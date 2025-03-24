@@ -9,6 +9,7 @@ from tqdm import tqdm
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Calculate trigger efficiencies')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output for debugging')
+parser.add_argument('-l0', '--l0-breakdown', action='store_true', help='Show breakdown of L0Global_TIS contributions')
 args = parser.parse_args()
 
 # Define trigger cuts for each level
@@ -16,6 +17,18 @@ L0_trigger_cuts = [
     "Bu_L0Global_TIS > 0",
     "Bu_L0HadronDecision_TOS > 0",
     "(Bu_L0Global_TIS > 0 || Bu_L0HadronDecision_TOS > 0)"
+]
+
+# Define individual L0Global_TIS contributing lines
+L0_TIS_components = [
+    "Bu_L0GlobalDecision_TIS > 0",
+    "Bu_L0PhysDecision_TIS > 0",
+    "Bu_L0HadronDecision_TIS > 0",
+    "Bu_L0MuonDecision_TIS > 0",
+    "Bu_L0MuonHighDecision_TIS > 0",
+    "Bu_L0DiMuonDecision_TIS > 0",
+    "Bu_L0PhotonDecision_TIS > 0",
+    "Bu_L0ElectronDecision_TIS > 0"
 ]
 
 L1_trigger_cuts = [
@@ -90,13 +103,18 @@ def caleff(nPass, nGen):
     return ufloat(eff, eff_err)
 
 efficiency = {}
+l0_tis_breakdown = {}  # For storing L0Global_TIS breakdown
+
 # Calculate total trees to process (3 years × 2 polarities × 2 track types = 12 trees)
 total_trees = 3 * 2 * 2  # years × polarities × track types
 with tqdm(total=total_trees, desc="Processing trees") as pbar:
     for track in ["LL", "DD"]:
         efficiency[track] = {}
+        l0_tis_breakdown[track] = {}
+        
         for year in ["16", "17", "18"]:
             efficiency[track][year] = []
+            l0_tis_breakdown[track][year] = []
             
             # Create explicit paths for the files
             base_dir = '/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC/'
@@ -135,6 +153,7 @@ with tqdm(total=total_trees, desc="Processing trees") as pbar:
                 print(f"Warning: No events found for {track} {year} before trigger. Skipping...")
                 # Fill with zeros to maintain structure
                 efficiency[track][year] = [ufloat(0, 0)] * 11
+                l0_tis_breakdown[track][year] = [ufloat(0, 0)] * len(L0_TIS_components)
                 continue
 
             # L0 Efficiencies
@@ -147,6 +166,15 @@ with tqdm(total=total_trees, desc="Processing trees") as pbar:
                 debug_print(f"L0 cut applied, Events: {after_L0trigger_evts}")
                 _eff = caleff(after_L0trigger_evts, before_trigger_evts)
                 L0_efficiencies.append(_eff)
+            
+            # L0 TIS breakdown (if option is enabled)
+            if args.l0_breakdown:
+                for L0_component in L0_TIS_components:
+                    cut_string = f"{truthpkk} && {L0_component}"
+                    component_events = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
+                    debug_print(f"L0 component {L0_component}: {component_events} events")
+                    _eff = caleff(component_events, before_trigger_evts)
+                    l0_tis_breakdown[track][year].append(_eff)
 
             # L1 Efficiencies
             L1_efficiencies = []
@@ -191,6 +219,17 @@ triggers.append("\\texttt{Bu\_Hlt2Topo3BodyDecision\_TOS}")
 triggers.append("\\texttt{Bu\_Hlt2Topo4BodyDecision\_TOS}")
 triggers.append("\\texttt{OR}")
 triggers.append("Total")
+
+# Define L0 TIS component names for table
+l0_tis_component_names = []
+l0_tis_component_names.append("\\texttt{Bu\_L0GlobalDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0PhysDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0HadronDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0MuonDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0MuonHighDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0DiMuonDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0PhotonDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0ElectronDecision\_TIS}")
 
 print("\\begin{table}[htbp]")
 print("\\centering")
@@ -269,3 +308,109 @@ print("\\label{tab:trigger_eff_DD}")
 print("\\end{table}")
 
 print("\n\n")
+
+# Print L0 TIS breakdown tables if the option is enabled
+if args.l0_breakdown:
+    # L0 TIS breakdown for LL
+    print("\\begin{table}[htbp]")
+    print("\\centering")
+    print("\\caption{Breakdown of $Bu\_L0Global\_TIS$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)}")
+    print("\\begin{tabular}{l|ccc}")
+    print("\\hline")
+    print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
+
+    for i in range(len(L0_TIS_components)):
+        eff_str = ""
+        for track in ["LL"]:
+            for year in ["16", "17", "18"]:
+                if i < len(l0_tis_breakdown[track][year]):
+                    eff = round(l0_tis_breakdown[track][year][i].nominal_value*100, 2)
+                    eff_err = round(l0_tis_breakdown[track][year][i].std_dev*100, 2)
+                    if year == "18":
+                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
+                    else:
+                        eff_str += f" & ${eff}\\pm{eff_err}$"
+                else:
+                    if year == "18":
+                        eff_str += f" & $0.00\\pm0.00$ \\\\"
+                    else:
+                        eff_str += f" & $0.00\\pm0.00$"
+
+        print(f"{l0_tis_component_names[i]} {eff_str} ")
+
+    # Add OR row (Bu_L0Global_TIS)
+    or_eff_str = ""
+    for track in ["LL"]:
+        for year in ["16", "17", "18"]:
+            # Use the value already calculated for Bu_L0Global_TIS in the main efficiency table
+            if len(efficiency[track][year]) > 0:
+                eff = round(efficiency[track][year][0].nominal_value*100, 2)
+                eff_err = round(efficiency[track][year][0].std_dev*100, 2)
+                if year == "18":
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
+            else:
+                if year == "18":
+                    or_eff_str += f" & $0.00\\pm0.00$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $0.00\\pm0.00$"
+    
+    print(f"\\texttt{{Total}} {or_eff_str} ")
+
+    print("\\end{tabular}")
+    print("\\label{tab:l0_tis_breakdown_LL}")
+    print("\\end{table}")
+
+    print("\n\n")
+
+    # L0 TIS breakdown for DD
+    print("\\begin{table}[htbp]")
+    print("\\centering")
+    print("\\caption{Breakdown of $Bu\_L0Global\_TIS$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)}")
+    print("\\begin{tabular}{l|ccc}")
+    print("\\hline")
+    print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
+
+    for i in range(len(L0_TIS_components)):
+        eff_str = ""
+        for track in ["DD"]:
+            for year in ["16", "17", "18"]:
+                if i < len(l0_tis_breakdown[track][year]):
+                    eff = round(l0_tis_breakdown[track][year][i].nominal_value*100, 2)
+                    eff_err = round(l0_tis_breakdown[track][year][i].std_dev*100, 2)
+                    if year == "18":
+                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
+                    else:
+                        eff_str += f" & ${eff}\\pm{eff_err}$"
+                else:
+                    if year == "18":
+                        eff_str += f" & $0.00\\pm0.00$ \\\\"
+                    else:
+                        eff_str += f" & $0.00\\pm0.00$"
+
+        print(f"{l0_tis_component_names[i]} {eff_str} ")
+
+    # Add Total row (Bu_L0Global_TIS)
+    or_eff_str = ""
+    for track in ["DD"]:
+        for year in ["16", "17", "18"]:
+            # Use the value already calculated for Bu_L0Global_TIS in the main efficiency table
+            if len(efficiency[track][year]) > 0:
+                eff = round(efficiency[track][year][0].nominal_value*100, 2)
+                eff_err = round(efficiency[track][year][0].std_dev*100, 2)
+                if year == "18":
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
+            else:
+                if year == "18":
+                    or_eff_str += f" & $0.00\\pm0.00$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $0.00\\pm0.00$"
+    
+    print(f"\\texttt{{Total}} {or_eff_str} ")
+
+    print("\\end{tabular}")
+    print("\\label{tab:l0_tis_breakdown_DD}")
+    print("\\end{table}")

@@ -9,6 +9,7 @@ from tqdm import tqdm
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Calculate trigger efficiencies')
 parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output for debugging')
+parser.add_argument('-l0', '--l0-breakdown', action='store_true', help='Show breakdown of L0Global_TIS contributions')
 args = parser.parse_args()
 
 # Define trigger cuts for each level
@@ -16,6 +17,18 @@ L0_trigger_cuts = [
     "Bu_L0Global_TIS > 0",
     "Bu_L0HadronDecision_TOS > 0",
     "(Bu_L0Global_TIS > 0 || Bu_L0HadronDecision_TOS > 0)"
+]
+
+# Define individual L0Global_TIS contributing lines
+L0_TIS_components = [
+    "Bu_L0GlobalDecision_TIS > 0",
+    "Bu_L0PhysDecision_TIS > 0",
+    "Bu_L0HadronDecision_TIS > 0",
+    "Bu_L0MuonDecision_TIS > 0",
+    "Bu_L0MuonHighDecision_TIS > 0",
+    "Bu_L0DiMuonDecision_TIS > 0",
+    "Bu_L0PhotonDecision_TIS > 0",
+    "Bu_L0ElectronDecision_TIS > 0"
 ]
 
 L1_trigger_cuts = [
@@ -32,7 +45,7 @@ L2_trigger_cuts = [
 ]
 
 # Define fixed truth cut string for B+ → Λ⁰ p̄ K+ K+
-truthpkk_standalone = """(abs(Bu_TRUEID)==521) && 
+truthpkk = """(abs(Bu_TRUEID)==521) && 
                     (abs(L0_TRUEID)==3122) && 
                     (abs(Lp_TRUEID)==2212) && 
                     (abs(Lpi_TRUEID)==211) && 
@@ -47,7 +60,7 @@ truthpkk_standalone = """(abs(Bu_TRUEID)==521) &&
                      ((abs(h2_MC_MOTHER_ID)==521) && (abs(h1_MC_MOTHER_ID)==521)))"""
 
 # Remove all newlines and extra spaces to make it a single-line expression
-truthpkk_standalone = truthpkk_standalone.replace('\n', ' ').replace('  ', ' ').strip()
+truthpkk = truthpkk.replace('\n', ' ').replace('  ', ' ').strip()
 
 def debug_print(*print_args, **kwargs):
     """Print only if verbose mode is enabled"""
@@ -90,33 +103,59 @@ def caleff(nPass, nGen):
     return ufloat(eff, eff_err)
 
 efficiency = {}
-# Calculate total iterations for progress bar (2 tracks × 3 years)
-total_iterations = 2 * 3
-with tqdm(total=total_iterations, desc="Processing files") as pbar:
+l0_tis_breakdown = {}  # For storing L0Global_TIS breakdown
+
+# Calculate total trees to process (3 years × 2 polarities × 2 track types = 12 trees)
+total_trees = 3 * 2 * 2  # years × polarities × track types
+with tqdm(total=total_trees, desc="Processing trees") as pbar:
     for track in ["LL", "DD"]:
         efficiency[track] = {}
+        l0_tis_breakdown[track] = {}
+        
         for year in ["16", "17", "18"]:
             efficiency[track][year] = []
+            l0_tis_breakdown[track][year] = []
             
             # Create explicit paths for the files - for B+ → Λ⁰ p̄ K+ K+
             base_dir = '/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC/'
-            mu_file = f'{base_dir}MC{year}MUBu2L0PbarKpKp.root/B2L0PbarKpKp_{track}/DecayTree'
-            md_file = f'{base_dir}MC{year}MDBu2L0PbarKpKp.root/B2L0PbarKpKp_{track}/DecayTree'
             
-            # Add both files to the path list
+            # Process MU file (contains 1 tree)
+            mu_file = f'{base_dir}MC{year}MUBu2L0PbarKpKp.root/B2L0PbarKpKp_{track}/DecayTree'
+            tuple_path = [mu_file]
+            debug_print(f"Processing tree: {year} MU {track}")
+            
+            # First check if file exists and get events with truth cut
+            before_trigger_evts_mu = getEntries(tuple_path, 'DecayTree', cutstr=truthpkk)
+            debug_print(f"MU Tree: {track}, Year: {year}, Before trigger events: {before_trigger_evts_mu}")
+            
+            # Update progress bar after processing this tree
+            pbar.update(1)
+            
+            # Process MD file (contains 1 tree)
+            md_file = f'{base_dir}MC{year}MDBu2L0PbarKpKp.root/B2L0PbarKpKp_{track}/DecayTree'
+            tuple_path = [md_file]
+            debug_print(f"Processing tree: {year} MD {track}")
+            
+            # First check if file exists and get events with truth cut
+            before_trigger_evts_md = getEntries(tuple_path, 'DecayTree', cutstr=truthpkk)
+            debug_print(f"MD Tree: {track}, Year: {year}, Before trigger events: {before_trigger_evts_md}")
+            
+            # Update progress bar after processing this tree
+            pbar.update(1)
+            
+            # Combine events from both trees
+            before_trigger_evts = before_trigger_evts_mu + before_trigger_evts_md
+            
+            # Continue with combined events from both files
             tuple_path = [mu_file, md_file]
             
-            debug_print(f"Looking for files: {mu_file} and {md_file}")
-            
-            # First check if files exist and get events with truth cut
-            before_trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=truthpkk_standalone)
-            
-            debug_print(f"Track: {track}, Year: {year}, Before trigger events: {before_trigger_evts}")
+            debug_print(f"Track: {track}, Year: {year}, Combined before trigger events: {before_trigger_evts}")
             
             if before_trigger_evts == 0:
                 print(f"Warning: No events found for {track} {year} before trigger. Skipping...")
                 # Fill with zeros to maintain structure
                 efficiency[track][year] = [ufloat(0, 0)] * 11
+                l0_tis_breakdown[track][year] = [ufloat(0, 0)] * len(L0_TIS_components)
                 pbar.update(1)
                 continue
 
@@ -125,18 +164,27 @@ with tqdm(total=total_iterations, desc="Processing files") as pbar:
             after_L0trigger_evts = 0
             for L0_trigger_cut in L0_trigger_cuts:
                 # For L0, combine the standalone truthpkk with the trigger
-                cut_string = f"{truthpkk_standalone} && {L0_trigger_cut}"
+                cut_string = f"{truthpkk} && {L0_trigger_cut}"
                 after_L0trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
                 debug_print(f"L0 cut applied, Events: {after_L0trigger_evts}")
                 _eff = caleff(after_L0trigger_evts, before_trigger_evts)
                 L0_efficiencies.append(_eff)
+            
+            # L0 TIS breakdown (if option is enabled)
+            if args.l0_breakdown:
+                for L0_component in L0_TIS_components:
+                    cut_string = f"{truthpkk} && {L0_component}"
+                    component_events = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
+                    debug_print(f"L0 component {L0_component}: {component_events} events")
+                    _eff = caleff(component_events, before_trigger_evts)
+                    l0_tis_breakdown[track][year].append(_eff)
 
             # L1 Efficiencies
             L1_efficiencies = []
             after_L1trigger_evts = 0
             for L1_trigger_cut in L1_trigger_cuts:
                 # For L1, combine L0 final cut with L1 cut
-                cut_string = f"{truthpkk_standalone} && {L0_trigger_cuts[-1]} && {L1_trigger_cut}"
+                cut_string = f"{truthpkk} && {L0_trigger_cuts[-1]} && {L1_trigger_cut}"
                 after_L1trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
                 debug_print(f"L1 cut applied, Events: {after_L1trigger_evts}")
                 _eff = caleff(after_L1trigger_evts, after_L0trigger_evts or 1)  # Avoid division by zero
@@ -147,7 +195,7 @@ with tqdm(total=total_iterations, desc="Processing files") as pbar:
             after_L2trigger_evts = 0
             for L2_trigger_cut in L2_trigger_cuts:
                 # For L2, combine L0 final cut, L1 final cut with L2 cut
-                cut_string = f"{truthpkk_standalone} && {L0_trigger_cuts[-1]} && {L1_trigger_cuts[-1]} && {L2_trigger_cut}"
+                cut_string = f"{truthpkk} && {L0_trigger_cuts[-1]} && {L1_trigger_cuts[-1]} && {L2_trigger_cut}"
                 after_L2trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
                 debug_print(f"L2 cut applied, Events: {after_L2trigger_evts}")
                 _eff = caleff(after_L2trigger_evts, after_L1trigger_evts or 1)  # Avoid division by zero
@@ -161,9 +209,7 @@ with tqdm(total=total_iterations, desc="Processing files") as pbar:
             # Total trigger efficiency
             efficiency[track][year].append(np.prod(L012_eff))
             
-            # Update progress bar
-            pbar.update(1)
-
+            
 # Define triggers
 triggers = []
 triggers.append("\\texttt{Bu\_L0Global\_TIS}")
@@ -177,6 +223,17 @@ triggers.append("\\texttt{Bu\_Hlt2Topo3BodyDecision\_TOS}")
 triggers.append("\\texttt{Bu\_Hlt2Topo4BodyDecision\_TOS}")
 triggers.append("\\texttt{OR}")
 triggers.append("Total")
+
+# Define L0 TIS component names for table
+l0_tis_component_names = []
+l0_tis_component_names.append("\\texttt{Bu\_L0GlobalDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0PhysDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0HadronDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0MuonDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0MuonHighDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0DiMuonDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0PhotonDecision\_TIS}")
+l0_tis_component_names.append("\\texttt{Bu\_L0ElectronDecision\_TIS}")
 
 print("\\begin{table}[htbp]")
 print("\\centering")
@@ -255,3 +312,109 @@ print("\\label{tab:trigger_eff_DD_pbar}")
 print("\\end{table}")
 
 print("\n\n")
+
+# Print L0 TIS breakdown tables if the option is enabled
+if args.l0_breakdown:
+    # L0 TIS breakdown for LL
+    print("\\begin{table}[htbp]")
+    print("\\centering")
+    print("\\caption{Breakdown of $Bu\_L0Global\_TIS$ contributions for $B^+ \\to \\Lambda^0_{\\text{LL}} \\bar{p} K^+ K^+$ selection (\\%)}")
+    print("\\begin{tabular}{l|ccc}")
+    print("\\hline")
+    print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
+
+    for i in range(len(L0_TIS_components)):
+        eff_str = ""
+        for track in ["LL"]:
+            for year in ["16", "17", "18"]:
+                if i < len(l0_tis_breakdown[track][year]):
+                    eff = round(l0_tis_breakdown[track][year][i].nominal_value*100, 2)
+                    eff_err = round(l0_tis_breakdown[track][year][i].std_dev*100, 2)
+                    if year == "18":
+                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
+                    else:
+                        eff_str += f" & ${eff}\\pm{eff_err}$"
+                else:
+                    if year == "18":
+                        eff_str += f" & $0.00\\pm0.00$ \\\\"
+                    else:
+                        eff_str += f" & $0.00\\pm0.00$"
+
+        print(f"{l0_tis_component_names[i]} {eff_str} ")
+
+    # Add Total row (Bu_L0Global_TIS)
+    or_eff_str = ""
+    for track in ["LL"]:
+        for year in ["16", "17", "18"]:
+            # Use the value already calculated for Bu_L0Global_TIS in the main efficiency table
+            if len(efficiency[track][year]) > 0:
+                eff = round(efficiency[track][year][0].nominal_value*100, 2)
+                eff_err = round(efficiency[track][year][0].std_dev*100, 2)
+                if year == "18":
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
+            else:
+                if year == "18":
+                    or_eff_str += f" & $0.00\\pm0.00$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $0.00\\pm0.00$"
+    
+    print(f"\\texttt{{Total}} {or_eff_str} ")
+
+    print("\\end{tabular}")
+    print("\\label{tab:l0_tis_breakdown_LL_pbar}")
+    print("\\end{table}")
+
+    print("\n\n")
+
+    # L0 TIS breakdown for DD
+    print("\\begin{table}[htbp]")
+    print("\\centering")
+    print("\\caption{Breakdown of $Bu\_L0Global\_TIS$ contributions for $B^+ \\to \\Lambda^0_{\\text{DD}} \\bar{p} K^+ K^+$ selection (\\%)}")
+    print("\\begin{tabular}{l|ccc}")
+    print("\\hline")
+    print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
+
+    for i in range(len(L0_TIS_components)):
+        eff_str = ""
+        for track in ["DD"]:
+            for year in ["16", "17", "18"]:
+                if i < len(l0_tis_breakdown[track][year]):
+                    eff = round(l0_tis_breakdown[track][year][i].nominal_value*100, 2)
+                    eff_err = round(l0_tis_breakdown[track][year][i].std_dev*100, 2)
+                    if year == "18":
+                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
+                    else:
+                        eff_str += f" & ${eff}\\pm{eff_err}$"
+                else:
+                    if year == "18":
+                        eff_str += f" & $0.00\\pm0.00$ \\\\"
+                    else:
+                        eff_str += f" & $0.00\\pm0.00$"
+
+        print(f"{l0_tis_component_names[i]} {eff_str} ")
+
+    # Add Total row (Bu_L0Global_TIS)
+    or_eff_str = ""
+    for track in ["DD"]:
+        for year in ["16", "17", "18"]:
+            # Use the value already calculated for Bu_L0Global_TIS in the main efficiency table
+            if len(efficiency[track][year]) > 0:
+                eff = round(efficiency[track][year][0].nominal_value*100, 2)
+                eff_err = round(efficiency[track][year][0].std_dev*100, 2)
+                if year == "18":
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
+            else:
+                if year == "18":
+                    or_eff_str += f" & $0.00\\pm0.00$ \\\\ \\hline"
+                else:
+                    or_eff_str += f" & $0.00\\pm0.00$"
+    
+    print(f"\\texttt{{Total}} {or_eff_str} ")
+
+    print("\\end{tabular}")
+    print("\\label{tab:l0_tis_breakdown_DD_pbar}")
+    print("\\end{table}")
