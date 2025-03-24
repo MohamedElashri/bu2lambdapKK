@@ -173,3 +173,9 @@ poetry.toml
 
 # LSP config files
 pyrightconfig.json
+
+
+## plots
+**/*.png
+**/*.jpg
+**/*.pdg
