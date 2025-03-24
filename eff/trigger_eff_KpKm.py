@@ -4,6 +4,7 @@ import os
 import argparse
 import numpy as np
 from uncertainties import ufloat
+from tqdm import tqdm
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Calculate trigger efficiencies')
@@ -89,73 +90,94 @@ def caleff(nPass, nGen):
     return ufloat(eff, eff_err)
 
 efficiency = {}
-for track in ["LL", "DD"]:
-    efficiency[track] = {}
-    for year in ["16", "17", "18"]:
-        efficiency[track][year] = []
-        
-        # Create explicit paths for the files
-        base_dir = '/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC/'
-        mu_file = f'{base_dir}MC{year}MUBu2L0barPKpKm.root/B2L0barPKpKm_{track}/DecayTree'
-        md_file = f'{base_dir}MC{year}MDBu2L0barPKpKm.root/B2L0barPKpKm_{track}/DecayTree'
-        
-        # Add both files to the path list
-        tuple_path = [mu_file, md_file]
-        
-        debug_print(f"Looking for files: {mu_file} and {md_file}")
-        
-        # First check if files exist and get events with truth cut
-        before_trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=truthpkk)
-        
-        debug_print(f"Track: {track}, Year: {year}, Before trigger events: {before_trigger_evts}")
-        
-        if before_trigger_evts == 0:
-            print(f"Warning: No events found for {track} {year} before trigger. Skipping...")
-            # Fill with zeros to maintain structure
-            efficiency[track][year] = [ufloat(0, 0)] * 11
-            continue
+# Calculate total trees to process (3 years × 2 polarities × 2 track types = 12 trees)
+total_trees = 3 * 2 * 2  # years × polarities × track types
+with tqdm(total=total_trees, desc="Processing trees") as pbar:
+    for track in ["LL", "DD"]:
+        efficiency[track] = {}
+        for year in ["16", "17", "18"]:
+            efficiency[track][year] = []
+            
+            # Create explicit paths for the files
+            base_dir = '/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC/'
+            
+            # Process MU file (contains 1 tree)
+            mu_file = f'{base_dir}MC{year}MUBu2L0barPKpKm.root/B2L0barPKpKm_{track}/DecayTree'
+            tuple_path = [mu_file]
+            debug_print(f"Processing tree: {year} MU {track}")
+            
+            # First check if file exists and get events with truth cut
+            before_trigger_evts_mu = getEntries(tuple_path, 'DecayTree', cutstr=truthpkk)
+            debug_print(f"MU Tree: {track}, Year: {year}, Before trigger events: {before_trigger_evts_mu}")
+            
+            # Update progress bar after processing this tree
+            pbar.update(1)
+            
+            # Process MD file (contains 1 tree)
+            md_file = f'{base_dir}MC{year}MDBu2L0barPKpKm.root/B2L0barPKpKm_{track}/DecayTree'
+            tuple_path = [md_file]
+            debug_print(f"Processing tree: {year} MD {track}")
+            
+            # First check if file exists and get events with truth cut
+            before_trigger_evts_md = getEntries(tuple_path, 'DecayTree', cutstr=truthpkk)
+            debug_print(f"MD Tree: {track}, Year: {year}, Before trigger events: {before_trigger_evts_md}")
+            
+            # Update progress bar after processing this tree
+            pbar.update(1)
+            
+            # Combine events from both trees
+            before_trigger_evts = before_trigger_evts_mu + before_trigger_evts_md
+            
+            # Continue with combined events from both files
+            tuple_path = [mu_file, md_file]
+            
+            if before_trigger_evts == 0:
+                print(f"Warning: No events found for {track} {year} before trigger. Skipping...")
+                # Fill with zeros to maintain structure
+                efficiency[track][year] = [ufloat(0, 0)] * 11
+                continue
 
-        # L0 Efficiencies
-        L0_efficiencies = []
-        after_L0trigger_evts = 0
-        for L0_trigger_cut in L0_trigger_cuts:
-            # For L0, combine the standalone truthpkk with the trigger
-            cut_string = f"{truthpkk} && {L0_trigger_cut}"
-            after_L0trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
-            debug_print(f"L0 cut applied, Events: {after_L0trigger_evts}")
-            _eff = caleff(after_L0trigger_evts, before_trigger_evts)
-            L0_efficiencies.append(_eff)
+            # L0 Efficiencies
+            L0_efficiencies = []
+            after_L0trigger_evts = 0
+            for L0_trigger_cut in L0_trigger_cuts:
+                # For L0, combine the standalone truthpkk with the trigger
+                cut_string = f"{truthpkk} && {L0_trigger_cut}"
+                after_L0trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
+                debug_print(f"L0 cut applied, Events: {after_L0trigger_evts}")
+                _eff = caleff(after_L0trigger_evts, before_trigger_evts)
+                L0_efficiencies.append(_eff)
 
-        # L1 Efficiencies
-        L1_efficiencies = []
-        after_L1trigger_evts = 0
-        for L1_trigger_cut in L1_trigger_cuts:
-            # For L1, combine L0 final cut with L1 cut
-            cut_string = f"{truthpkk} && {L0_trigger_cuts[-1]} && {L1_trigger_cut}"
-            after_L1trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
-            debug_print(f"L1 cut applied, Events: {after_L1trigger_evts}")
-            _eff = caleff(after_L1trigger_evts, after_L0trigger_evts or 1)  # Avoid division by zero
-            L1_efficiencies.append(_eff)
+            # L1 Efficiencies
+            L1_efficiencies = []
+            after_L1trigger_evts = 0
+            for L1_trigger_cut in L1_trigger_cuts:
+                # For L1, combine L0 final cut with L1 cut
+                cut_string = f"{truthpkk} && {L0_trigger_cuts[-1]} && {L1_trigger_cut}"
+                after_L1trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
+                debug_print(f"L1 cut applied, Events: {after_L1trigger_evts}")
+                _eff = caleff(after_L1trigger_evts, after_L0trigger_evts or 1)  # Avoid division by zero
+                L1_efficiencies.append(_eff)
 
-        # L2 Efficiencies
-        L2_efficiencies = []
-        after_L2trigger_evts = 0
-        for L2_trigger_cut in L2_trigger_cuts:
-            # For L2, combine L0 final cut, L1 final cut with L2 cut
-            cut_string = f"{truthpkk} && {L0_trigger_cuts[-1]} && {L1_trigger_cuts[-1]} && {L2_trigger_cut}"
-            after_L2trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
-            debug_print(f"L2 cut applied, Events: {after_L2trigger_evts}")
-            _eff = caleff(after_L2trigger_evts, after_L1trigger_evts or 1)  # Avoid division by zero
-            L2_efficiencies.append(_eff)
+            # L2 Efficiencies
+            L2_efficiencies = []
+            after_L2trigger_evts = 0
+            for L2_trigger_cut in L2_trigger_cuts:
+                # For L2, combine L0 final cut, L1 final cut with L2 cut
+                cut_string = f"{truthpkk} && {L0_trigger_cuts[-1]} && {L1_trigger_cuts[-1]} && {L2_trigger_cut}"
+                after_L2trigger_evts = getEntries(tuple_path, 'DecayTree', cutstr=cut_string)
+                debug_print(f"L2 cut applied, Events: {after_L2trigger_evts}")
+                _eff = caleff(after_L2trigger_evts, after_L1trigger_evts or 1)  # Avoid division by zero
+                L2_efficiencies.append(_eff)
 
-        efficiency[track][year].extend(L0_efficiencies)
-        efficiency[track][year].extend(L1_efficiencies)
-        efficiency[track][year].extend(L2_efficiencies)
+            efficiency[track][year].extend(L0_efficiencies)
+            efficiency[track][year].extend(L1_efficiencies)
+            efficiency[track][year].extend(L2_efficiencies)
 
-        L012_eff = [L0_efficiencies[-1], L1_efficiencies[-1], L2_efficiencies[-1]]
-        # Total trigger efficiency
-        efficiency[track][year].append(np.prod(L012_eff))
-
+            L012_eff = [L0_efficiencies[-1], L1_efficiencies[-1], L2_efficiencies[-1]]
+            # Total trigger efficiency
+            efficiency[track][year].append(np.prod(L012_eff))
+            
 # Define triggers
 triggers = []
 triggers.append("\\texttt{Bu\_L0Global\_TIS}")
