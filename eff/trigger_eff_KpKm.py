@@ -314,7 +314,7 @@ if args.l0_breakdown:
     # L0 TIS breakdown for LL
     print("\\begin{table}[htbp]")
     print("\\centering")
-    print("\\caption{Breakdown of $Bu\_L0Global\_TIS$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)}")
+    print("\\caption{ $L0$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)}")
     print("\\begin{tabular}{l|ccc}")
     print("\\hline")
     print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
@@ -367,7 +367,7 @@ if args.l0_breakdown:
     # L0 TIS breakdown for DD
     print("\\begin{table}[htbp]")
     print("\\centering")
-    print("\\caption{Breakdown of $Bu\_L0Global\_TIS$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)}")
+    print("\\caption{$LO$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)}")
     print("\\begin{tabular}{l|ccc}")
     print("\\hline")
     print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
