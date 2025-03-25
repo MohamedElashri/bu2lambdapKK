@@ -934,7 +934,7 @@ def extract_signal_shape_with_background(mc_data, true_id_branch='Bu_TRUEID', ma
     )
     
     # Plot the result
-    frame = mass.frame(RooFit.Title("B+ Mass Shape - Gaussian+Poly2 Model"))
+    frame = mass.frame(RooFit.Title("B+ Mass Shape - Gaussian+Poly2 Model - DD"))
     data_hist.plotOn(frame, RooFit.Name("data"))
     model.plotOn(frame, RooFit.LineColor(ROOT.kBlue), RooFit.Name("model"))
     
@@ -1152,7 +1152,6 @@ def extract_signal_shape_cb_with_background(mc_data, true_id_branch='Bu_TRUEID',
     legend.Draw()
     
     # Save the plot
-    canvas.SaveAs(f"{output_dir}/b_mass_shape_{sample_name}.png")
     canvas.SaveAs(f"{output_dir}/b_mass_shape_{sample_name}.pdf")
     
     # Store results in a dictionary
@@ -1291,7 +1290,7 @@ def extract_signal_shape_double_gaussian_with_background(mc_data, true_id_branch
     )
     
     # Plot the result
-    frame = mass.frame(RooFit.Title("B+ Mass Shape - Double Gaussian + Poly2 Model"))
+    frame = mass.frame(RooFit.Title("B+ Mass Shape - Double Gaussian + Poly2 Model - DD"))
     data_hist.plotOn(frame, RooFit.Name("data"))
     model.plotOn(frame, RooFit.LineColor(ROOT.kBlue), RooFit.Name("model"))
     

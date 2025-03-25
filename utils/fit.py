@@ -81,7 +81,7 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     hist = create_root_histogram(
         mass_data, mass_bins, mass_min, mass_max, 
         name=hist_name, 
-        title="B^{+} #rightarrow #bar{#Lambda}^{0}pK^{+}K^{-}"
+        title="B^{+} #rightarrow #bar{#Lambda}^{0}pK^{+}K^{-} - DD"
     )
     
     # Decorate histogram
@@ -179,7 +179,7 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     )
     
     # Plot the result
-    frame = mass.frame(RooFit.Title("B+ Mass Fit - Double Gaussian + Poly2 Model"))
+    frame = mass.frame(RooFit.Title("B+ Mass Fit - Double Gaussian + Poly2 Model - DD"))
     data_hist.plotOn(frame, RooFit.Name("data"))
     model.plotOn(frame, RooFit.LineColor(ROOT.kBlue), RooFit.Name("model"))
     
@@ -241,7 +241,6 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     legend.Draw()
     
     # Save the plot
-    canvas.SaveAs(f"{output_dir}/b_mass_fit_{sample_name}.png")
     canvas.SaveAs(f"{output_dir}/b_mass_fit_{sample_name}.pdf")
     
     # Store results in a dictionary

@@ -179,3 +179,7 @@ pyrightconfig.json
 **/*.png
 **/*.jpg
 **/*.pdg
+
+## fits data
+**/*.json
+**/*.pkl
