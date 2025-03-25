@@ -6,7 +6,7 @@ from ROOT import RooAddPdf, RooFFTConvPdf, RooDataSet, RooFormulaVar, RooChebych
 from array import array
 import os
 import json
-from utils.mc_kpkm import create_root_histogram
+from utils.mc import create_root_histogram
 
 def load_mc_fit_params(json_file_path):
     """
