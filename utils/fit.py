@@ -72,7 +72,7 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     mass_bins = np.linspace(mass_min, mass_max, n_bins+1)
     
     # Create ROOT canvas
-    canvas = TCanvas(f"canvas_{sample_name}", f"B+ Mass Fit ({sample_name})", 900, 700)
+    canvas = TCanvas(f"canvas_{sample_name}", f"B^{{+}} Mass Fit", 900, 700)
     canvas.SetLeftMargin(0.12)
     canvas.SetBottomMargin(0.12)
     
@@ -81,20 +81,20 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     hist = create_root_histogram(
         mass_data, mass_bins, mass_min, mass_max, 
         name=hist_name, 
-        title="B^{+} #rightarrow #bar{#Lambda}^{0}pK^{+}K^{-} - LL"
+        title="B^{+} #rightarrow #bar{#Lambda}^{0}pK^{+}K^{-}"
     )
     
     # Decorate histogram
     hist.SetMarkerStyle(20)
     hist.SetMarkerSize(0.8)
     hist.SetLineColor(ROOT.kBlack)
-    hist.GetXaxis().SetTitle("m(#bar{#Lambda}^{0}pK^{+}K^{-}) [MeV/c^{2}]")
+    hist.GetXaxis().SetTitle("M(#bar{#Lambda}^{0}pK^{+}K^{-}) [MeV/c^{2}]")
     hist.GetYaxis().SetTitle("Candidates / (%.1f MeV/c^{2})" % ((mass_max - mass_min)/n_bins))
     hist.GetYaxis().SetTitleOffset(1.5)
     hist.Draw("E")
     
     # RooFit variables
-    mass = RooRealVar("mass", "B^{+} mass [MeV/c^{2}]", mass_min, mass_max)
+    mass = RooRealVar("mass", "M(#bar{#Lambda}^{0}pK^{+}K^{-}) [MeV/c^{2}]", mass_min, mass_max)
     
     # Create RooDataHist
     data_hist = RooDataHist("data_hist", "B+ Mass Data", RooArgList(mass), hist)
@@ -179,7 +179,7 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     )
     
     # Plot the result
-    frame = mass.frame(RooFit.Title("B+ Mass Fit - Double Gaussian + Poly2 Model - LL"))
+    frame = mass.frame(RooFit.Title("Double Gaussian + Pol2 Fit to B^{+} Mass"))
     data_hist.plotOn(frame, RooFit.Name("data"))
     model.plotOn(frame, RooFit.LineColor(ROOT.kBlue), RooFit.Name("model"))
     
@@ -219,20 +219,27 @@ def fit_data_with_mc_constraints(data, mass_branch='Bu_MM', mc_params=None, outp
     # Add text with fit results - positioned at top right with smaller font
     latex = TLatex()
     latex.SetNDC()
-    latex.SetTextSize(0.025)  # Small text size
-    latex.DrawLatex(0.65, 0.85, f"Mean = {mean.getVal():.2f} #pm {mean.getError():.2f} MeV/c^{{2}}")
-    latex.DrawLatex(0.65, 0.82, f"#sigma_{{1}} = {sigma1.getVal():.2f} #pm {sigma1.getError():.2f} MeV/c^{{2}}")
-    latex.DrawLatex(0.65, 0.79, f"#sigma_{{2}} = {sigma2.getVal():.2f} #pm {sigma2.getError():.2f} MeV/c^{{2}}")
-    latex.DrawLatex(0.65, 0.76, f"Fraction = {frac.getVal():.2f} #pm {frac.getError():.2f}")
-    latex.DrawLatex(0.65, 0.73, f"#sigma_{{eff}} = {effective_sigma:.2f} #pm {effective_sigma_err:.2f} MeV/c^{{2}}")
-    latex.DrawLatex(0.65, 0.70, f"Signal yield = {nsig.getVal():.0f} #pm {nsig.getError():.0f}")
-    latex.DrawLatex(0.65, 0.67, f"Bkg yield = {nbkg.getVal():.0f} #pm {nbkg.getError():.0f}")
-    latex.DrawLatex(0.65, 0.64, f"S/sqrt(S+B) = {nsig.getVal()/np.sqrt(nsig.getVal()+nbkg.getVal()):.1f}")
-    latex.DrawLatex(0.65, 0.61, f"Significance = {signal_significance:.1f}#sigma")
-    latex.DrawLatex(0.65, 0.58, f"#chi^{{2}}/ndf = {chi2:.3f}")
+    latex.SetTextSize(0.035)  # Default text size
+    latex.SetTextColor(1)
+    latex.SetTextFont(42)
     
-    # Add legend
-    legend = ROOT.TLegend(0.65, 0.43, 0.88, 0.55)
+    # Create a smaller font for fit parameters - start much higher
+    latex.SetTextSize(0.025)  # Much smaller text size for fit parameters
+    start_y = 0.88  # Start higher
+    step = 0.03     # Consistent spacing
+    
+    latex.DrawLatex(0.68, start_y, f"Mean = {mean.getVal():.2f} #pm {mean.getError():.2f} MeV/c^{{2}}")
+    latex.DrawLatex(0.68, start_y - step*1, f"#sigma_{{1}} = {sigma1.getVal():.2f} #pm {sigma1.getError():.2f} MeV/c^{{2}}")
+    latex.DrawLatex(0.68, start_y - step*2, f"#sigma_{{2}} = {sigma2.getVal():.2f} #pm {sigma2.getError():.2f} MeV/c^{{2}}")
+    latex.DrawLatex(0.68, start_y - step*3, f"Fraction = {frac.getVal():.2f} #pm {frac.getError():.2f}")
+    latex.DrawLatex(0.68, start_y - step*4, f"#sigma_{{eff}} = {effective_sigma:.2f} #pm {effective_sigma_err:.2f} MeV/c^{{2}}")
+    latex.DrawLatex(0.68, start_y - step*5, f"Signal yield = {nsig.getVal():.0f} #pm {nsig.getError():.0f}")
+    latex.DrawLatex(0.68, start_y - step*6, f"Bkg yield = {nbkg.getVal():.0f} #pm {nbkg.getError():.0f}")
+    # latex.DrawLatex(0.68, start_y - step*7, f"S/sqrt(S+B) = {nsig.getVal()/np.sqrt(nsig.getVal()+nbkg.getVal()):.1f}")
+    # latex.DrawLatex(0.68, start_y - step*8, f"Significance = {signal_significance:.1f}#sigma")
+    latex.DrawLatex(0.68, start_y - step*7, f"#chi^{{2}}/ndf = {chi2:.3f}")
+    
+    legend = ROOT.TLegend(0.68, 0.15, 0.88, 0.30)  # Bottom right corner
     legend.SetBorderSize(0)
     legend.AddEntry(frame.findObject("data"), "Data", "P")
     legend.AddEntry(frame.findObject("model"), "Total Fit", "L")
