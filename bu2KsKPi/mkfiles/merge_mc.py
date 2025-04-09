@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """
-Enhanced B Meson Monte Carlo Data Processor
-
 This script handles inconsistencies in TTree paths and naming conventions,
 ensuring compatibility with uproot for all processed files.
 """

@@ -1,5 +1,5 @@
 """
-LHCb style plotting utilities for particle physics analyses.
+LHCb style plotting utility.
 """
 import os
 import numpy as np
