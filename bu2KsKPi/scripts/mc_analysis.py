@@ -1,6 +1,6 @@
 """
 Analysis script for B -> K0s K- pi+ K+ decay MC data.
-This script loads Monte Carlo data for multiple decay modes,
+This script loads MC for multiple decay modes,
 performs basic analysis, creates plots, and applies selection cuts.
 """
 import os
@@ -31,11 +31,11 @@ from utils.plot import (
 
 # Configure decay modes and data loading parameters
 DECAY_MODES = {
-    "B2K0s2PipPimKmPipKp": "B+ → (K0_S → π+π-)K-π+K+",
-    "B2Jpsi2K0s2PipPimKmPipKp": "B+ → (J/ψ → (K0_S → π+π-)K-π+)K+",
-    "B2Etac2K0s2PipPimKmPipKp": "B+ → (ηc → (K0_S → π+π-)K-π+)K+",
-    "B2Etac2S2K0s2PipPimKmPipKp": "B+ → (ηc(2S) → (K0_S → π+π-)K-π+)K+",
-    "B2Chic12K0s2PipPimKmPipKp": "B+ → (χc1 → (K0_S → π+π-)K-π+)K+"
+    "B2K0s2PipPimKmPipKp": "B^{+} #rightarrow (K^{0}_{S} #rightarrow #pi^{+}#pi^{-})K^{-}#pi^{+}K^{+}",
+    "B2Jpsi2K0s2PipPimKmPipKp": "B^{+} #rightarrow (J/#psi #rightarrow (K^{0}_{S} #rightarrow #pi^{+}#pi^{-})K^{-}#pi^{+})K^{+}",
+    "B2Etac2K0s2PipPimKmPipKp": "B^{+} #rightarrow (#eta_{c} #rightarrow (K^{0}_{S} #rightarrow #pi^{+}#pi^{-})K^{-}#pi^{+})K^{+}",
+    "B2Etac2S2K0s2PipPimKmPipKp": "B^{+} #rightarrow (#eta_{c}(2S) #rightarrow (K^{0}_{S} #rightarrow #pi^{+}#pi^{-})K^{-}#pi^{+})K^{+}",
+    "B2Chic12K0s2PipPimKmPipKp": "B^{+} #rightarrow (#chi_{c1} #rightarrow (K^{0}_{S} #rightarrow #pi^{+}#pi^{-})K^{-}#pi^{+})K^{+}"
 }
 
 # Define tuples and years for the analysis
@@ -201,9 +201,9 @@ def plot_all_b_mass_distributions(combined_data, dd_data, ll_data, output_dir="p
             # Finalize plot
             finalize_lhcb_figure(ax, 
                               title=f"B Mass Distribution - {DECAY_MODES[decay_mode]}",
-                              xlabel="B Mass [MeV/c²]",
-                              ylabel="Events / 2 MeV/c²",
-                              simulation=True,
+                              xlabel="B Mass [MeV/c^{2}]",
+                              ylabel="Events / 2 MeV/c^{2}",
+                              simulation=False,
                               status="Preliminary",
                               data_label="Simulation")
             
@@ -231,7 +231,7 @@ def plot_all_b_mass_distributions(combined_data, dd_data, ll_data, output_dir="p
                 range_min=5200,
                 range_max=5400,
                 variable_name="B_mass",
-                variable_title="B Mass [MeV/c²]",
+                variable_title="B Mass [MeV/c^{2}]",
                 fit_model="gauss+exp",  # Using exponential background instead of polynomial
                 title=f"B Mass RooFit - {DECAY_MODES[decay_mode]}",
                 save_path=os.path.join(output_dir, f"b_mass_roofit_{decay_mode}.pdf")
@@ -267,7 +267,7 @@ def plot_pid_variables(combined_data, output_dir="plots"):
                             axes[i].set_xlabel(var)
                             axes[i].set_ylabel("Events")
                             axes[i].set_title(f"{pid_var}")
-                            finalize_lhcb_figure(axes[i], simulation=True, legend=False,
+                            finalize_lhcb_figure(axes[i], simulation=False, legend=False,
                                               status="Preliminary", tight_layout=False)
                         else:
                             axes[i].text(0.5, 0.5, f"Variable {pid_var} not found", 
@@ -296,13 +296,13 @@ def plot_correlated_channels(combined_data, output_dir="plots"):
     # Format: (x_min, x_max, y_min, y_max, label)
     cc_regions = [
         # J/ψ region
-        (3050, 3150, 5250, 5300, "J/ψ → K⁰ₛK⁻π⁺"),
+        (3050, 3150, 5250, 5300, "J/#psi #rightarrow K^{0}_{S}K^{-}#pi^{+}"),
         # ηc region
-        (2900, 3000, 5250, 5300, "ηc → K⁰ₛK⁻π⁺"),
+        (2900, 3000, 5250, 5300, "#eta_{c} #rightarrow K^{0}_{S}K^{-}#pi^{+}"),
         # χc1 region
-        (3450, 3550, 5250, 5300, "χc1 → K⁰ₛK⁻π⁺"),
+        (3450, 3550, 5250, 5300, "#chi_{c1} #rightarrow K^{0}_{S}K^{-}#pi^{+}"),
         # ηc(2S) region
-        (3600, 3700, 5250, 5300, "ηc(2S) → K⁰ₛK⁻π⁺")
+        (3600, 3700, 5250, 5300, "#eta_{c}(2S) #rightarrow K^{0}_{S}K^{-}#pi^{+}")
     ]
     
     for decay_mode in DECAY_MODES:
@@ -348,7 +348,7 @@ def plot_correlated_channels(combined_data, output_dir="plots"):
             
             # Create 2D histogram
             h = ax.hist2d(x_data, y_data, bins=50, 
-                         range=((5200, 5400), (2500, 4000)),
+                         range=((5200, 5400), (2500, 6000)),
                          cmap='viridis', norm=mpl.colors.LogNorm())
             
             plt.colorbar(h[3], ax=ax, label="Events")
@@ -364,10 +364,10 @@ def plot_correlated_channels(combined_data, output_dir="plots"):
             
             # Finalize plot
             finalize_lhcb_figure(ax, 
-                               xlabel="B Mass [MeV/c²]", 
-                               ylabel="K⁰ₛK⁻π⁺ Mass [MeV/c²]",
+                               xlabel="B Mass [MeV/c^{2}]", 
+                               ylabel="K^{0}_{S}K^{-}#pi^{+} Mass [MeV/c^{2}]",
                                title=f"Correlated Channels - {DECAY_MODES[decay_mode]}",
-                               simulation=True,
+                               simulation=False,
                                status="Preliminary")
             
             # Save figure
@@ -379,15 +379,15 @@ def plot_correlated_channels(combined_data, output_dir="plots"):
             # Also create 1D histograms of K0s K- π+ mass
             fig, ax = create_lhcb_figure(figsize=(10, 8))
             
-            plot_histogram(kskpi_m, bins=100, range=(2500, 4000),
-                          label="K⁰ₛK⁻π⁺ mass", ax=ax, histtype="step")
+            plot_histogram(kskpi_m, bins=100, range=(2500, 6000),
+                          label="K^{0}_{S}K^{-}#pi^{+} mass", ax=ax, histtype="step")
             
             # Add vertical lines for known resonances
             resonances = [
-                (3097, "J/ψ"),
-                (2984, "ηc"),
-                (3511, "χc1"),
-                (3639, "ηc(2S)")
+                (3097, "J/#psi"),
+                (2984, "#eta_{c}"),
+                (3511, "#chi_{c1}"),
+                (3639, "#eta_{c}(2S)")
             ]
             
             for mass, name in resonances:
@@ -396,16 +396,16 @@ def plot_correlated_channels(combined_data, output_dir="plots"):
                        rotation=90, color='red')
             
             finalize_lhcb_figure(ax, 
-                              title=f"K⁰ₛK⁻π⁺ Invariant Mass - {DECAY_MODES[decay_mode]}",
-                              xlabel="K⁰ₛK⁻π⁺ Mass [MeV/c²]",
-                              ylabel="Events / 15 MeV/c²",
-                              simulation=True,
+                              title=f"K^{{0}}_{{S}}K^{{-}}#pi^{{+}} Invariant Mass - {DECAY_MODES[decay_mode]}",
+                              xlabel="K^{0}_{S}K^{-}#pi^{+} Mass [MeV/c^{2}]",
+                              ylabel="Events / 15 MeV/c^{2}",
+                              simulation=False,
                               status="Preliminary")
             
             plt.savefig(os.path.join(output_dir, f"kskpi_mass_{decay_mode}.pdf"))
             plt.close()
             
-            print(f"  Saved K⁰ₛK⁻π⁺ mass plot for {decay_mode}")
+            print(f"  Saved K^{{0}}_{{S}}K^{{-}}#pi^{{+}} mass plot for {decay_mode}")
             
             
 def apply_selection_cuts(combined_data, output_dir="plots"):
@@ -425,14 +425,14 @@ def apply_selection_cuts(combined_data, output_dir="plots"):
     ]
     
     cut_labels = [
-        "B pT > 1 GeV/c",
-        "B IP χ² < 25",
-        "B FD χ² > 100",
+        "B p_{T} > 1 GeV/c",
+        "B IP #chi^{2} < 25",
+        "B FD #chi^{2} > 100",
         "B DIRA > 0.9999",
-        "K⁰ₛ FD χ² > 25",
-        "K⁻ NNk > 0.2",
-        "π⁺ NNk > 0.2",
-        "K⁺ NNpi > 0.2"
+        "K^{0}_{S} FD #chi^{2} > 25",
+        "K^{-} NNk > 0.2",
+        "#pi^{+} NNk > 0.2",
+        "K^{+} NN#pi > 0.2"
     ]
     
     for decay_mode in DECAY_MODES:
@@ -447,8 +447,8 @@ def apply_selection_cuts(combined_data, output_dir="plots"):
                 bins=100,
                 range=(5200, 5400),
                 title=f"B Mass Distribution with Cuts - {DECAY_MODES[decay_mode]}",
-                xlabel="B Mass [MeV/c²]",
-                ylabel="Events / 2 MeV/c²",
+                xlabel="B Mass [MeV/c^{2}]",
+                ylabel="Events / 2 MeV/c^{2}",
                 figsize=(10, 8),
                 compare_before=True,
                 cut_labels=cut_labels
