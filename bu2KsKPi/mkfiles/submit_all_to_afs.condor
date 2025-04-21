@@ -1,0 +1,28 @@
+############################
+# submit_all_to_afs.condor
+############################
+
+# Executable & arguments
+executable = condor_wrapper.sh
+arguments  = $(Dataset)
+
+# Resources / runtime
+request_cpus   = 1
+request_memory = 4 GB
++MaxRuntime    = 14400
+
+# Logs (always transferred back)
+output = logs/$(Dataset).out
+error  = logs/$(Dataset).err
+log    = logs/condor_master.log
+
+# Transfer only the inputs; outputs live in AFS
+should_transfer_files   = YES
+transfer_input_files    = run_processing.sh, process_dataset.py, merge_dataset.py, condor_wrapper.sh
+when_to_transfer_output = NEVER
+
+# Run in  AFS base dir
+initialdir = /afs/cern.ch/work/m/melashri/public/reduction_norm
+
+# Queue one job per dataset
+queue Dataset in 2015_magup,2015_magdown,2016_magdown,2016_magup,2017_magdown,2017_magup,2018_magdown,2018_magup
