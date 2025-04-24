@@ -181,6 +181,5 @@ pyrightconfig.json
 **/*.pdg
 
 ## fits data
-**/*.json
 **/*.pkl
 **/*.csv
