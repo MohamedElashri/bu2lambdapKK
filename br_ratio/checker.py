@@ -23,7 +23,7 @@ def list_root_files(directory, max_files=10):
 directories = {
     "signal_data": "/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced",
     "signal_mc": "/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC",
-    "norm_data": "/share/lazy/Mohamed/bu2kskpik/RD/compressed",
+    "norm_data": "/share/lazy/Mohamed/bu2kskpik/RD/new/final",
     "norm_mc": "/share/lazy/Mohamed/bu2kskpik/MC/processed"
 }
 

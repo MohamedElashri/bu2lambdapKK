@@ -3,6 +3,10 @@ from tqdm.auto import tqdm
 from branches import canonical, get_branches
 CFG = yaml.safe_load(open("config.yml"))
 
+# Define full lists for 'all'
+ALL_YEARS = ['16', '17', '18'] # Or load from CFG if defined: CFG.get('years', ['16', '17', '18'])
+ALL_TRACKS = ['LL', 'DD'] # Or load from CFG if defined: CFG.get('track_types', ['LL', 'DD'])
+
 # ------------------------------------------------------------
 # tree‑path resolver (updated with more flexible matching)
 # ------------------------------------------------------------
@@ -185,9 +189,19 @@ def _loader(base, pattern, mode, years, tracks, sample, extra, cuts):
 # ------------------------------------------------------------
 def load_mc_data(mc_path, decay_mode, **kw):
     pattern = CFG["patterns"]["signal_mc"] if "L0bar" in decay_mode else CFG["patterns"]["norm_mc"]
+    
+    # Handle 'all' keywords
+    years_to_load = kw.get("years", ALL_YEARS)
+    if 'all' in years_to_load:
+        years_to_load = ALL_YEARS
+        
+    tracks_to_load = kw.get("tracks", ALL_TRACKS)
+    if 'all' in tracks_to_load:
+        tracks_to_load = ALL_TRACKS
+        
     return _loader(base=mc_path, pattern=pattern, mode=decay_mode,
-                  years=kw.get("years", ["16", "17", "18"]),
-                  tracks=kw.get("tracks", ["LL", "DD"]),
+                  years=years_to_load,
+                  tracks=tracks_to_load,
                   sample="signal" if "L0bar" in decay_mode else "norm",
                   extra=kw.get("additional_branches", ()),
                   cuts=kw.get("cuts", ""))
@@ -204,11 +218,20 @@ def load_data(data_path, decay_mode, **kw):
         # print(f"DEBUG: Using configured norm_mode_data: {actual_mode} instead of {decay_mode}")
     
     # Get the appropriate years format based on the sample type
-    years_format = kw.get("years", ["2016", "2017", "2018"])
+    years_format = kw.get("years", ALL_YEARS)
     
+    # Handle 'all' keywords
+    years_to_load = years_format
+    if 'all' in years_to_load:
+        years_to_load = ALL_YEARS
+        
+    tracks_to_load = kw.get("tracks", ALL_TRACKS)
+    if 'all' in tracks_to_load:
+        tracks_to_load = ALL_TRACKS
+
     return _loader(base=data_path, pattern=pattern, mode=actual_mode,
-                  years=years_format,
-                  tracks=kw.get("tracks", ["LL", "DD"]),
+                  years=years_to_load,
+                  tracks=tracks_to_load,
                   sample="signal" if is_signal else "norm",
                   extra=kw.get("additional_branches", ()),
                   cuts=kw.get("cuts", ""))
