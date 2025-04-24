@@ -70,12 +70,12 @@ def fit(sample, year, track):
 
     # --- Signal Shape Parameters ---
     mean  = ROOT.RooRealVar("mean", "mean", 5280, 5260, 5290)
-    # Sigma might differ - adjust initial value/range if needed for norm
+    # Sigma might differ 
     sigma_init = 15 if is_sig else 12 # EXAMPLE: Slightly smaller initial sigma for norm
     sigma_min = 5 if is_sig else 3     # EXAMPLE: Tighter range for norm?
     sigma_max = 30 if is_sig else 25
     sigma = ROOT.RooRealVar("sigma", "sigma", sigma_init, sigma_min, sigma_max)
-    # Crystal Ball tail parameters (keep same for now, could adjust)
+    # Crystal Ball tail parameters (keep same for now, change later)
     alpha = ROOT.RooRealVar("alpha", "alpha", 1.5, 0.1, 5.0)
     n     = ROOT.RooRealVar("n", "n", 2.0, 0.1, 10.0)
 
@@ -131,7 +131,7 @@ def fit(sample, year, track):
     # Create frame WITH the Title argument
     frame = m.frame(ROOT.RooFit.Title(plot_title))
     # Explicitly set plotting bins
-    n_bins_plot = 50 # Adjust bins for the smaller range? Let's try 50.
+    n_bins_plot = 50 # Lets try 50 bins for the smaller range
     rds.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.Binning(n_bins_plot))
     model.plotOn(frame, ROOT.RooFit.Name("total_fit"))#, ROOT.RooFit.Range(fit_min, fit_max), ROOT.RooFit.NormRange("fit_range"))
     # Plot components
