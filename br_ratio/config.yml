@@ -17,8 +17,8 @@ tracks: ["LL", "DD"]
 # Normalization mode names
 norm_mode_data: "KSKmKpPip"
 # PDG input for normalisation channel
-br_norm_pdg: 26.56e-5
-br_norm_pdg_unc: 6.0
+br_norm_pdg: 32.28e-5
+br_norm_pdg_unc: 0.33
 # -------------------------------------------------------------
 # branch aliases
 # -------------------------------------------------------------

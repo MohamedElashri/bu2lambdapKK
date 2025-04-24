@@ -65,30 +65,51 @@ def fit(sample, year, track):
 
     nentries = rds.numEntries() # Recalculated for the new range
 
-    # Define model parameters
-    # --- Signal: Crystal Ball ---
+    # --- Define Model Parameters (potentially sample-dependent) ---
+    is_sig = (sample == 'sig')
+
+    # --- Signal Shape Parameters ---
     mean  = ROOT.RooRealVar("mean", "mean", 5280, 5260, 5290)
-    sigma = ROOT.RooRealVar("sigma", "sigma", 15, 5, 30)   
-    alpha = ROOT.RooRealVar("alpha", "alpha", 1.5, 0.1, 5.0)  # CB tail parameter
-    n     = ROOT.RooRealVar("n", "n", 2.0, 0.1, 10.0)    # CB tail parameter
-    # --- Background: Chebychev ---
-    c1    = ROOT.RooRealVar("c1", "c1", -0.1, -1, 1) # 1st order coefficient
-    c2    = ROOT.RooRealVar("c2", "c2", 0.05, -1, 1) # 2nd order coefficient
-    # Yields - Start closer to 50/50 and allow wider range
+    # Sigma might differ - adjust initial value/range if needed for norm
+    sigma_init = 15 if is_sig else 12 # EXAMPLE: Slightly smaller initial sigma for norm
+    sigma_min = 5 if is_sig else 3     # EXAMPLE: Tighter range for norm?
+    sigma_max = 30 if is_sig else 25
+    sigma = ROOT.RooRealVar("sigma", "sigma", sigma_init, sigma_min, sigma_max)
+    # Crystal Ball tail parameters (keep same for now, could adjust)
+    alpha = ROOT.RooRealVar("alpha", "alpha", 1.5, 0.1, 5.0)
+    n     = ROOT.RooRealVar("n", "n", 2.0, 0.1, 10.0)
+
+    # --- Background Shape Parameters ---
+    c1    = ROOT.RooRealVar("c1", "c1", -0.1, -1, 1) # 1st order coefficient (used by both)
+    if is_sig:
+        # Define c2 only for signal fit (2nd order Chebychev)
+        c2 = ROOT.RooRealVar("c2", "c2", 0.05, -1, 1)
+
+    # --- Yields ---
     # Use nentries (events in range) for initial guess
     nsig_init = nentries * 0.5 if nentries > 0 else 100 # Avoid 0 if no entries
     nbkg_init = nentries * 0.5 if nentries > 0 else 100
     nsig  = ROOT.RooRealVar("nsig", "Nsig", nsig_init, 0, nentries*1.5 if nentries > 0 else 1000)
     nbkg  = ROOT.RooRealVar("nbkg", "Nbkg", nbkg_init, 0, nentries*1.5 if nentries > 0 else 1000)
 
-    # Define PDFs
-    # --- Signal: Crystal Ball ---
+    # --- Define PDFs --- 
+    # Signal model is Crystal Ball for both for now
     signal_model = ROOT.RooCBShape("signal_model", "Crystal Ball", m, mean, sigma, alpha, n)
-    # 2nd order Chebychev background
-    background_model = ROOT.RooChebychev("background_model", "Chebychev Background", m, ROOT.RooArgList(c1, c2))
+
+    # Background model depends on sample
+    if is_sig:
+        # 2nd order Chebychev for signal
+        background_model = ROOT.RooChebychev("background_model", "Chebychev Background (2nd order)", m, ROOT.RooArgList(c1, c2))
+        model_comp_list = ROOT.RooArgList(signal_model, background_model)
+        model_yield_list = ROOT.RooArgList(nsig, nbkg)
+    else:
+        # 1st order Chebychev for normalization
+        background_model = ROOT.RooChebychev("background_model", "Chebychev Background (1st order)", m, ROOT.RooArgList(c1))
+        model_comp_list = ROOT.RooArgList(signal_model, background_model)
+        model_yield_list = ROOT.RooArgList(nsig, nbkg)
 
     # Combine signal and background
-    model = ROOT.RooAddPdf("model", "Signal+Background", ROOT.RooArgList(signal_model, background_model), ROOT.RooArgList(nsig, nbkg))
+    model = ROOT.RooAddPdf("model", "Signal+Background", model_comp_list, model_yield_list)
 
     # Perform the fit
     # Use Extended(True) for RooAddPdf with yields
@@ -136,9 +157,9 @@ def fit(sample, year, track):
 
     # Set data legend entry based on sample type
     if is_sig:
-        data_legend_text = "B^{+} #rightarrow #Lambda #bar{p} K^{+} K^{+}"
+        data_legend_text = "B^{+} #rightarrow #bar{#\Lambda} #bar{p} K^{+} K^{-}"
     else:
-        data_legend_text = "B^{+} #rightarrow K_{S}^{0} #pi^{-} K^{+} K^{+}"
+        data_legend_text = "B^{+} #rightarrow K_{S}^{0} #pi^{+} K^{+} K^{-}"
 
     legend.AddEntry(frame.findObject("data"), data_legend_text, "PE")
     legend.AddEntry(frame.findObject("total_fit"), "Fit", "L")
