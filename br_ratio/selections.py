@@ -3,11 +3,14 @@ CFG = yaml.safe_load(open("config.yml"))
 
 def trigger_mask(evt, sample):
     """
-    Return boolean array – true if event passes *all* trigger lines.
+    Boolean mask: event passes *all* trigger lines.
     """
-    cols = [CFG["triggers"][k][sample] for k in
-            ("L0TIS", "L0H_TOS", "H12_TOS", "Topo2_TOS")]
-    mask = ak.ones_like(evt[cols[0]], dtype=bool)
-    for c in cols:
-        mask &= evt[c]
+    cname = lambda key: CFG["triggers"][key][sample]
+    cols = [cname(k) for k in ("L0TIS", "L0H_TOS", "H12_TOS", "Topo2_TOS")]
+    # Initialize mask based on the first trigger, ensuring it's boolean
+    mask = ak.values_astype(evt[cols[0]], bool)
+    # Combine remaining triggers, ensuring each is cast to boolean
+    for c in cols[1:]:
+        # Use standard '&' and reassign instead of in-place '&='
+        mask = mask & ak.values_astype(evt[c], bool)
     return mask

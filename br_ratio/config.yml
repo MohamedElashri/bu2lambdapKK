@@ -1,41 +1,55 @@
 # ------------------------------------------------------------------
-#  File & run configuration
+# paths
 # ------------------------------------------------------------------
 signal_data_dir: "/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced"
-signal_mc_dir:   "/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC"
-
-norm_data_dir:   "/share/lazy/Mohamed/bu2kskpik/RD/compressed"
-norm_mc_dir:     "/share/lazy/Mohamed/bu2kskpik/MC/processed"
-
+signal_mc_dir: "/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC"
+norm_data_dir: "/share/lazy/Mohamed/bu2kskpik/RD/new/final"
+norm_mc_dir: "/share/lazy/Mohamed/bu2kskpik/MC/processed"
+# filename substrings for discovery (data & MC can differ)
+patterns:
+  signal_data: "L0barPHH"
+  signal_mc: "L0barPKpKm"
+  norm_data: ".root"  # Match any ROOT file in the directory
+  norm_mc: "B2K0s2PipPimKmPipKp"
+# run period and track types
 years:  ["2016", "2017", "2018"]
 tracks: ["LL", "DD"]
-
-# PDG value for B⁺→K_S⁰ π⁺ K⁺ K⁻   (update whenever needed)
-br_norm_pdg:      2.7e-5
-br_norm_pdg_unc:  0.4e-5
-
-# ------------------------------------------------------------------
-#  Branch aliases  (canonical → list of actual names)
-# ------------------------------------------------------------------
+# Normalization mode names
+norm_mode_data: "KSKmKpPip"
+# PDG input for normalisation channel
+br_norm_pdg: 26.56e-5
+br_norm_pdg_unc: 6.0
+# -------------------------------------------------------------
+# branch aliases
+# -------------------------------------------------------------
 aliases:
-  mass:          ["Bu_M", "B_M", "Bu_MM", "B_MM"]
-
-  track_h1_P:    ["h1_P",  "P0_P"]
-  track_h2_P:    ["h2_P",  "P2_P"]
-  track_p_P:     ["p_P",   "P1_P"]
-
-# ------------------------------------------------------------------
-#  Trigger branch map  (canonical → {signal:, norm:})
-# ------------------------------------------------------------------
+  mass: ["Bu_M", "B_M", "Bu_MM", "B_MM"]
+  # tracks: (h1→K⁺, h2→K⁻, p→p⁺) vs (P0=K⁺, P2=K⁻, P1=π⁺)
+  track_h1_P: ["h1_P", "P0_P"]
+  track_h2_P: ["h2_P", "P2_P"]
+  track_p_P: ["p_P", "P1_P"]
+# -------------------------------------------------------------
+# trigger alias map
+# -------------------------------------------------------------
 triggers:
-  L0TIS:   {signal: "Bu_L0Global_TIS",             norm: "B_L0Global_TIS"}
-  L0H_TOS: {signal: "Bu_L0HadronDecision_TOS",     norm: "B_L0HadronDecision_TOS"}
-  H1_TOS:  {signal: "Bu_Hlt1TrackMVADecision_Dec", norm: "B_Hlt1TrackMVADecision_TOS"}
-  H12_TOS: {signal: "Bu_Hlt1TwoTrackMVADecision_TOS",
-            norm:   "B_Hlt1TwoTrackMVADecision_TOS"}
-  Topo2_TOS:{signal: "Bu_Hlt2Topo2BodyDecision_TOS",
-             norm:   "B_Hlt2Topo2BodyDecision_TOS"}
-  Topo3_TOS:{signal: "Bu_Hlt2Topo3BodyDecision_TOS",
-             norm:   "B_Hlt2Topo3BodyDecision_TOS"}
-  Topo4_TOS:{signal: "Bu_Hlt2Topo4BodyDecision_TOS",
-             norm:   "B_Hlt2Topo4BodyDecision_TOS"}
+  L0TIS:
+    signal: "Bu_L0Global_TIS"
+    norm: "B_L0Global_TIS"
+  L0H_TOS:
+    signal: "Bu_L0HadronDecision_TOS"
+    norm: "B_L0HadronDecision_TOS"
+  H1_TOS:
+    signal: "Bu_Hlt1TrackMVADecision_TOS"
+    norm: "B_Hlt1TrackMVADecision_TOS"
+  H12_TOS:
+    signal: "Bu_Hlt1TwoTrackMVADecision_TOS"
+    norm: "B_Hlt1TwoTrackMVADecision_TOS"
+  Topo2_TOS:
+    signal: "Bu_Hlt2Topo2BodyDecision_TOS"
+    norm: "B_Hlt2Topo2BodyDecision_TOS"
+  Topo3_TOS:
+    signal: "Bu_Hlt2Topo3BodyDecision_TOS"
+    norm: "B_Hlt2Topo3BodyDecision_TOS"
+  Topo4_TOS:
+    signal: "Bu_Hlt2Topo4BodyDecision_TOS"
+    norm: "B_Hlt2Topo4BodyDecision_TOS"
