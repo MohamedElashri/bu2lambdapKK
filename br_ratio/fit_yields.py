@@ -1,9 +1,13 @@
 import yaml, ROOT, json
+import os
 from loaders import load_data
 from selections import trigger_mask
 from branches import canonical
 
 CFG = yaml.safe_load(open("config.yml"))
+
+# Prevent plots from popping up
+ROOT.gROOT.SetBatch(True)
 
 
 def fit(sample, year, track):
@@ -35,18 +39,52 @@ def fit(sample, year, track):
         rds.add(ROOT.RooArgSet(m))
     print("\t...filling complete.")
 
-    mean  = ROOT.RooRealVar("mean", "mean", 5280, 5200, 5350)
-    sigma = ROOT.RooRealVar("sigma", "sigma", 20, 5, 60)
-    c     = ROOT.RooRealVar("c", "c", -0.002, -1, 0)
-    expo  = ROOT.RooExponential("expo", "", m, c)
-    fsig  = ROOT.RooRealVar("fsig", "fsig", 0.6, 0, 1)
-    gaus  = ROOT.RooGaussian("gaus", "", m, mean, sigma)
-    model = ROOT.RooAddPdf("model", "", gaus, expo, fsig)
+    nentries = rds.numEntries()
 
-    model.fitTo(rds, ROOT.RooFit.PrintLevel(-1))
-    nsig = fsig.getVal() * rds.numEntries()
-    err  = fsig.getError() * rds.numEntries()
-    return nsig, err
+    # Define model parameters
+    mean  = ROOT.RooRealVar("mean", "mean", 5280, 5200, 5350)
+    sigma1 = ROOT.RooRealVar("sigma1", "sigma1", 15, 5, 40) # Renamed from sigma
+    sigma2 = ROOT.RooRealVar("sigma2", "sigma2", 40, 10, 80) # Second sigma
+    fgaus1 = ROOT.RooRealVar("fgaus1", "fgaus1", 0.7, 0, 1) # Fraction of first Gaussian
+    c     = ROOT.RooRealVar("c", "c", -0.001, -0.1, 0) # Exp slope
+    nsig  = ROOT.RooRealVar("nsig", "Nsig", nentries*0.8, 0, nentries*1.2)
+    nbkg  = ROOT.RooRealVar("nbkg", "Nbkg", nentries*0.2, 0, nentries*1.2)
+
+    # Define PDFs
+    gaus1 = ROOT.RooGaussian("gaus1", "Gaussian 1", m, mean, sigma1)
+    gaus2 = ROOT.RooGaussian("gaus2", "Gaussian 2", m, mean, sigma2) # Using same mean
+    signal_model = ROOT.RooAddPdf("signal_model", "Double Gaussian", gaus1, gaus2, fgaus1)
+    background_model = ROOT.RooExponential("background_model", "Exponential background", m, c)
+
+    # Combine signal and background
+    model = ROOT.RooAddPdf("model", "Signal+Background", ROOT.RooArgList(signal_model, background_model), ROOT.RooArgList(nsig, nbkg))
+
+    # Perform the fit
+    # Use Extended(True) for RooAddPdf with yields
+    fit_result = model.fitTo(rds, ROOT.RooFit.PrintLevel(-1), ROOT.RooFit.Save(), ROOT.RooFit.Extended(True))
+
+    # Create and save the plot
+    plots_dir = "plots"
+    os.makedirs(plots_dir, exist_ok=True)
+    plot_filename = os.path.join(plots_dir, f"{sample}_{year}_{track}.png")
+
+    frame = m.frame(ROOT.RooFit.Title(f"Fit for {sample} {year} {track}"))
+    rds.plotOn(frame, ROOT.RooFit.Name("data"))
+    model.plotOn(frame, ROOT.RooFit.Name("total_fit"))
+    # Plot components
+    model.plotOn(frame, ROOT.RooFit.Components("background_model"), ROOT.RooFit.LineStyle(ROOT.kDashed), ROOT.RooFit.LineColor(ROOT.kGreen+2), ROOT.RooFit.Name("background"))
+    model.plotOn(frame, ROOT.RooFit.Components("signal_model"), ROOT.RooFit.LineStyle(ROOT.kDashed), ROOT.RooFit.LineColor(ROOT.kRed), ROOT.RooFit.Name("signal"))
+
+    c1 = ROOT.TCanvas("c1", "", 800, 600)
+    frame.Draw()
+    c1.SaveAs(plot_filename)
+    print(f"\tSaved plot -> {plot_filename}")
+
+    # Return signal yield and error
+    fitted_nsig = nsig.getVal()
+    err  = nsig.getError()
+    print(f"\tFitted Nsig = {fitted_nsig:.2f} +/- {err:.2f}")
+    return fitted_nsig, err
 
 
 results = {}
