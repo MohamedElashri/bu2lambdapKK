@@ -4,8 +4,8 @@ from ROOT import RooFit, RooArgSet, RooCBShape, TH1F, TLegend, TLatex
 import os
 import numpy as np
 from loaders import load_data
-from selections import trigger_mask
-from branches import canonical
+from selections import trigger_mask, create_selection_mask
+from branches import _resolve_branch_name
 
 # Prevent plots from popping up
 ROOT.gROOT.SetBatch(True)
@@ -27,114 +27,6 @@ ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
 
 # Load configuration
 CFG = yaml.safe_load(open("config.yml"))
-
-def create_selection_mask(data, sample):
-    """
-    Create selection mask for data based on sample type
-    
-    Parameters:
-    -----------
-    data : awkward array
-        Data to apply selection to
-    sample : str
-        'signal' or 'norm' to determine which selection to apply
-    
-    Returns:
-    --------
-    boolean mask
-        Mask to apply to data
-    """
-    is_sig = sample == "signal"
-    mask = np.ones(len(data), dtype=bool)  # Start with all True
-    
-    # Get correct branch names based on sample
-    if is_sig:
-        # Signal-specific branch names
-        l0_endvertex_z = "L0_ENDVERTEX_Z"
-        l0_ownpv_z = "L0_OWNPV_Z"
-        l0_fdchi2 = "L0_FDCHI2_OWNPV"
-        l0_m = "L0_M"
-        l0_proton_nn = "Lp_MC15TuneV1_ProbNNp"
-        proton_nn = "p_MC15TuneV1_ProbNNp"
-        h1_nn = "h1_MC15TuneV1_ProbNNk"
-        h2_nn = "h2_MC15TuneV1_ProbNNk"
-        bu_pt = "Bu_PT"
-        bu_dtf_chi2 = "Bu_DTF_chi2"
-        bu_ipchi2 = "Bu_IPCHI2_OWNPV"
-        bu_fdchi2 = "Bu_FDCHI2_OWNPV"
-    else:
-        # Normalization-specific branch names
-        l0_endvertex_z = "Ks_ENDVERTEX_Z"
-        l0_ownpv_z = "Ks_OWNPV_Z"
-        l0_fdchi2 = "Ks_FDCHI2_OWNPV"
-        l0_m = "Ks_M"
-        l0_proton_nn = "KsPi_MC15TuneV1_ProbNNpi"  # For Ks pion
-        proton_nn = "P1_MC15TuneV1_ProbNNpi"  # For pion in norm channel
-        h1_nn = "P0_MC15TuneV1_ProbNNk"
-        h2_nn = "P2_MC15TuneV1_ProbNNk"
-        bu_pt = "B_PT"
-        bu_dtf_chi2 = "B_DTF_chi2"
-        bu_ipchi2 = "B_IPCHI2_OWNPV"
-        bu_fdchi2 = "B_FDCHI2_OWNPV"
-    
-    # Common cuts for both channels with branch name adaptation
-    try:
-        # Delta Z cut
-        if l0_endvertex_z in data.fields and l0_ownpv_z in data.fields:
-            mask = mask & ((data[l0_endvertex_z] - data[l0_ownpv_z]) > 20)
-            print(f"\tApplied delta Z cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # FD chi2 cut
-        if l0_fdchi2 in data.fields:
-            mask = mask & (data[l0_fdchi2] > 45)
-            print(f"\tApplied FD chi2 cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # Mass window cut - different for Lambda vs Ks
-        if l0_m in data.fields:
-            pdg_mass = 1115.6 if is_sig else 497.6  # Lambda vs Ks PDG mass
-            window = 6 if is_sig else 15  # Wider window for Ks
-            mask = mask & (np.abs(data[l0_m] - pdg_mass) < window)
-            print(f"\tApplied {('Lambda' if is_sig else 'Ks')} mass window cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # PID cuts
-        if is_sig and proton_nn in data.fields:
-            mask = mask & (data[proton_nn] > 0.05)
-            print(f"\tApplied proton PID cut: {mask.sum()}/{len(mask)} remaining")
-        
-        if l0_proton_nn in data.fields:
-            threshold = 0.2 if is_sig else 0.1  # Different threshold for proton vs pion
-            mask = mask & (data[l0_proton_nn] > threshold)
-            print(f"\tApplied {'Lambda proton' if is_sig else 'Ks pion'} PID cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # Kaon PID product cut (for both channels)
-        if h1_nn in data.fields and h2_nn in data.fields:
-            mask = mask & ((data[h1_nn] * data[h2_nn]) > 0.04)
-            print(f"\tApplied KK product cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # B PT cut
-        if bu_pt in data.fields:
-            mask = mask & (data[bu_pt] > 3000)
-            print(f"\tApplied B PT cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # DTF chi2 cut
-        if bu_dtf_chi2 in data.fields:
-            mask = mask & (data[bu_dtf_chi2] < 30)
-            print(f"\tApplied DTF chi2 cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # IP chi2 cut
-        if bu_ipchi2 in data.fields:
-            mask = mask & (data[bu_ipchi2] < 10)
-            print(f"\tApplied IP chi2 cut: {mask.sum()}/{len(mask)} remaining")
-        
-        # FD chi2 cut for B
-        if bu_fdchi2 in data.fields:
-            mask = mask & (data[bu_fdchi2] > 175)
-            print(f"\tApplied B FD chi2 cut: {mask.sum()}/{len(mask)} remaining")
-        
-    except Exception as e:
-        print(f"Error applying selection: {e}")
-    
-    return mask
 
 def fit(sample, year, track):
     """
@@ -190,7 +82,7 @@ def fit(sample, year, track):
         return None
 
     # Determine the correct physical mass column name using canonical
-    mass_col = canonical(sample_label, ["mass"])[0]
+    mass_col = _resolve_branch_name("mass", sample_label) # Resolve 'mass' directly
     # Set fit range - potentially different for signal vs norm
     fit_min, fit_max = (5200, 5400)  # Same range for both by default
     m = ROOT.RooRealVar("m", "mass", fit_min, fit_max)

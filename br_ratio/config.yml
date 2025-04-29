@@ -23,7 +23,9 @@ br_norm_pdg_unc: 0.33
 # branch aliases
 # -------------------------------------------------------------
 aliases:
-  mass: ["Bu_M", "B_M", "Bu_MM", "B_MM"]
+  mass:
+    signal: "Bu_MM" 
+    norm: "B_MM"   
   # tracks: (h1→K⁺, h2→K⁻, p→p⁺) vs (P0=K⁺, P2=K⁻, P1=π⁺)
   track_h1_P: ["h1_P", "P0_P"]
   track_h2_P: ["h2_P", "P2_P"]
@@ -53,3 +55,96 @@ triggers:
   Topo4_TOS:
     signal: "Bu_Hlt2Topo4BodyDecision_TOS"
     norm: "B_Hlt2Topo4BodyDecision_TOS"
+  HLT1TIS:
+    signal: "Bu_Hlt1TrackMVADecision_TIS"
+    norm: "B_Hlt1TrackMVADecision_TOS"
+
+# -------------------------------------------------------------
+# PDG Masses (for selections)
+# -------------------------------------------------------------
+pdg_masses:
+  Lambda: 1115.683  # MeV/c^2
+  K0s: 497.611      # MeV/c^2
+
+# -------------------------------------------------------------
+# Selection Variables
+# -------------------------------------------------------------
+# IMPORTANT: We need to verify these branch names match TTrees exactly!
+selection_vars:
+  # Lambda/Ks variables
+  l0_endvertex_z:
+    signal: "L0_ENDVERTEX_Z" 
+    norm: "KS_ENDVERTEX_Z"
+  l0_ownpv_z:
+    signal: "L0_OWNPV_Z"     
+    norm: "KS_OWNPV_Z"
+  l0_fdchi2:
+    signal: "L0_FDCHI2_OWNPV" 
+    norm: "KS_FDCHI2_OWNPV"
+  l0_m:
+    signal: "L0_M"          
+    norm: "KS_M"
+
+  # PID variables (Keys MUST match usage in selections.py)
+  l0_daughter1_pid: # e.g., Lambda proton / Ks pion+
+    signal: "Lp_MC15TuneV1_ProbNNp" 
+    norm: "P0_ProbNNp" 
+  l0_daughter2_pid: # e.g., Lambda pion / Ks pion-
+    signal: "Lpi_MC15TuneV1_ProbNNpi" 
+    norm: "P0_ProbNNpi"
+
+  bachelor_pid: # e.g., Signal proton / Norm pion (P1)
+    signal: "p_MC15TuneV1_ProbNNp"  
+    norm: "P1_ProbNNpi" 
+
+  h1_probNNK: # e.g., Signal Kaon1 / Norm Kaon1 (P0)
+    signal: "h1_MC15TuneV1_ProbNNk"  
+    norm: "P0_ProbNNk"  # USER PROVIDED
+  h2_probNNK: # e.g., Signal Kaon2 / Norm Kaon2 (P2)
+    signal: "h2_MC15TuneV1_ProbNNk"   
+    norm: "P2_ProbNNk"  # USER PROVIDED
+
+  # Bu/B variables
+  bu_pt:
+    signal: "Bu_PT"              
+    norm: "B_PT"
+  bu_dtf_chi2:
+    signal: "Bu_DTF_chi2"         
+    norm: "B_ENDVERTEX_CHI2"
+  bu_ipchi2:
+    signal: "Bu_IPCHI2_OWNPV"     
+    norm: "B_IPCHI2_OWNPV"
+  bu_fdchi2:
+    signal: "Bu_FDCHI2_OWNPV"
+    norm: "B_FDCHI2_OWNPV"
+
+# -------------------------------------------------------------
+# Selection Cuts
+# -------------------------------------------------------------
+selections:
+  common:
+    delta_z_min: 20
+    l0_fdchi2_min: 45
+    kaon_pid_prod_min: 0.04
+    bu_pt_min: 3000
+    bu_dtf_chi2_max: 30
+    bu_ipchi2_max: 10
+    bu_fdchi2_min: 175
+  signal: # Bu -> Lambda(p+ pi-) K+ K-
+    l0_mass_window: 15  # +/- MeV around PDG Lambda mass
+    proton_pid_min: 0.05 # PID cut on the proton from Lambda decay
+    l0_proton_pid_min: 0.1 # Specific for Lambda's proton
+  norm:   # Bu -> Ks(pi+ pi-) K+ K- (treat Ks as L0 as they are equivalent here)
+    l0_mass_window: 20  # +/- MeV around PDG Ks mass
+    l0_pion_pid_min: 0.1 # Specific for Ks's pion 
+
+# Fitting parameters (example)
+fit_params:
+  mass_range: [5200, 5800]
+  signal_pdf: "Gaussian"
+  background_pdf: "Chebychev"
+  num_signal: [1000, 0, 10000]
+  num_background: [5000, 0, 50000]
+  signal_mean: [5280, 5250, 5310] # Initial, Min, Max
+  signal_sigma: [15, 5, 30]
+  chebychev_coeffs: [-0.1, -1, 1]

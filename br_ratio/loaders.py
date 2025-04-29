@@ -1,6 +1,6 @@
 import os, uproot, yaml, awkward as ak
 from tqdm.auto import tqdm
-from branches import canonical, get_branches
+from branches import get_nominal_branches
 CFG = yaml.safe_load(open("config.yml"))
 
 # Define full lists for 'all'
@@ -163,14 +163,18 @@ def _loader(base, pattern, mode, years, tracks, sample, extra, cuts):
         print(f"[loader] files found but no trees for {mode}")
         return None
     
-    branches = canonical(sample, get_branches(sample) + list(extra))
-    # print(f"DEBUG: Loading branches: {branches}")
+    # Get base branches from config-aware function
+    base_branches = get_nominal_branches(sample)
+    # Combine with extra branches, ensuring uniqueness
+    final_branches = sorted(list(set(base_branches) | set(extra)))
+
+    # print(f"DEBUG: Loading branches: {final_branches}")
     arrays = []
     
     for tp in tqdm(trees, desc=f"{sample}-{mode}", unit="tree"):
         try:
             # print(f"DEBUG: Reading tree {tp}")
-            array = uproot.concatenate(tp, branches, cut=(cuts or None), how="zip")
+            array = uproot.concatenate(tp, final_branches, cut=(cuts or None), how="zip")
             # print(f"DEBUG: Loaded {len(array)} events with fields: {array.fields}")
             arrays.append(array)
         except Exception as e:

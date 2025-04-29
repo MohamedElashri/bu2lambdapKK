@@ -19,7 +19,7 @@ def list_root_files(directory, max_files=10):
                     return files
     return files
 
-# Directories from your config.yml
+# Directories from config.yml
 directories = {
     "signal_data": "/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced",
     "signal_mc": "/share/lazy/Mohamed/Bu2LambdaPPP/MC/DaVinciTuples/restripped.MC",
