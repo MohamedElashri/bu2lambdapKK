@@ -157,7 +157,7 @@ def fit(sample, year, track):
 
     # Set data legend entry based on sample type
     if is_sig:
-        data_legend_text = "B^{+} #rightarrow #bar{#\Lambda} #bar{p} K^{+} K^{-}"
+        data_legend_text = "B^{+} #rightarrow #bar{\Lambda} #bar{p} K^{+} K^{-}"
     else:
         data_legend_text = "B^{+} #rightarrow K_{S}^{0} #pi^{+} K^{+} K^{-}"
 
