@@ -13,7 +13,7 @@ EFF_FILE = "eff.json"
 OUTPUT_DIR = "reports"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Define acceptable fit quality (adjust as needed)
+# Define acceptable fit quality
 GOOD_FIT_STATUS = [0] # Allow only status 0 for "OK"
 GOOD_COV_QUAL = [3] # Allow only covQual 3 for "OK"
 

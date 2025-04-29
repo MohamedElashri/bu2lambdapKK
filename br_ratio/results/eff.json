@@ -1,0 +1,309 @@
+{
+  "sig": {
+    "2016_LL_detailed": {
+      "total": {
+        "n_tot": 234230,
+        "n_pass": 23685,
+        "efficiency": 0.1011185586816377
+      },
+      "trigger": {
+        "n_tot": 234230,
+        "n_pass": 23685,
+        "efficiency": 0.1011185586816377
+      },
+      "relative": {
+        "n_tot": 23685,
+        "n_pass": 23685,
+        "efficiency": 1.0
+      }
+    },
+    "2016_LL": {
+      "n_tot": 234230,
+      "n_pass": 23685
+    },
+    "2016_DD_detailed": {
+      "total": {
+        "n_tot": 161694,
+        "n_pass": 13309,
+        "efficiency": 0.08230979504496147
+      },
+      "trigger": {
+        "n_tot": 161694,
+        "n_pass": 13309,
+        "efficiency": 0.08230979504496147
+      },
+      "relative": {
+        "n_tot": 13309,
+        "n_pass": 13309,
+        "efficiency": 1.0
+      }
+    },
+    "2016_DD": {
+      "n_tot": 161694,
+      "n_pass": 13309
+    },
+    "2017_LL_detailed": {
+      "total": {
+        "n_tot": 208531,
+        "n_pass": 22675,
+        "efficiency": 0.10873683049522613
+      },
+      "trigger": {
+        "n_tot": 208531,
+        "n_pass": 22675,
+        "efficiency": 0.10873683049522613
+      },
+      "relative": {
+        "n_tot": 22675,
+        "n_pass": 22675,
+        "efficiency": 1.0
+      }
+    },
+    "2017_LL": {
+      "n_tot": 208531,
+      "n_pass": 22675
+    },
+    "2017_DD_detailed": {
+      "total": {
+        "n_tot": 169984,
+        "n_pass": 14642,
+        "efficiency": 0.0861375188253012
+      },
+      "trigger": {
+        "n_tot": 169984,
+        "n_pass": 14642,
+        "efficiency": 0.0861375188253012
+      },
+      "relative": {
+        "n_tot": 14642,
+        "n_pass": 14642,
+        "efficiency": 1.0
+      }
+    },
+    "2017_DD": {
+      "n_tot": 169984,
+      "n_pass": 14642
+    },
+    "2018_LL_detailed": {
+      "total": {
+        "n_tot": 270871,
+        "n_pass": 27394,
+        "efficiency": 0.10113301165499444
+      },
+      "trigger": {
+        "n_tot": 270871,
+        "n_pass": 27394,
+        "efficiency": 0.10113301165499444
+      },
+      "relative": {
+        "n_tot": 27394,
+        "n_pass": 27394,
+        "efficiency": 1.0
+      }
+    },
+    "2018_LL": {
+      "n_tot": 270871,
+      "n_pass": 27394
+    },
+    "2018_DD_detailed": {
+      "total": {
+        "n_tot": 230250,
+        "n_pass": 17121,
+        "efficiency": 0.07435830618892508
+      },
+      "trigger": {
+        "n_tot": 230250,
+        "n_pass": 17121,
+        "efficiency": 0.07435830618892508
+      },
+      "relative": {
+        "n_tot": 17121,
+        "n_pass": 17121,
+        "efficiency": 1.0
+      }
+    },
+    "2018_DD": {
+      "n_tot": 230250,
+      "n_pass": 17121
+    },
+    "all_all": {
+      "n_tot": 1275560,
+      "n_pass": 118826
+    }
+  },
+  "norm": {
+    "2016_LL_detailed": {
+      "total": {
+        "n_tot": 15962001,
+        "n_pass": 1058681,
+        "efficiency": 0.0663250804206816
+      },
+      "trigger": {
+        "n_tot": 15962001,
+        "n_pass": 1058681,
+        "efficiency": 0.0663250804206816
+      },
+      "proton_pid": {
+        "n_tot": 1058681,
+        "n_pass": 1058681,
+        "efficiency": 1.0
+      },
+      "relative": {
+        "n_tot": 1058681,
+        "n_pass": 1058681,
+        "efficiency": 1.0
+      }
+    },
+    "2016_LL": {
+      "n_tot": 15962001,
+      "n_pass": 1058681
+    },
+    "2016_DD_detailed": {
+      "total": {
+        "n_tot": 57675750,
+        "n_pass": 3662912,
+        "efficiency": 0.06350870166404425
+      },
+      "trigger": {
+        "n_tot": 57675750,
+        "n_pass": 3662912,
+        "efficiency": 0.06350870166404425
+      },
+      "proton_pid": {
+        "n_tot": 3662912,
+        "n_pass": 3662912,
+        "efficiency": 1.0
+      },
+      "relative": {
+        "n_tot": 3662912,
+        "n_pass": 3662912,
+        "efficiency": 1.0
+      }
+    },
+    "2016_DD": {
+      "n_tot": 57675750,
+      "n_pass": 3662912
+    },
+    "2017_LL_detailed": {
+      "total": {
+        "n_tot": 14150731,
+        "n_pass": 1042363,
+        "efficiency": 0.07366142427553743
+      },
+      "trigger": {
+        "n_tot": 14150731,
+        "n_pass": 1042363,
+        "efficiency": 0.07366142427553743
+      },
+      "proton_pid": {
+        "n_tot": 1042363,
+        "n_pass": 1042363,
+        "efficiency": 1.0
+      },
+      "relative": {
+        "n_tot": 1042363,
+        "n_pass": 1042363,
+        "efficiency": 1.0
+      }
+    },
+    "2017_LL": {
+      "n_tot": 14150731,
+      "n_pass": 1042363
+    },
+    "2017_DD_detailed": {
+      "total": {
+        "n_tot": 57813539,
+        "n_pass": 3755574,
+        "efficiency": 0.06496011254388008
+      },
+      "trigger": {
+        "n_tot": 57813539,
+        "n_pass": 3755574,
+        "efficiency": 0.06496011254388008
+      },
+      "proton_pid": {
+        "n_tot": 3755574,
+        "n_pass": 3755574,
+        "efficiency": 1.0
+      },
+      "relative": {
+        "n_tot": 3755574,
+        "n_pass": 3755574,
+        "efficiency": 1.0
+      }
+    },
+    "2017_DD": {
+      "n_tot": 57813539,
+      "n_pass": 3755574
+    },
+    "2018_LL_detailed": {
+      "total": {
+        "n_tot": 17114796,
+        "n_pass": 1174736,
+        "efficiency": 0.0686386212257511
+      },
+      "trigger": {
+        "n_tot": 17114796,
+        "n_pass": 1174736,
+        "efficiency": 0.0686386212257511
+      },
+      "proton_pid": {
+        "n_tot": 1174736,
+        "n_pass": 1174736,
+        "efficiency": 1.0
+      },
+      "relative": {
+        "n_tot": 1174736,
+        "n_pass": 1174736,
+        "efficiency": 1.0
+      }
+    },
+    "2018_LL": {
+      "n_tot": 17114796,
+      "n_pass": 1174736
+    },
+    "2018_DD_detailed": {
+      "total": {
+        "n_tot": 69720912,
+        "n_pass": 4145817,
+        "efficiency": 0.059463034562714845
+      },
+      "trigger": {
+        "n_tot": 69720912,
+        "n_pass": 4145817,
+        "efficiency": 0.059463034562714845
+      },
+      "proton_pid": {
+        "n_tot": 4145817,
+        "n_pass": 4145817,
+        "efficiency": 1.0
+      },
+      "relative": {
+        "n_tot": 4145817,
+        "n_pass": 4145817,
+        "efficiency": 1.0
+      }
+    },
+    "2018_DD": {
+      "n_tot": 69720912,
+      "n_pass": 4145817
+    },
+    "all_all": {
+      "n_tot": 232437729,
+      "n_pass": 14840083
+    }
+  },
+  "config": {
+    "years": [
+      "2016",
+      "2017",
+      "2018"
+    ],
+    "tracks": [
+      "LL",
+      "DD"
+    ],
+    "signal_mode": "L0barPKpKm",
+    "norm_mode": "KSKmKpPip"
+  }
+}
