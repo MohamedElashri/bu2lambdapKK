@@ -28,6 +28,121 @@ ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
 # Load configuration
 CFG = yaml.safe_load(open("config.yml"))
 
+# Add a PDF factory function
+def create_pdf(pdf_type, pdf_name, observable, params_dict, order=None):
+    """
+    Factory function to create RooFit PDFs based on the configuration
+    
+    Parameters:
+    -----------
+    pdf_type : str
+        Type of PDF to create (e.g., 'CrystalBall', 'Chebychev')
+    pdf_name : str
+        Name to assign to the PDF object
+    observable : RooRealVar
+        Observable variable (usually mass)
+    params_dict : dict
+        Dictionary of parameter objects (RooRealVars)
+    order : int, optional
+        Order for PDFs that need it (e.g., polynomial order)
+        
+    Returns:
+    --------
+    RooAbsPdf
+        The created PDF object
+    """
+    pdf_type = pdf_type.strip()
+    
+    # Signal PDF types
+    if pdf_type == "CrystalBall":
+        return ROOT.RooCBShape(pdf_name, "Crystal Ball", 
+                               observable, 
+                               params_dict["mean"], 
+                               params_dict["sigma"], 
+                               params_dict["alpha"], 
+                               params_dict["n"])
+    
+    elif pdf_type == "Gaussian":
+        return ROOT.RooGaussian(pdf_name, "Gaussian", 
+                              observable, 
+                              params_dict["mean"], 
+                              params_dict["sigma"])
+    
+    elif pdf_type == "DoubleGaussian":
+        # Create individual Gaussians
+        g1 = ROOT.RooGaussian(f"{pdf_name}_g1", "Gaussian 1", 
+                            observable, 
+                            params_dict["mean"], 
+                            params_dict["sigma1"])
+        
+        g2 = ROOT.RooGaussian(f"{pdf_name}_g2", "Gaussian 2", 
+                            observable, 
+                            params_dict["mean"], 
+                            params_dict["sigma2"])
+        
+        # Combine them with a fraction parameter
+        return ROOT.RooAddPdf(pdf_name, "Double Gaussian", 
+                           ROOT.RooArgList(g1, g2), 
+                           ROOT.RooArgList(params_dict["frac"]))
+    
+    elif pdf_type == "Voigtian":
+        return ROOT.RooVoigtian(pdf_name, "Voigtian", 
+                              observable, 
+                              params_dict["mean"], 
+                              params_dict["width"], 
+                              params_dict["sigma"])
+    
+    elif pdf_type == "Breit-Wigner":
+        return ROOT.RooBreitWigner(pdf_name, "Breit-Wigner", 
+                                 observable, 
+                                 params_dict["mean"], 
+                                 params_dict["width"])
+    
+    # Background PDF types
+    elif pdf_type == "Chebychev":
+        # Get coefficients based on order
+        order = order if order is not None else 1
+        coef_list = ROOT.RooArgList()
+        for i in range(1, order + 1):
+            coef_name = f"c{i}"
+            if coef_name in params_dict:
+                coef_list.add(params_dict[coef_name])
+        
+        return ROOT.RooChebychev(pdf_name, f"Chebychev Background (order {order})", 
+                              observable, coef_list)
+    
+    elif pdf_type == "Exponential":
+        return ROOT.RooExponential(pdf_name, "Exponential Background", 
+                                 observable, 
+                                 params_dict["c"])
+    
+    elif pdf_type == "Argus":
+        return ROOT.RooArgusBG(pdf_name, "Argus Background", 
+                            observable, 
+                            params_dict["m0"], 
+                            params_dict["c"], 
+                            params_dict["p"])
+    
+    elif pdf_type == "Polynomial":
+        # Get coefficients based on order
+        order = order if order is not None else 1
+        coef_list = ROOT.RooArgList()
+        for i in range(1, order + 1):
+            coef_name = f"c{i}"
+            if coef_name in params_dict:
+                coef_list.add(params_dict[coef_name])
+        
+        return ROOT.RooPolynomial(pdf_name, f"Polynomial Background (order {order})", 
+                               observable, coef_list)
+    
+    else:
+        print(f"WARNING: Unknown PDF type '{pdf_type}', defaulting to Gaussian")
+        # Default to a simple Gaussian for unknown types
+        return ROOT.RooGaussian(pdf_name, "Default Gaussian", 
+                               observable, 
+                               params_dict["mean"], 
+                               params_dict.get("sigma", params_dict.get("width", None)))
+
 def fit(sample, year, track):
     """
     Perform mass fit for signal or normalization channel
@@ -83,12 +198,17 @@ def fit(sample, year, track):
 
     # Determine the correct physical mass column name using canonical
     mass_col = _resolve_branch_name("mass", sample_label) # Resolve 'mass' directly
-    # Set fit range - potentially different for signal vs norm
-    fit_min, fit_max = (5200, 5400)  # Same range for both by default
+    
+    # Get model configuration from config
+    fit_config = CFG["fit_params"]
+    model_config = fit_config["models"]["signal"] if is_sig else fit_config["models"]["norm"]
+    
+    # Set fit range from config
+    fit_min, fit_max = fit_config["mass_range"]["signal"] if is_sig else fit_config["mass_range"]["norm"]
     m = ROOT.RooRealVar("m", "mass", fit_min, fit_max)
 
     # --- Set Axis Titles ---
-    m.SetTitle("M(B^{+}) [MeV/c^{2}]")
+    m.SetTitle(fit_config["plotting"]["axis_title"])
 
     # Create an empty dataset with the mass variable
     rds = ROOT.RooDataSet("rds", "", ROOT.RooArgSet(m))
@@ -108,25 +228,15 @@ def fit(sample, year, track):
         print(f"No entries in fit range for {sample}/{year}/{track}")
         return None
 
-    # --- Define Model Parameters (potentially sample-dependent) ---
-    # Signal mean - try to use PDG mass as center
-    mean = ROOT.RooRealVar("mean", "mean", 5280, 5260, 5290)
+    # --- Create RooRealVars for all parameters in the configuration ---
+    params = model_config["parameters"]
+    param_vars = {}  # Dictionary to store parameter variables
     
-    # Sigma might differ between channels
-    sigma_init = 15 if is_sig else 12  # Slightly smaller initial sigma for norm
-    sigma_min = 5 if is_sig else 3     # Tighter range for norm
-    sigma_max = 30 if is_sig else 25
-    sigma = ROOT.RooRealVar("sigma", "sigma", sigma_init, sigma_min, sigma_max)
-    
-    # Crystal Ball tail parameters
-    alpha = ROOT.RooRealVar("alpha", "alpha", 1.5, 0.1, 5.0)
-    n = ROOT.RooRealVar("n", "n", 2.0, 0.1, 10.0)
-
-    # --- Background Shape Parameters ---
-    c1 = ROOT.RooRealVar("c1", "c1", -0.1, -1, 1)  # 1st order coefficient (used by both)
-    if is_sig:
-        # Define c2 only for signal fit (2nd order Chebychev)
-        c2 = ROOT.RooRealVar("c2", "c2", 0.05, -1, 1)
+    # Loop through all parameters in the config and create corresponding RooRealVars
+    for param_name, param_values in params.items():
+        if len(param_values) >= 3:  # We need at least [initial, min, max]
+            init_val, min_val, max_val = param_values[:3]
+            param_vars[param_name] = ROOT.RooRealVar(param_name, param_name, init_val, min_val, max_val)
 
     # --- Yields ---
     # Use nentries (events in range) for initial guess
@@ -135,33 +245,33 @@ def fit(sample, year, track):
     nsig = ROOT.RooRealVar("nsig", "Nsig", nsig_init, 0, nentries*1.5 if nentries > 0 else 1000)
     nbkg = ROOT.RooRealVar("nbkg", "Nbkg", nbkg_init, 0, nentries*1.5 if nentries > 0 else 1000)
 
-    # --- Define PDFs --- 
-    # Signal model is Crystal Ball for both for now
-    signal_model = ROOT.RooCBShape("signal_model", "Crystal Ball", m, mean, sigma, alpha, n)
-
-    # Background model depends on sample
-    if is_sig:
-        # 2nd order Chebychev for signal
-        background_model = ROOT.RooChebychev("background_model", "Chebychev Background (2nd order)", 
-                                          m, ROOT.RooArgList(c1, c2))
-    else:
-        # 1st order Chebychev for normalization
-        background_model = ROOT.RooChebychev("background_model", "Chebychev Background (1st order)", 
-                                          m, ROOT.RooArgList(c1))
+    # --- Create signal and background PDFs based on configuration ---
+    signal_pdf_type = model_config["signal_pdf"]
+    background_pdf_type = model_config["background_pdf"]
+    background_order = model_config.get("background_order", 1)
+    
+    print(f"\tCreating signal PDF: {signal_pdf_type}")
+    signal_model = create_pdf(signal_pdf_type, "signal_model", m, param_vars)
+    
+    print(f"\tCreating background PDF: {background_pdf_type} (order: {background_order})")
+    background_model = create_pdf(background_pdf_type, "background_model", m, param_vars, background_order)
 
     # Combine signal and background
     model_comp_list = ROOT.RooArgList(signal_model, background_model)
     model_yield_list = ROOT.RooArgList(nsig, nbkg)
     model = ROOT.RooAddPdf("model", "Signal+Background", model_comp_list, model_yield_list)
 
-    # Perform the fit with more robust settings
+    # Get fit options from config
+    fit_options = fit_config["fit_options"]
+    
+    # Perform the fit with settings from config
     fit_result = model.fitTo(
         rds, 
         ROOT.RooFit.Save(),
-        ROOT.RooFit.Extended(True),
-        ROOT.RooFit.PrintLevel(1),
-        ROOT.RooFit.Minos(False),   # Disable Minos for stability
-        ROOT.RooFit.InitialHesse(True)  # Better error estimates
+        ROOT.RooFit.Extended(fit_options["use_extended"]),
+        ROOT.RooFit.PrintLevel(fit_options["print_level"]),
+        ROOT.RooFit.Minos(fit_options["use_minos"]),  
+        ROOT.RooFit.InitialHesse(fit_options["use_initial_hesse"])
     )
 
     # Check fit status
@@ -178,8 +288,8 @@ def fit(sample, year, track):
     # Create frame WITH the Title argument
     frame = m.frame(ROOT.RooFit.Title(plot_title))
     
-    # Explicitly set plotting bins
-    n_bins_plot = 50  # Let's try 50 bins for the smaller range
+    # Explicitly set plotting bins from config
+    n_bins_plot = fit_config["plotting"]["nbins"]
     rds.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.Binning(n_bins_plot))
     model.plotOn(frame, ROOT.RooFit.Name("total_fit"))
     
@@ -237,7 +347,7 @@ def fit(sample, year, track):
     result_params = {}
     
     # Basic parameters for both channels
-    for param in [nsig, nbkg, mean, sigma]:
+    for param in [nsig, nbkg, param_vars["mean"], param_vars["sigma"]]:
         par_name = param.GetName()
         fit_param = final_params.find(par_name)
         if fit_param:
@@ -250,7 +360,7 @@ def fit(sample, year, track):
             result_params[par_name] = {'value': param.getVal(), 'error': 0.0}
     
     # Crystal Ball parameters for both channels
-    for param in [alpha, n]:
+    for param in [param_vars["alpha"], param_vars["n"]]:
         par_name = param.GetName()
         fit_param = final_params.find(par_name)
         if fit_param:
@@ -262,7 +372,7 @@ def fit(sample, year, track):
             result_params[par_name] = {'value': param.getVal(), 'error': 0.0}
     
     # Background parameters for both channels
-    param = c1
+    param = param_vars["c1"]
     par_name = param.GetName()
     fit_param = final_params.find(par_name)
     if fit_param:
@@ -274,8 +384,8 @@ def fit(sample, year, track):
         result_params[par_name] = {'value': param.getVal(), 'error': 0.0}
     
     # Add c2 parameter for signal channel only
-    if is_sig:
-        param = c2
+    if is_sig and "c2" in param_vars:
+        param = param_vars["c2"]
         par_name = param.GetName()
         fit_param = final_params.find(par_name)
         if fit_param:
@@ -459,64 +569,77 @@ def compare_channels(results_sig, results_norm, year='all', track='all'):
     
     return comparison
 
-def run_all_fits():
-    """Run mass fits for all combinations and compare results"""
+def run_all_fits(run_individual=False):
+    """
+    Run mass fits for specific combinations or all combinations
+    
+    Parameters:
+    -----------
+    run_individual : bool, optional
+        If True, run fits for each individual year/track combination
+        Default is False (only run the combined fits)
+    
+    Returns:
+    --------
+    dict
+        Dictionary with all fit results
+    """
+    # Get years and tracks from config file
     years = CFG.get("years", ["2016", "2017", "2018"])
     tracks = CFG.get("tracks", ["LL", "DD"])
     
     all_fit_results = {}  # Dictionary to store all results
     
-    # --- Individual Fits ---
-    print("\n=== Fitting Individual Year/Track Combinations ===")
-    for cls in ["sig", "norm"]:
-        for y in years:
-            for tr in tracks:
-                # Pass sample, year, track to fit function
-                fit_id = f"{cls}_{y}_{tr}"
-                print(f"\n--- Fitting: {fit_id} ---")
-                try:
-                    params = fit(cls, y, tr)
-                    all_fit_results[fit_id] = params
-                except Exception as e:
-                    print(f"ERROR fitting {fit_id}: {e}")
-                    all_fit_results[fit_id] = {'error': str(e)}
+    # --- Individual Fits (optional) ---
+    if run_individual:
+        print("\n=== Fitting Individual Year/Track Combinations ===")
+        for cls in ["sig", "norm"]:
+            for y in years:
+                for tr in tracks:
+                    # Pass sample, year, track to fit function
+                    fit_id = f"{cls}_{y}_{tr}"
+                    print(f"\n--- Fitting: {fit_id} ---")
+                    try:
+                        params = fit(cls, y, tr)
+                        all_fit_results[fit_id] = params
+                    except Exception as e:
+                        print(f"ERROR fitting {fit_id}: {e}")
+                        all_fit_results[fit_id] = {'error': str(e)}
     
-    # --- Combined Fits ---
-    print("\n\n=== Fitting Combined Datasets ===")
+    # --- Default Fits: All years combined, by track type ---
+    print("\n\n=== Fitting Default Combined Datasets ===")
     
-    # All years for each track type
-    print("\n--- Combining all years for each track type ---")
-    for cls in ["sig", "norm"]:
-        for tr in tracks:
-            fit_id = f"{cls}_all_{tr}"
-            print(f"\nFitting combined dataset: {fit_id}")
-            try:
-                params = fit(cls, 'all', tr)
-                all_fit_results[fit_id] = params
-            except Exception as e:
-                print(f"ERROR fitting {fit_id}: {e}")
-                all_fit_results[fit_id] = {'error': str(e)}
-    
-    # All tracks for each year 
-    print("\n--- Combining all tracks for each year ---")
-    for cls in ["sig", "norm"]:
-        for y in years:
-            fit_id = f"{cls}_{y}_all"
-            print(f"\nFitting combined dataset: {fit_id}")
-            try:
-                params = fit(cls, y, 'all')
-                all_fit_results[fit_id] = params
-            except Exception as e:
-                print(f"ERROR fitting {fit_id}: {e}")
-                all_fit_results[fit_id] = {'error': str(e)}
-    
-    # All years and all tracks (fully combined)
-    print("\n--- Combining all years and all tracks ---")
+    # 1. All data (combined years and tracks)
+    print("\n--- Fitting all years and all tracks combined ---")
     for cls in ["sig", "norm"]:
         fit_id = f"{cls}_all_all"
         print(f"\nFitting combined dataset: {fit_id}")
         try:
             params = fit(cls, 'all', 'all')
+            all_fit_results[fit_id] = params
+        except Exception as e:
+            print(f"ERROR fitting {fit_id}: {e}")
+            all_fit_results[fit_id] = {'error': str(e)}
+    
+    # 2. All LL tracks (combined years)
+    print("\n--- Fitting all years with LL tracks ---")
+    for cls in ["sig", "norm"]:
+        fit_id = f"{cls}_all_LL"
+        print(f"\nFitting combined dataset: {fit_id}")
+        try:
+            params = fit(cls, 'all', 'LL')
+            all_fit_results[fit_id] = params
+        except Exception as e:
+            print(f"ERROR fitting {fit_id}: {e}")
+            all_fit_results[fit_id] = {'error': str(e)}
+    
+    # 3. All DD tracks (combined years)
+    print("\n--- Fitting all years with DD tracks ---")
+    for cls in ["sig", "norm"]:
+        fit_id = f"{cls}_all_DD"
+        print(f"\nFitting combined dataset: {fit_id}")
+        try:
+            params = fit(cls, 'all', 'DD')
             all_fit_results[fit_id] = params
         except Exception as e:
             print(f"ERROR fitting {fit_id}: {e}")
@@ -535,58 +658,35 @@ def run_all_fits():
     print(" "*30 + "FITTING SUMMARY")
     print("="*80)
     
-    # First display individual results by channel
-    for cls, title in [("sig", "SIGNAL CHANNEL (B+ → Λ̅0pK+K-)"), 
-                       ("norm", "NORMALIZATION CHANNEL (B+ → K0sπ+K+K-)")]:
-        print(f"\n{title}")
-        print("-"*80)
-        print(f"{'Dataset':<15} {'Yield':<20} {'Mass (MeV)':<20} {'Width (MeV)':<15} {'Significance':<12}")
-        print("-"*80)
-        
-        # Individual year/track combinations
-        for y in years:
-            for tr in tracks:
-                fit_id = f"{cls}_{y}_{tr}"
-                if fit_id in all_fit_results and all_fit_results[fit_id] and 'error' not in all_fit_results[fit_id]:
-                    res = all_fit_results[fit_id]
-                    dataset = f"{y}/{tr}"
-                    yield_val = f"{res['nsig']['value']:.1f} ± {res['nsig']['error']:.1f}"
-                    mass = f"{res['mean']['value']:.1f} ± {res['mean']['error']:.1f}"
-                    width = f"{res['sigma']['value']:.1f} ± {res['sigma']['error']:.1f}"
-                    signif = f"{res.get('significance', 0):.2f}σ"
-                    print(f"{dataset:<15} {yield_val:<20} {mass:<20} {width:<15} {signif:<12}")
-        
-        # Combined by year (all tracks)
-        print("-"*80 + "\nCombined by year (all tracks):")
-        for y in years:
-            fit_id = f"{cls}_{y}_all"
-            if fit_id in all_fit_results and all_fit_results[fit_id] and 'error' not in all_fit_results[fit_id]:
-                res = all_fit_results[fit_id]
-                dataset = f"{y}/all"
-                yield_val = f"{res['nsig']['value']:.1f} ± {res['nsig']['error']:.1f}"
-                mass = f"{res['mean']['value']:.1f} ± {res['mean']['error']:.1f}"
-                width = f"{res['sigma']['value']:.1f} ± {res['sigma']['error']:.1f}"
-                signif = f"{res.get('significance', 0):.2f}σ"
-                print(f"{dataset:<15} {yield_val:<20} {mass:<20} {width:<15} {signif:<12}")
-        
-        # Combined by track type (all years)
-        print("-"*80 + "\nCombined by track type (all years):")
-        for tr in tracks:
-            fit_id = f"{cls}_all_{tr}"
-            if fit_id in all_fit_results and all_fit_results[fit_id] and 'error' not in all_fit_results[fit_id]:
-                res = all_fit_results[fit_id]
-                dataset = f"All/{tr}"
-                yield_val = f"{res['nsig']['value']:.1f} ± {res['nsig']['error']:.1f}"
-                mass = f"{res['mean']['value']:.1f} ± {res['mean']['error']:.1f}"
-                width = f"{res['sigma']['value']:.1f} ± {res['sigma']['error']:.1f}"
-                signif = f"{res.get('significance', 0):.2f}σ"
-                print(f"{dataset:<15} {yield_val:<20} {mass:<20} {width:<15} {signif:<12}")
-        
-        # Fully combined
-        fit_id = f"{cls}_all_all"
+    # Display summary for signal channel
+    print(f"\nSIGNAL CHANNEL (B+ → Λ̅0pK+K-)")
+    print("-"*80)
+    print(f"{'Dataset':<15} {'Yield':<20} {'Mass (MeV)':<20} {'Width (MeV)':<15} {'Significance':<12}")
+    print("-"*80)
+    
+    # Print results for the 3 default signal fits
+    for fit_id in ["sig_all_all", "sig_all_LL", "sig_all_DD"]:
         if fit_id in all_fit_results and all_fit_results[fit_id] and 'error' not in all_fit_results[fit_id]:
             res = all_fit_results[fit_id]
-            dataset = "All/All"
+            # Display in format: "all/all", "all/LL", "all/DD"
+            dataset = "/".join(fit_id.split("_")[1:])
+            yield_val = f"{res['nsig']['value']:.1f} ± {res['nsig']['error']:.1f}"
+            mass = f"{res['mean']['value']:.1f} ± {res['mean']['error']:.1f}"
+            width = f"{res['sigma']['value']:.1f} ± {res['sigma']['error']:.1f}"
+            signif = f"{res.get('significance', 0):.2f}σ"
+            print(f"{dataset:<15} {yield_val:<20} {mass:<20} {width:<15} {signif:<12}")
+    
+    # Display summary for normalization channel
+    print(f"\nNORMALIZATION CHANNEL (B+ → K0sπ+K+K-)")
+    print("-"*80)
+    print(f"{'Dataset':<15} {'Yield':<20} {'Mass (MeV)':<20} {'Width (MeV)':<15} {'Significance':<12}")
+    print("-"*80)
+    
+    # Print results for the 3 default normalization fits
+    for fit_id in ["norm_all_all", "norm_all_LL", "norm_all_DD"]:
+        if fit_id in all_fit_results and all_fit_results[fit_id] and 'error' not in all_fit_results[fit_id]:
+            res = all_fit_results[fit_id]
+            dataset = "/".join(fit_id.split("_")[1:])
             yield_val = f"{res['nsig']['value']:.1f} ± {res['nsig']['error']:.1f}"
             mass = f"{res['mean']['value']:.1f} ± {res['mean']['error']:.1f}"
             width = f"{res['sigma']['value']:.1f} ± {res['sigma']['error']:.1f}"
@@ -600,13 +700,13 @@ def run_all_fits():
     print(f"{'Dataset':<15} {'Signal Yield':<20} {'Norm Yield':<20} {'Ratio S/N':<20}")
     print("-"*80)
     
-    # Compare ratios for each year (combined tracks)
-    for y in years:
-        sig_results = all_fit_results.get(f"sig_{y}_all")
-        norm_results = all_fit_results.get(f"norm_{y}_all")
+    # Compare ratios for the default fits
+    for track in ["all", "LL", "DD"]:
+        sig_results = all_fit_results.get(f"sig_all_{track}")
+        norm_results = all_fit_results.get(f"norm_all_{track}")
         
         if sig_results and norm_results and 'error' not in sig_results and 'error' not in norm_results:
-            dataset = f"{y}/All"
+            dataset = f"all/{track}"
                 
             sig_yield = f"{sig_results['nsig']['value']:.1f} ± {sig_results['nsig']['error']:.1f}"
             norm_yield = f"{norm_results['nsig']['value']:.1f} ± {norm_results['nsig']['error']:.1f}"
@@ -624,83 +724,19 @@ def run_all_fits():
                 
             print(f"{dataset:<15} {sig_yield:<20} {norm_yield:<20} {ratio_str:<20}")
     
-    # Compare ratios for each track type (combined years)
-    for tr in tracks:
-        sig_results = all_fit_results.get(f"sig_all_{tr}")
-        norm_results = all_fit_results.get(f"norm_all_{tr}")
-        
-        if sig_results and norm_results and 'error' not in sig_results and 'error' not in norm_results:
-            dataset = f"All/{tr}"
-                
-            sig_yield = f"{sig_results['nsig']['value']:.1f} ± {sig_results['nsig']['error']:.1f}"
-            norm_yield = f"{norm_results['nsig']['value']:.1f} ± {norm_results['nsig']['error']:.1f}"
-            
-            # Calculate signal ratio
-            try:
-                ratio = sig_results['nsig']['value'] / norm_results['nsig']['value']
-                ratio_err = ratio * np.sqrt(
-                    (sig_results['nsig']['error'] / sig_results['nsig']['value'])**2 +
-                    (norm_results['nsig']['error'] / norm_results['nsig']['value'])**2
-                )
-                ratio_str = f"{ratio:.4f} ± {ratio_err:.4f}"
-            except:
-                ratio_str = "N/A"
-                
-            print(f"{dataset:<15} {sig_yield:<20} {norm_yield:<20} {ratio_str:<20}")
-    
-    # Compare ratio for fully combined dataset
-    sig_results = all_fit_results.get(f"sig_all_all")
-    norm_results = all_fit_results.get(f"norm_all_all")
-    
-    if sig_results and norm_results and 'error' not in sig_results and 'error' not in norm_results:
-        dataset = "All/All"
-            
-        sig_yield = f"{sig_results['nsig']['value']:.1f} ± {sig_results['nsig']['error']:.1f}"
-        norm_yield = f"{norm_results['nsig']['value']:.1f} ± {norm_results['nsig']['error']:.1f}"
-        
-        # Calculate signal ratio
-        try:
-            ratio = sig_results['nsig']['value'] / norm_results['nsig']['value']
-            ratio_err = ratio * np.sqrt(
-                (sig_results['nsig']['error'] / sig_results['nsig']['value'])**2 +
-                (norm_results['nsig']['error'] / norm_results['nsig']['value'])**2
-            )
-            ratio_str = f"{ratio:.4f} ± {ratio_err:.4f}"
-        except:
-            ratio_str = "N/A"
-            
-        print(f"{dataset:<15} {sig_yield:<20} {norm_yield:<20} {ratio_str:<20}")
-            
     print("\nAll fit results details saved to:", results_filename)
     
-    # Run detailed channel comparisons and save those results too
+    # Run detailed channel comparisons for default fits
     comparisons = {}
     
-    # Compare channels for individual years (combined tracks)
-    for y in years:
-        sig_results = all_fit_results.get(f"sig_{y}_all")
-        norm_results = all_fit_results.get(f"norm_{y}_all")
+    # Compare channels for default combinations
+    for track in ["all", "LL", "DD"]:
+        sig_results = all_fit_results.get(f"sig_all_{track}")
+        norm_results = all_fit_results.get(f"norm_all_{track}")
         if sig_results and norm_results and 'error' not in sig_results and 'error' not in norm_results:
-            comp = compare_channels(sig_results, norm_results, y, 'all')
+            comp = compare_channels(sig_results, norm_results, 'all', track)
             if comp:
-                comparisons[f"{y}_all"] = comp
-    
-    # Compare channels for track types (combined years)
-    for tr in tracks:
-        sig_results = all_fit_results.get(f"sig_all_{tr}")
-        norm_results = all_fit_results.get(f"norm_all_{tr}")
-        if sig_results and norm_results and 'error' not in sig_results and 'error' not in norm_results:
-            comp = compare_channels(sig_results, norm_results, 'all', tr)
-            if comp:
-                comparisons[f"all_{tr}"] = comp
-    
-    # Compare for fully combined dataset
-    sig_results = all_fit_results.get(f"sig_all_all")
-    norm_results = all_fit_results.get(f"norm_all_all")
-    if sig_results and norm_results and 'error' not in sig_results and 'error' not in norm_results:
-        comp = compare_channels(sig_results, norm_results, 'all', 'all')
-        if comp:
-            comparisons["all_all"] = comp
+                comparisons[f"all_{track}"] = comp
     
     # Save comparisons to JSON
     comparison_filename = os.path.join(results_dir, "channel_comparisons.json")
@@ -711,4 +747,12 @@ def run_all_fits():
     return all_fit_results
 
 if __name__ == "__main__":
-    results = run_all_fits()
+    # Add command line argument parsing
+    import argparse
+    parser = argparse.ArgumentParser(description="Run B→ΛpKK fitting procedures")
+    parser.add_argument("--all", action="store_true", 
+                        help="Run fits for all individual year/track combinations")
+    args = parser.parse_args()
+    
+    # Run the fits with the specified options
+    results = run_all_fits(run_individual=args.all)
