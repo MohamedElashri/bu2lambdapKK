@@ -7,8 +7,12 @@ CFG = yaml.safe_load(open("config.yml"))
 ALL_YEARS = ['16', '17', '18'] # Or load from CFG if defined: CFG.get('years', ['16', '17', '18'])
 ALL_TRACKS = ['LL', 'DD'] # Or load from CFG if defined: CFG.get('track_types', ['LL', 'DD'])
 
+# Can be done as something like that - Todo
+# ALL_YEARS = CFG.get('years', ['16', '17', '18'])
+# ALL_TRACKS = CFG.get('track_types', ['LL', 'DD'])
+
 # ------------------------------------------------------------
-# tree‑path resolver (updated with more flexible matching)
+# tree‑path resolver
 # ------------------------------------------------------------
 def _tree_path(fpath, mode, track):
     # print(f"DEBUG: Looking for tree {mode}_{track} in {fpath}")
@@ -21,7 +25,7 @@ def _tree_path(fpath, mode, track):
         path = f"{fpath}:{tpl}"
         try:
             uproot.open(path)
-            print(f"DEBUG: Found direct path {path}")
+            # print(f"DEBUG: Found direct path {path}")
             return path
         except Exception:
             continue
