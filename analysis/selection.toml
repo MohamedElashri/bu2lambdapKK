@@ -176,8 +176,7 @@ description = "B+ meson selection cuts"
 description = "Tight selection cuts from old notebook (without DTF chi2 cut)"
 
   [tight.proton]
-  p_ProbNNp = 0.5  # Tighter than loose (0.05)
-  
+  p_ProbNNp = 0.5  # proton identification
   [tight.lambda]
   delta_z = 5.0  # good_Lambda_sep_100: Delta_Z > 5
   FD_CHISQ = 100.0  # good_Lambda_sep_100: L0_FD_CHISQ > 100
@@ -187,7 +186,7 @@ description = "Tight selection cuts from old notebook (without DTF chi2 cut)"
   
   [tight.kaon]
   # prodProbKK > 0.5 (product of two kaon PID probabilities)
-  kk_product = 0.5
+  kk_product = 0.05
   
   [tight.bplus]
   PT = 3500.0  # Bu_PT > 3500
@@ -199,11 +198,8 @@ description = "Tight selection cuts from old notebook (without DTF chi2 cut)"
   mass_window_upper = 5305.0
   mass_window_enabled = true
 
-# tighter_cuts = tight_cuts & (Bu_DTF_chi2<40)
-
-
 [tighter]
-description = "Tighter selection cuts from old notebook (tight_cuts + DTF chi2 < 40)"
+description = "tight_cuts + DTF chi2 < 40)"
 
   [tighter.proton]
   p_ProbNNp = 0.5
@@ -255,5 +251,5 @@ description = "Loose selection cuts from K⁻K⁺ mode analysis"
 
 [cut_set]
 # Choose which set of cuts to apply: "tight", "tighter", or "loose"
-active = "loose"  # Default to tighter cuts from old notebook
+active = "tight" 
 
