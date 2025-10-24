@@ -1,0 +1,190 @@
+# Selection Configuration for B+ → pK⁻Λ̄ K+ Analysis
+# This file defines all selection cuts applied to the data
+
+[metadata]
+description = "Selection cuts for B+ → Λ0 h1 h2 decay channel"
+version = "1.0"
+date = "2025-10-24"
+
+# Derived/Calculated branches that need to be computed from existing branches
+[derived_branches]
+# Format: name = "expression"
+# These will be evaluated using the events data
+delta_z = "L0_ENDVERTEX_Z - L0_OWNPV_Z"
+lambda_mass_diff = "abs(L0_M - 1115.6)"
+kk_product = "h1_ProbNNk * h2_ProbNNk"
+
+# Trigger Selection Cuts
+[trigger]
+enabled = true
+
+  [trigger.L0]
+  description = "L0 trigger requirement"
+  expression = "(Bu_L0Global_TIS) | (Bu_L0HadronDecision_TOS)"
+  
+  [trigger.L1]
+  description = "L1 trigger requirement"
+  expression = "(Bu_Hlt1TrackMVADecision_TOS) | (Bu_Hlt1TwoTrackMVADecision_TOS)"
+  
+  [trigger.L2]
+  description = "L2 trigger requirement"
+  expression = "(Bu_Hlt2Topo2BodyDecision_TOS) | (Bu_Hlt2Topo3BodyDecision_TOS) | (Bu_Hlt2Topo4BodyDecision_TOS)"
+
+# Proton Selection Cuts
+[proton]
+description = "Proton (p) selection cuts"
+
+  [[proton.cuts]]
+  name = "p_ProbNNp"
+  branch = "p_MC15TuneV1_ProbNNp"
+  operator = ">"
+  value = 0.05
+  description = "Proton PID probability"
+
+# Lambda Selection Cuts
+[lambda]
+description = "Lambda (Λ0) selection cuts"
+
+  [[lambda.cuts]]
+  name = "lambda_delta_z"
+  branch = "delta_z"  # This is a derived branch
+  operator = ">"
+  value = 20.0
+  description = "ΔZ > 20 mm (Lambda decay vertex - primary vertex)"
+  
+  [[lambda.cuts]]
+  name = "lambda_FDCHI2"
+  branch = "L0_FDCHI2_OWNPV"
+  operator = ">"
+  value = 45.0
+  description = "Lambda flight distance χ²"
+  
+  [[lambda.cuts]]
+  name = "lambda_mass_window"
+  branch = "lambda_mass_diff"  # This is a derived branch
+  operator = "<"
+  value = 6.0
+  description = "|m(pπ⁻) - 1115.6| < 6 MeV/c²"
+  
+  [[lambda.cuts]]
+  name = "lambda_proton_ProbNNp"
+  branch = "Lp_MC15TuneV1_ProbNNp"
+  operator = ">"
+  value = 0.2
+  description = "Lambda daughter proton PID probability"
+
+# Kaon Selection Cuts (h1 and h2)
+[kaon]
+description = "Kaon (h1, h2) selection cuts"
+
+  [[kaon.cuts]]
+  name = "kk_product"
+  branch = "kk_product"  # This is a derived branch
+  operator = ">"
+  value = 0.04
+  description = "Product of h1 and h2 kaon PID probabilities (h1_ProbNNk × h2_ProbNNk)"
+  
+  # Individual kaon cuts for reference (not applied by default, but can be used)
+  [[kaon.cuts]]
+  name = "h1_ProbNNk"
+  branch = "h1_ProbNNk"
+  operator = ">"
+  value = 0.2
+  description = "h1 kaon PID probability"
+  enabled = false  # Set to true to apply this cut
+  
+  [[kaon.cuts]]
+  name = "h2_ProbNNk"
+  branch = "h2_ProbNNk"
+  operator = ">"
+  value = 0.2
+  description = "h2 kaon PID probability"
+  enabled = false  # Set to true to apply this cut
+
+# B+ Selection Cuts
+[bplus]
+description = "B+ meson selection cuts"
+
+  [[bplus.cuts]]
+  name = "Bu_PT"
+  branch = "Bu_PT"
+  operator = ">"
+  value = 3000.0
+  description = "B+ transverse momentum > 3000 MeV/c"
+  
+  [[bplus.cuts]]
+  name = "Bu_DTF_chi2"
+  branch = "Bu_DTF_chi2"
+  operator = "<"
+  value = 30.0
+  description = "B+ DTF χ² < 30"
+  
+  [[bplus.cuts]]
+  name = "Bu_DTF_status"
+  branch = "Bu_DTF_status"
+  operator = "=="
+  value = 0
+  description = "B+ DTF converged successfully"
+  
+  [[bplus.cuts]]
+  name = "Bu_IPCHI2"
+  branch = "Bu_IPCHI2_OWNPV"
+  operator = "<"
+  value = 10.0
+  description = "B+ impact parameter χ² < 10"
+  
+  [[bplus.cuts]]
+  name = "Bu_FDCHI2"
+  branch = "Bu_FDCHI2_OWNPV"
+  operator = ">"
+  value = 175.0
+  description = "B+ flight distance χ² > 175"
+
+# Cut Set Selection
+[cut_set]
+# Choose which set of cuts to apply: "tight" or "loose"
+active = "tight"  # Change to "loose" for looser cuts
+
+# Tight Cuts (Default/Standard Analysis)
+[tight]
+description = "Tight selection cuts for standard analysis"
+
+  [tight.proton]
+  p_ProbNNp = 0.05
+  
+  [tight.lambda]
+  delta_z = 20.0
+  FDCHI2 = 45.0
+  mass_window = 6.0
+  proton_ProbNNp = 0.2
+  
+  [tight.kaon]
+  kk_product = 0.04
+  
+  [tight.bplus]
+  PT = 3000.0
+  DTF_chi2 = 30.0
+  IPCHI2 = 10.0
+  FDCHI2 = 175.0
+
+# Loose Cuts (Systematic Studies)
+[loose]
+description = "Loose selection cuts for systematic studies"
+
+  [loose.proton]
+  p_ProbNNp = 0.03  # Looser than tight
+  
+  [loose.lambda]
+  delta_z = 15.0  # Looser than tight (20.0)
+  FDCHI2 = 30.0  # Looser than tight (45.0)
+  mass_window = 8.0  # Looser than tight (6.0)
+  proton_ProbNNp = 0.15  # Looser than tight (0.2)
+  
+  [loose.kaon]
+  kk_product = 0.02  # Looser than tight (0.04)
+  
+  [loose.bplus]
+  PT = 2500.0  # Looser than tight (3000.0)
+  DTF_chi2 = 40.0  # Looser than tight (30.0)
+  IPCHI2 = 15.0  # Looser than tight (10.0)
+  FDCHI2 = 150.0  # Looser than tight (175.0)
