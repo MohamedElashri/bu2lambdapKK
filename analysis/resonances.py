@@ -272,10 +272,9 @@ def main():
         logger.info(f"Marking resonances: {', '.join(resonance_names)}")
     
     # Convert mass range to tuple if provided
-    # Default to match old notebook: 2500-5000 MeV range with 125 bins (20 MeV per bin)
-    mass_range = tuple(args.mass_range) if args.mass_range else (2000, 5000)
-    # 125 bins for 2500 MeV range = 20 MeV per bin (matches old notebook)
-    bins = args.bins if args.mass_range else 600
+    mass_range = tuple(args.mass_range) if args.mass_range else (2800, 4000)
+    # 440 bins for full 2800-4000 MeV range = 5 MeV per bin 
+    bins = args.bins if args.mass_range else 440
     
     # Create plots
     logger.info("\nCreating mass spectrum plots...")

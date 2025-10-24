@@ -194,13 +194,14 @@ description = "Tight selection cuts from old notebook (without DTF chi2 cut)"
   DTF_chi2 = 999999.0  # No DTF chi2 cut in tight_cuts (effectively disabled)
   IPCHI2 = 6.0  # Bu_IPCHI2_OWNPV < 6
   FDCHI2 = 250.0  # Bu_FDCHI2_OWNPV > 250
-  # B_region cuts (disabled by default)
+  # B_region cuts
   mass_window_lower = 5255.0
   mass_window_upper = 5305.0
   mass_window_enabled = true
 
-# Tighter Cuts (Based on old KpKm_explore.ipynb notebook)
 # tighter_cuts = tight_cuts & (Bu_DTF_chi2<40)
+
+
 [tighter]
 description = "Tighter selection cuts from old notebook (tight_cuts + DTF chi2 < 40)"
 
@@ -232,11 +233,11 @@ description = "Tighter selection cuts from old notebook (tight_cuts + DTF chi2 <
 description = "Loose selection cuts from K⁻K⁺ mode analysis"
 
   [loose.proton]
-  p_ProbNNp = 0.05  # Basic proton identification
+  p_ProbNNp = 0.05  # proton identification
   
   [loose.lambda]
-  delta_z = 5.0  # ΔZ > 5 mm (from slides)
-  FDCHI2 = 250.0  # Lambda FD χ² > 250 (from slides)
+  delta_z = 5.0  # ΔZ > 5 mm 
+  FDCHI2 = 250.0  # Lambda FD χ² > 250 
   mass_window = 5.0  # |m(pπ⁻) - 1115.6| < 5 MeV (1111 < M < 1121)
   proton_ProbNNp = 0.3  # Λ_p ProbNNp > 0.3 (from slides summary table)
   
@@ -244,11 +245,15 @@ description = "Loose selection cuts from K⁻K⁺ mode analysis"
   pid_product = 0.20  # Looser than tight (0.50)
   
   [loose.bplus]
-  PT = 3500.0  # B+ pT > 3500 MeV (from slides)
+  PT = 3500.0  # B+ pT > 3500 MeV 
   DTF_chi2 = 40.0  # Looser than tight
-  IPCHI2 = 6.0  # B+ IP χ² < 6 (from slides)
-  FDCHI2 = 250.0  # B+ FD χ² > 250 (from slides)
+  IPCHI2 = 6.0  # B+ IP χ² < 6 
+  FDCHI2 = 250.0  # B+ FD χ² > 250 (
+  mass_window_lower = 5255.0
+  mass_window_upper = 5305.0
+  mass_window_enabled = true
+
 [cut_set]
 # Choose which set of cuts to apply: "tight", "tighter", or "loose"
-active = "tighter"  # Default to tighter cuts from old notebook
+active = "loose"  # Default to tighter cuts from old notebook
 

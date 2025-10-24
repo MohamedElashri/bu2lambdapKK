@@ -39,28 +39,41 @@ import warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
-# Configure matplotlib to use available fonts before setting style
-matplotlib.rcParams['font.family'] = 'sans-serif'
-matplotlib.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
-
-# Set LHCb style for all plots
-plt.style.use(hep.style.LHCb2)
-
-# Override any Times New Roman settings from the style
-matplotlib.rcParams['font.family'] = 'sans-serif'
+# Configure matplotlib for high-quality plots with readable fonts
+matplotlib.rcParams.update({
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['DejaVu Sans', 'Arial', 'Helvetica', 'Liberation Sans', 'sans-serif'],
+    'font.size': 14,
+    'axes.labelsize': 16,
+    'axes.titlesize': 18,
+    'xtick.labelsize': 14,
+    'ytick.labelsize': 14,
+    'legend.fontsize': 13,
+    'figure.titlesize': 18,
+    'text.usetex': True,  # Use LaTeX for text rendering
+    'axes.linewidth': 1.5,
+    'grid.linewidth': 0.8,
+    'lines.linewidth': 2,
+    'patch.linewidth': 1,
+    'xtick.major.width': 1.2,
+    'ytick.major.width': 1.2,
+    'xtick.minor.width': 0.8,
+    'ytick.minor.width': 0.8,
+})
 
 class MassSpectrumPlotter:
     """Class for creating mass spectrum plots"""
     
-    # Expected resonances in pK⁻Λ̄ system (masses and widths in MeV)
-    # Widths from PDG for precise mass region visualization
+    # Expected resonances in pK⁻Λ̄ system (masses in MeV)
+    # Using consistent visual width for display purposes (not physical widths)
+    # Using distinct, colorblind-friendly colors
     KNOWN_RESONANCES = {
-        'jpsi': {'name': r'$J/\psi$', 'mass': 3097, 'width': 0.093, 'color': 'red', 'window': 50},
-        'eta_c': {'name': r'$\eta_c$', 'mass': 2984, 'width': 32, 'color': 'blue', 'window': 50},
-        'chi_c0': {'name': r'$\chi_{c0}$', 'mass': 3415, 'width': 11, 'color': 'green', 'window': 50},
-        'chi_c1': {'name': r'$\chi_{c1}$', 'mass': 3511, 'width': 1, 'color': 'orange', 'window': 50},
-        'chi_c2': {'name': r'$\chi_{c2}$', 'mass': 3556, 'width': 2, 'color': 'cyan', 'window': 50},
-        'eta_c2s': {'name': r'$\eta_c(2S)$', 'mass': 3637, 'width': 11.3, 'color': 'purple', 'window': 50},
+        'jpsi': {'name': r'$J/\psi$', 'mass': 3097, 'visual_width': 20, 'color': '#E41A1C', 'window': 50},  # Red
+        'eta_c': {'name': r'$\eta_c$', 'mass': 2984, 'visual_width': 20, 'color': '#377EB8', 'window': 50},  # Blue
+        'chi_c0': {'name': r'$\chi_{c0}$', 'mass': 3415, 'visual_width': 20, 'color': '#4DAF4A', 'window': 50},  # Green
+        'chi_c1': {'name': r'$\chi_{c1}$', 'mass': 3511, 'visual_width': 20, 'color': '#FF7F00', 'window': 50},  # Orange
+        'chi_c2': {'name': r'$\chi_{c2}$', 'mass': 3556, 'visual_width': 20, 'color': '#984EA3', 'window': 50},  # Purple
+        'eta_c2s': {'name': r'$\eta_c(2S)$', 'mass': 3637, 'visual_width': 20, 'color': '#A65628', 'window': 50},  # Brown
     }
     
     def __init__(self, output_dir):
@@ -240,22 +253,22 @@ class MassSpectrumPlotter:
         # Calculate errors (Poisson statistics)
         hist_errors = np.sqrt(hist)
         
-        # Plot histogram with step style and error bars
-        # Use step histogram for cleaner look
-        ax.hist(masses, bins=bins, range=mass_range, 
-               histtype='step', color='black', linewidth=1.5,
-               label=r'$B^+ \rightarrow pK^-\bar{\Lambda}$')
-        
-        # Add error bars without connecting lines for better visibility
+        # Plot data points with error bars - using black color
         ax.errorbar(bin_centers, hist, yerr=hist_errors, 
-                   fmt='none', color='black', 
-                   capsize=0, elinewidth=0.8, alpha=0.5)
+                   fmt='o', color='black', markersize=6, 
+                   markerfacecolor='black', markeredgewidth=0,
+                   ecolor='black', elinewidth=1.5, capsize=3,
+                   capthick=1.5, label=r'$B^+ \rightarrow pK^-\bar{\Lambda}$', zorder=10, alpha=0.9)
+        
+        # Set y-axis to start from 0 and get max value for proper scaling
+        y_max = np.max(hist) * 1.15  # Add 15% padding at top
+        ax.set_ylim(bottom=0, top=y_max)
         
         # Mark known resonances with vertical lines showing mass regions
         if resonances:
             for res in resonances:
                 mass = res['mass']
-                width = res.get('width', 0)
+                visual_width = res.get('visual_width', 20)  # Use consistent visual width
                 color = res.get('color', 'red')
                 
                 # Calculate the local maximum in the region around this resonance
@@ -270,36 +283,55 @@ class MassSpectrumPlotter:
                     # Fallback to global maximum if no data in region
                     line_height = 1.2 * np.max(hist)
                 
-                # For J/psi with extremely narrow width, draw single line
-                if width < 0.5:  # Effectively treat as delta function
-                    ax.axvline(x=mass, ymin=0, ymax=line_height/ax.get_ylim()[1],
-                              color=color, linestyle='--', linewidth=2, alpha=0.7,
-                              label=f"{res['name']} ({mass:.1f} MeV/$c^2$)")
-                else:
-                    # Draw two vertical lines at mass ± width/2
-                    half_width = width / 2
-                    mass_low = mass - half_width
-                    mass_high = mass + half_width
-                    
-                    # Draw the two boundary lines
-                    ax.vlines([mass_low, mass_high], 0, line_height,
-                             colors=color, linestyles='--', linewidth=2, alpha=0.6,
-                             label=f"{res['name']} ({mass:.1f} MeV/$c^2$)")
-                    
-                    # Optionally add a shaded region between the lines
-                    ax.axvspan(mass_low, mass_high, alpha=0.15, color=color)
+                # Ensure line doesn't exceed plot limits
+                line_height = min(line_height, y_max)
+                
+                # Draw two vertical lines at mass ± visual_width/2
+                half_width = visual_width / 2
+                mass_low = mass - half_width
+                mass_high = mass + half_width
+                
+                # Draw the two boundary lines with limited height
+                ax.plot([mass_low, mass_low], [0, line_height],
+                       color=color, linestyle='-', linewidth=2.5, alpha=0.7, zorder=5)
+                ax.plot([mass_high, mass_high], [0, line_height],
+                       color=color, linestyle='-', linewidth=2.5, alpha=0.7,
+                       label=f"{res['name']} ({mass:.1f} MeV/$c^2$)", zorder=5)
+                
+                # Add a shaded region between the lines up to line_height
+                ax.fill_between([mass_low, mass_high], 0, line_height, 
+                               alpha=0.2, color=color, zorder=3)
         
         # Add labels and title
-        ax.set_xlabel(r'$M(pK^-\bar{\Lambda})$ [MeV/$c^2$]', fontsize=14)
-        ax.set_ylabel(f'Candidates / ({bin_width:.1f} MeV/$c^2$)', fontsize=14)
-        ax.set_title(r'$pK^-\bar{\Lambda}$ Invariant Mass Spectrum', fontsize=16, pad=20)
+        ax.set_xlabel(r'$M(pK^-\bar{\Lambda})$ [MeV/$c^2$]', fontsize=18, fontweight='bold')
+        ax.set_ylabel(f'Candidates / ({bin_width:.1f} MeV/$c^2$)', fontsize=18, fontweight='bold')
+        ax.set_title(r'$pK^-\bar{\Lambda}$ Invariant Mass Spectrum', fontsize=20, pad=20, fontweight='bold')
         
-        # Add grid and legend
-        ax.grid(alpha=0.3, linestyle='--')
-        ax.legend(fontsize=12, loc='best')
+        # Add LHCb label in top left
+        hep.lhcb.text(loc=1, fontsize=22, ax=ax)
         
-        # Set y-axis to start from 0
-        ax.set_ylim(bottom=0)
+        # Add subtle grid for better readability
+        ax.grid(True, alpha=0.25, linestyle=':', linewidth=0.8, color='gray', zorder=0)
+        
+        # Add legend with better styling
+        legend = ax.legend(fontsize=13, loc='upper right', frameon=True, 
+                          fancybox=False, edgecolor='black', 
+                          framealpha=0.95, facecolor='white')
+        legend.set_zorder(20)
+        
+        # Adjust tick parameters for better visibility
+        ax.tick_params(axis='both', which='major', labelsize=14, direction='in', 
+                      length=6, width=1.2, colors='black')
+        ax.tick_params(axis='both', which='minor', direction='in', 
+                      length=3, width=0.8, colors='black')
+        
+        # Add minor ticks for better scale reading
+        ax.minorticks_on()
+        
+        # Set axis spine colors
+        for spine in ax.spines.values():
+            spine.set_edgecolor('black')
+            spine.set_linewidth(1.5)
         
         # Adjust layout
         plt.tight_layout()
@@ -310,6 +342,133 @@ class MassSpectrumPlotter:
         plt.close()
         
         self.logger.info(f"Created plot: {plot_path_pdf}")
+        
+        # Log statistics about the mass distribution
+        self.logger.info(f"Mass distribution: min={np.min(masses):.1f}, max={np.max(masses):.1f}, mean={np.mean(masses):.1f}, std={np.std(masses):.1f} MeV")
+        
+        # Log statistics for each resonance window if provided
+        if resonances:
+            for res in resonances:
+                window_width = res.get('window', 50)  # Default ±50 MeV window
+                window = (res['mass'] - window_width, res['mass'] + window_width)
+                in_window = np.sum((masses >= window[0]) & (masses <= window[1]))
+                total = len(masses)
+                self.logger.info(f"Candidates near {res['name']} [{window[0]:.0f}-{window[1]:.0f} MeV]: {in_window}/{total} ({100*in_window/total:.2f}%)")
+    
+    def _create_line_mass_plot(self, masses, filename, mass_range=None, bins=100, resonances=None):
+        """
+        Create and save a mass spectrum plot using connected lines without error bars.
+        Cleaner visualization for focusing on resonance structures.
+        
+        Parameters:
+        - masses: Array of mass values
+        - filename: Base filename for the plot
+        - mass_range: Range for the mass plot (auto-determined if None)
+        - bins: Number of bins
+        - resonances: List of dicts with resonance info to mark on plot
+        """
+        # Auto-determine mass range if not provided
+        if mass_range is None:
+            mass_min = np.min(masses)
+            mass_max = np.max(masses)
+            # Add 5% padding
+            padding = (mass_max - mass_min) * 0.05
+            mass_range = (mass_min - padding, mass_max + padding)
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        
+        # Create histogram
+        hist, bin_edges = np.histogram(masses, bins=bins, range=mass_range)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        bin_width = (mass_range[1] - mass_range[0]) / bins
+        
+        # Plot data as connected line - using black color
+        ax.plot(bin_centers, hist, 
+               color='black', linewidth=2, linestyle='-',
+               marker='o', markersize=4, markerfacecolor='black',
+               label='Data', zorder=10)
+        
+        # Calculate y-axis maximum for better visualization
+        y_max = np.max(hist) * 1.3  # 30% headroom for legend
+        ax.set_ylim(bottom=0, top=y_max)
+        
+        # Mark known resonances with vertical lines showing mass regions
+        if resonances:
+            for res in resonances:
+                mass = res['mass']
+                visual_width = res.get('visual_width', 20)  # Use consistent visual width
+                color = res.get('color', 'red')
+                
+                # Calculate the local maximum in the region around this resonance
+                # Use ±50 MeV window to find local peak
+                local_window = 50  # MeV
+                in_region = (bin_centers >= mass - local_window) & (bin_centers <= mass + local_window)
+                if np.any(in_region):
+                    local_max = np.max(hist[in_region])
+                    # Limit line height to 120% of local maximum
+                    line_height = 1.2 * local_max
+                else:
+                    # Fallback to global maximum if no data in region
+                    line_height = 1.2 * np.max(hist)
+                
+                # Ensure line doesn't exceed plot limits
+                line_height = min(line_height, y_max)
+                
+                # Draw two vertical lines at mass ± visual_width/2
+                half_width = visual_width / 2
+                mass_low = mass - half_width
+                mass_high = mass + half_width
+                
+                # Draw the two boundary lines with limited height
+                ax.plot([mass_low, mass_low], [0, line_height],
+                       color=color, linestyle='-', linewidth=2.5, alpha=0.7, zorder=5)
+                ax.plot([mass_high, mass_high], [0, line_height],
+                       color=color, linestyle='-', linewidth=2.5, alpha=0.7,
+                       label=f"{res['name']} ({mass:.1f} MeV/$c^2$)", zorder=5)
+                
+                # Add a shaded region between the lines up to line_height
+                ax.fill_between([mass_low, mass_high], 0, line_height, 
+                               alpha=0.2, color=color, zorder=3)
+        
+        # Add labels and title
+        ax.set_xlabel(r'$M(pK^-\bar{\Lambda})$ [MeV/$c^2$]', fontsize=18, fontweight='bold')
+        ax.set_ylabel(f'Candidates / ({bin_width:.1f} MeV/$c^2$)', fontsize=18, fontweight='bold')
+        ax.set_title(r'$pK^-\bar{\Lambda}$ Invariant Mass Spectrum', fontsize=20, pad=20, fontweight='bold')
+        
+        # Add LHCb label in top left
+        hep.lhcb.text(loc=1, fontsize=22, ax=ax)
+        
+        # Add subtle grid for better readability
+        ax.grid(True, alpha=0.25, linestyle=':', linewidth=0.8, color='gray', zorder=0)
+        
+        # Add legend
+        legend = ax.legend(loc='upper right', frameon=True, framealpha=0.9, 
+                          fontsize=12, ncol=1, fancybox=True)
+        legend.set_zorder(20)
+        
+        # Adjust tick parameters for better visibility
+        ax.tick_params(axis='both', which='major', labelsize=14, direction='in', 
+                      length=6, width=1.2, colors='black')
+        ax.tick_params(axis='both', which='minor', direction='in', 
+                      length=3, width=0.8, colors='black')
+        
+        # Add minor ticks for better scale reading
+        ax.minorticks_on()
+        
+        # Set axis spine colors
+        for spine in ax.spines.values():
+            spine.set_edgecolor('black')
+            spine.set_linewidth(1.5)
+        
+        # Adjust layout
+        plt.tight_layout()
+        
+        # Save plot in PDF format only (with _line suffix to distinguish)
+        plot_path_pdf = self.output_dir / f"{filename}_line.pdf"
+        plt.savefig(plot_path_pdf, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        self.logger.info(f"Created line plot: {plot_path_pdf}")
         
         # Log statistics about the mass distribution
         self.logger.info(f"Mass distribution: min={np.min(masses):.1f}, max={np.max(masses):.1f}, mean={np.mean(masses):.1f}, std={np.std(masses):.1f} MeV")
