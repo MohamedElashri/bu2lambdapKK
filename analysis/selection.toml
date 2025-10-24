@@ -170,10 +170,6 @@ description = "B+ meson selection cuts"
   enabled = false  # Set to true to apply B_region cut
 
 # Cut Set Selection
-[cut_set]
-# Choose which set of cuts to apply: "tight", "tighter", or "loose"
-active = "tighter"  # Default to tighter cuts from old notebook
-
 # Tight Cuts (Based on old KpKm_explore.ipynb notebook)
 # tight_cuts = good_Lambda_sep_100 & (Bu_PT>3500) & (prodProbKK>0.5) & (p_ProbNNp>0.5) & (Bu_FDCHI2_OWNPV>250.) & (Bu_IPCHI2_OWNPV<6) & good_Lambda_mass
 [tight]
@@ -252,3 +248,7 @@ description = "Loose selection cuts from K⁻K⁺ mode analysis"
   DTF_chi2 = 40.0  # Looser than tight
   IPCHI2 = 6.0  # B+ IP χ² < 6 (from slides)
   FDCHI2 = 250.0  # B+ FD χ² > 250 (from slides)
+[cut_set]
+# Choose which set of cuts to apply: "tight", "tighter", or "loose"
+active = "tighter"  # Default to tighter cuts from old notebook
+

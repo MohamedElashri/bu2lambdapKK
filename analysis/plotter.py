@@ -52,14 +52,15 @@ matplotlib.rcParams['font.family'] = 'sans-serif'
 class MassSpectrumPlotter:
     """Class for creating mass spectrum plots"""
     
-    # Expected resonances in pK⁻Λ̄ system (masses in MeV)
-    # Widths available in PDG for precise analysis
+    # Expected resonances in pK⁻Λ̄ system (masses and widths in MeV)
+    # Widths from PDG for precise mass region visualization
     KNOWN_RESONANCES = {
-        'jpsi': {'name': r'$J/\psi$', 'mass': 3097, 'color': 'red', 'window': 50},
-        'eta_c': {'name': r'$\eta_c$', 'mass': 2984, 'color': 'blue', 'window': 50},
-        'chi_c0': {'name': r'$\chi_{c0}$', 'mass': 3415, 'color': 'green', 'window': 50},
-        'chi_c1': {'name': r'$\chi_{c1}$', 'mass': 3511, 'color': 'orange', 'window': 50},
-        'eta_c2s': {'name': r'$\eta_c(2S)$', 'mass': 3637, 'color': 'purple', 'window': 50},
+        'jpsi': {'name': r'$J/\psi$', 'mass': 3097, 'width': 0.093, 'color': 'red', 'window': 50},
+        'eta_c': {'name': r'$\eta_c$', 'mass': 2984, 'width': 32, 'color': 'blue', 'window': 50},
+        'chi_c0': {'name': r'$\chi_{c0}$', 'mass': 3415, 'width': 11, 'color': 'green', 'window': 50},
+        'chi_c1': {'name': r'$\chi_{c1}$', 'mass': 3511, 'width': 1, 'color': 'orange', 'window': 50},
+        'chi_c2': {'name': r'$\chi_{c2}$', 'mass': 3556, 'width': 2, 'color': 'cyan', 'window': 50},
+        'eta_c2s': {'name': r'$\eta_c(2S)$', 'mass': 3637, 'width': 11.3, 'color': 'purple', 'window': 50},
     }
     
     def __init__(self, output_dir):
@@ -239,20 +240,54 @@ class MassSpectrumPlotter:
         # Calculate errors (Poisson statistics)
         hist_errors = np.sqrt(hist)
         
-        # Plot histogram with error bars
-        ax.errorbar(bin_centers, hist, yerr=hist_errors, 
-                   fmt='o', color='black', markersize=4,
-                   capsize=2, capthick=1, elinewidth=1,
-                   label=r'$B^+ \rightarrow pK^-\bar{\Lambda}$')
+        # Plot histogram with step style and error bars
+        # Use step histogram for cleaner look
+        ax.hist(masses, bins=bins, range=mass_range, 
+               histtype='step', color='black', linewidth=1.5,
+               label=r'$B^+ \rightarrow pK^-\bar{\Lambda}$')
         
-        # Mark known resonances if provided
+        # Add error bars without connecting lines for better visibility
+        ax.errorbar(bin_centers, hist, yerr=hist_errors, 
+                   fmt='none', color='black', 
+                   capsize=0, elinewidth=0.8, alpha=0.5)
+        
+        # Mark known resonances with vertical lines showing mass regions
         if resonances:
             for res in resonances:
-                ax.axvline(x=res['mass'], 
-                          color=res.get('color', 'red'), 
-                          linestyle='--', 
-                          linewidth=2, 
-                          label=f"{res['name']} ({res['mass']:.1f} MeV/$c^2$)")
+                mass = res['mass']
+                width = res.get('width', 0)
+                color = res.get('color', 'red')
+                
+                # Calculate the local maximum in the region around this resonance
+                # Use ±50 MeV window to find local peak
+                local_window = 50  # MeV
+                in_region = (bin_centers >= mass - local_window) & (bin_centers <= mass + local_window)
+                if np.any(in_region):
+                    local_max = np.max(hist[in_region])
+                    # Limit line height to 120% of local maximum
+                    line_height = 1.2 * local_max
+                else:
+                    # Fallback to global maximum if no data in region
+                    line_height = 1.2 * np.max(hist)
+                
+                # For J/psi with extremely narrow width, draw single line
+                if width < 0.5:  # Effectively treat as delta function
+                    ax.axvline(x=mass, ymin=0, ymax=line_height/ax.get_ylim()[1],
+                              color=color, linestyle='--', linewidth=2, alpha=0.7,
+                              label=f"{res['name']} ({mass:.1f} MeV/$c^2$)")
+                else:
+                    # Draw two vertical lines at mass ± width/2
+                    half_width = width / 2
+                    mass_low = mass - half_width
+                    mass_high = mass + half_width
+                    
+                    # Draw the two boundary lines
+                    ax.vlines([mass_low, mass_high], 0, line_height,
+                             colors=color, linestyles='--', linewidth=2, alpha=0.6,
+                             label=f"{res['name']} ({mass:.1f} MeV/$c^2$)")
+                    
+                    # Optionally add a shaded region between the lines
+                    ax.axvspan(mass_low, mass_high, alpha=0.15, color=color)
         
         # Add labels and title
         ax.set_xlabel(r'$M(pK^-\bar{\Lambda})$ [MeV/$c^2$]', fontsize=14)
