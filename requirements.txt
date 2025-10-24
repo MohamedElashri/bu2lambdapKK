@@ -1,0 +1,17 @@
+# Core scientific computing
+numpy
+scipy
+matplotlib
+pandas
+
+# High-energy physics specific
+uproot
+awkward
+ROOT
+mplhep
+
+# Utilities
+tqdm
+uncertainties
+psutil
+pyyaml

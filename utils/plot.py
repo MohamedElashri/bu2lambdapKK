@@ -1,6 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import ticker
+import mplhep as hep
+
+# Set LHCb style globally
+plt.style.use(hep.style.LHCb2)
 
 formatter = ticker.ScalarFormatter(useMathText=True)
 formatter.set_scientific(True)
