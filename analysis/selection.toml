@@ -13,6 +13,8 @@ date = "2025-10-24"
 delta_z = "L0_ENDVERTEX_Z - L0_OWNPV_Z"
 lambda_mass_diff = "abs(L0_M - 1115.6)"
 kk_product = "h1_ProbNNk * h2_ProbNNk"
+# 3-body PID product (proton * h1 * h2)
+pid_product = "p_MC15TuneV1_ProbNNp * h1_ProbNNk * h2_ProbNNk"
 
 # Trigger Selection Cuts
 [trigger]
@@ -78,11 +80,11 @@ description = "Lambda (Λ0) selection cuts"
 description = "Kaon (h1, h2) selection cuts"
 
   [[kaon.cuts]]
-  name = "kk_product"
-  branch = "kk_product"  # This is a derived branch
+  name = "pid_product"
+  branch = "pid_product"  # This is a derived branch: p * h1 * h2 PID product
   operator = ">"
-  value = 0.04
-  description = "Product of h1 and h2 kaon PID probabilities (h1_ProbNNk × h2_ProbNNk)"
+  value = 0.50
+  description = "Product of p, h1, and h2 PID probabilities (p_ProbNNp × h1_ProbNNk × h2_ProbNNk)"
   
   # Individual kaon cuts for reference (not applied by default, but can be used)
   [[kaon.cuts]]
@@ -143,9 +145,10 @@ description = "B+ meson selection cuts"
 # Cut Set Selection
 [cut_set]
 # Choose which set of cuts to apply: "tight" or "loose"
-active = "tight"  # Change to "loose" for looser cuts
+active = "loose"  # Change to "loose" for looser cuts
 
 # Tight Cuts (Default/Standard Analysis)
+# Based on final selection in L0barPKK.data_DD.ipynb notebook
 [tight]
 description = "Tight selection cuts for standard analysis"
 
@@ -159,32 +162,36 @@ description = "Tight selection cuts for standard analysis"
   proton_ProbNNp = 0.2
   
   [tight.kaon]
-  kk_product = 0.04
+  # Product of all three PID probabilities (p * h1 * h2)
+  # LL uses 0.50, DD uses 0.55 - using 0.50 as default
+  pid_product = 0.50
   
   [tight.bplus]
   PT = 3000.0
   DTF_chi2 = 30.0
-  IPCHI2 = 10.0
+  # log(IPCHI2) < 1.70 for LL, < 2.00 for DD
+  # Using exp(1.70) ≈ 5.47 for LL as default
+  IPCHI2 = 5.47
   FDCHI2 = 175.0
 
-# Loose Cuts (Systematic Studies)
+# Loose Cuts (Based on K⁻K⁺ mode slides)
 [loose]
-description = "Loose selection cuts for systematic studies"
+description = "Loose selection cuts from K⁻K⁺ mode analysis"
 
   [loose.proton]
-  p_ProbNNp = 0.03  # Looser than tight
+  p_ProbNNp = 0.05  # Basic proton identification
   
   [loose.lambda]
-  delta_z = 15.0  # Looser than tight (20.0)
-  FDCHI2 = 30.0  # Looser than tight (45.0)
-  mass_window = 8.0  # Looser than tight (6.0)
-  proton_ProbNNp = 0.15  # Looser than tight (0.2)
+  delta_z = 5.0  # ΔZ > 5 mm (from slides)
+  FDCHI2 = 250.0  # Lambda FD χ² > 250 (from slides)
+  mass_window = 5.0  # |m(pπ⁻) - 1115.6| < 5 MeV (1111 < M < 1121)
+  proton_ProbNNp = 0.3  # Λ_p ProbNNp > 0.3 (from slides summary table)
   
   [loose.kaon]
-  kk_product = 0.02  # Looser than tight (0.04)
+  pid_product = 0.20  # Looser than tight (0.50)
   
   [loose.bplus]
-  PT = 2500.0  # Looser than tight (3000.0)
-  DTF_chi2 = 40.0  # Looser than tight (30.0)
-  IPCHI2 = 15.0  # Looser than tight (10.0)
-  FDCHI2 = 150.0  # Looser than tight (175.0)
+  PT = 3500.0  # B+ pT > 3500 MeV (from slides)
+  DTF_chi2 = 40.0  # Looser than tight
+  IPCHI2 = 6.0  # B+ IP χ² < 6 (from slides)
+  FDCHI2 = 250.0  # B+ FD χ² > 250 (from slides)
