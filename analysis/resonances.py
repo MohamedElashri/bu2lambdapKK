@@ -109,6 +109,14 @@ Examples:
     )
     
     parser.add_argument(
+        '--selection-config',
+        type=str,
+        default=None,
+        help='Path to selection configuration file (default: analysis/selection.toml). '
+             'The active cut set (tight/loose) is controlled in the config file.'
+    )
+    
+    parser.add_argument(
         '--output', '-o',
         type=str,
         default='output',
@@ -211,13 +219,31 @@ def main():
     
     # Apply selection criteria
     logger.info("\nApplying selection criteria...")
-    selector = SelectionProcessor()
-    selected_data = selector.apply_basic_selection(data)
+    
+    # Initialize selector with optional custom config
+    if args.selection_config:
+        logger.info(f"Using custom selection config: {args.selection_config}")
+        selector = SelectionProcessor(config_path=args.selection_config)
+    else:
+        logger.info("Using default selection config (analysis/selection.toml)")
+        selector = SelectionProcessor()
+    
+    # Apply selection with summary
+    selected_data, selection_summary = selector.apply_basic_selection(data, return_summary=True)
     
     selected_events = sum(len(events) for events in selected_data.values())
     logger.info(f"After selection: {selected_events} events ({100*selected_events/total_events:.2f}%)")
+    
+    # Log per-dataset statistics after selection
     for key, events in selected_data.items():
-        logger.info(f"  {key}: {len(events)} events")
+        summary = selection_summary[key]
+        efficiency = summary['final_selected']['efficiency']
+        logger.info(f"  {key}: {len(events)} events ({efficiency:.2f}% efficiency)")
+    
+    # Print detailed cut summary if verbose
+    if args.verbose:
+        logger.info("\nDetailed cut summary:")
+        selector.print_cut_summary(selection_summary)
     
     # Calculate invariant masses
     logger.info("\nCalculating pK⁻Λ̄ invariant masses...")
@@ -246,14 +272,17 @@ def main():
         logger.info(f"Marking resonances: {', '.join(resonance_names)}")
     
     # Convert mass range to tuple if provided
-    mass_range = tuple(args.mass_range) if args.mass_range else None
+    # Default to match old notebook: 2500-5000 MeV range with 125 bins (20 MeV per bin)
+    mass_range = tuple(args.mass_range) if args.mass_range else (2000, 5000)
+    # 125 bins for 2500 MeV range = 20 MeV per bin (matches old notebook)
+    bins = args.bins if args.mass_range else 600
     
     # Create plots
     logger.info("\nCreating mass spectrum plots...")
     plotter.plot_mass_spectrum(
         data=data_with_masses,
         mass_range=mass_range,
-        bins=args.bins,
+        bins=bins,
         resonances=resonances
     )
     

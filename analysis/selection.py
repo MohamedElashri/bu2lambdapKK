@@ -83,8 +83,14 @@ class SelectionProcessor:
                 elif category == 'lambda':
                     if 'delta_z' in cut_name or 'delta_z' in branch:
                         possible_keys.append('delta_z')
+                    elif 'FD_CHISQ' in branch or 'FD_CHISQ' in cut_name:
+                        possible_keys.append('FD_CHISQ')
                     elif 'FDCHI2' in branch:
                         possible_keys.append('FDCHI2')
+                    elif 'mass_window_lower' in cut_name:
+                        possible_keys.append('mass_window_lower')
+                    elif 'mass_window_upper' in cut_name:
+                        possible_keys.append('mass_window_upper')
                     elif 'mass' in cut_name:
                         possible_keys.append('mass_window')
                     elif 'Lp_' in branch and 'ProbNNp' in branch:
@@ -97,6 +103,17 @@ class SelectionProcessor:
                 
                 # For B+ cuts: Bu_PT -> PT, Bu_DTF_chi2 -> DTF_chi2, etc.
                 elif category == 'bplus':
+                    # Handle mass window cuts specially
+                    if 'mass_window_lower' in cut_name:
+                        possible_keys.append('mass_window_lower')
+                    elif 'mass_window_upper' in cut_name:
+                        possible_keys.append('mass_window_upper')
+                    # Check if mass_window is enabled
+                    if 'mass_window' in cut_name:
+                        # Check for mass_window_enabled flag
+                        if 'mass_window_enabled' in set_values:
+                            cut_info['enabled'] = set_values['mass_window_enabled']
+                    
                     # Remove Bu_ prefix and use the rest
                     if branch.startswith('Bu_'):
                         key = branch.replace('Bu_', '')
@@ -138,7 +155,9 @@ class SelectionProcessor:
                     'events': events,
                     'np': np,
                     'ak': ak,
-                    'abs': np.abs
+                    'abs': np.abs,
+                    'sqrt': np.sqrt,
+                    'square': np.square
                 }
                 
                 # Add all event branches to namespace
@@ -159,6 +178,33 @@ class SelectionProcessor:
             except Exception as e:
                 self.logger.error(f"Error computing derived branch {branch_name}: {e}")
                 raise
+        
+        # Compute L0_FD_CHISQ (special case - more complex calculation)
+        # Based on old notebook: L0_FD_CHISQ = (Delta_X/Delta_X_ERR)^2 + (Delta_Y/Delta_Y_ERR)^2 + (Delta_Z/Delta_Z_ERR)^2
+        try:
+            Delta_X = ak.to_numpy(events.L0_ENDVERTEX_X) - ak.to_numpy(events.Bu_ENDVERTEX_X)
+            Delta_Y = ak.to_numpy(events.L0_ENDVERTEX_Y) - ak.to_numpy(events.Bu_ENDVERTEX_Y)
+            Delta_Z = ak.to_numpy(events.L0_ENDVERTEX_Z) - ak.to_numpy(events.Bu_ENDVERTEX_Z)
+            
+            Delta_X_ERR = np.sqrt(np.square(ak.to_numpy(events.Bu_ENDVERTEX_XERR)) + 
+                                 np.square(ak.to_numpy(events.L0_ENDVERTEX_XERR)))
+            Delta_Y_ERR = np.sqrt(np.square(ak.to_numpy(events.Bu_ENDVERTEX_YERR)) + 
+                                 np.square(ak.to_numpy(events.L0_ENDVERTEX_YERR)))
+            Delta_Z_ERR = np.sqrt(np.square(ak.to_numpy(events.Bu_ENDVERTEX_ZERR)) + 
+                                 np.square(ak.to_numpy(events.L0_ENDVERTEX_ZERR)))
+            
+            delta_x = np.divide(Delta_X, Delta_X_ERR)
+            delta_y = np.divide(Delta_Y, Delta_Y_ERR)
+            delta_z = np.divide(Delta_Z, Delta_Z_ERR)
+            
+            L0_FD_CHISQ = np.square(delta_x) + np.square(delta_y) + np.square(delta_z)
+            derived['L0_FD_CHISQ'] = L0_FD_CHISQ
+            
+            self.logger.debug(f"Computed L0_FD_CHISQ derived branch")
+            
+        except Exception as e:
+            self.logger.error(f"Error computing L0_FD_CHISQ: {e}")
+            raise
         
         return derived
     

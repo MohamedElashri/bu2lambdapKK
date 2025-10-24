@@ -123,6 +123,13 @@ Examples:
     )
     
     parser.add_argument(
+        "--selection-config",
+        default=None,
+        help="Path to selection configuration file (default: analysis/selection.toml). "
+             "Control tight/loose cuts in the config file."
+    )
+    
+    parser.add_argument(
         "--verbose", "-v", 
         action="store_true", 
         help="Enable verbose output"
@@ -178,11 +185,24 @@ def main():
     
     # Step 2: Apply selection
     logger.info("\nStep 2: Applying selection criteria...")
-    selector = SelectionProcessor()
-    selected_data = selector.apply_basic_selection(data)
+    
+    # Initialize selector with optional custom config
+    if args.selection_config:
+        logger.info(f"Using custom selection config: {args.selection_config}")
+        selector = SelectionProcessor(config_path=args.selection_config)
+    else:
+        logger.info("Using default selection config")
+        selector = SelectionProcessor()
+    
+    # Apply selection with summary
+    selected_data, selection_summary = selector.apply_basic_selection(data, return_summary=True)
     
     selected_events = sum(len(events) for events in selected_data.values())
     logger.info(f"After selection: {selected_events} events ({100*selected_events/total_events:.2f}%)")
+    
+    # Print detailed cut summary if verbose
+    if args.verbose:
+        selector.print_cut_summary(selection_summary)
     
     # Step 3: Calculate invariant masses
     logger.info("\nStep 3: Calculating pK⁻Λ̄ invariant mass...")

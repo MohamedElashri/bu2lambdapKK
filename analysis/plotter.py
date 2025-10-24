@@ -104,6 +104,9 @@ class MassSpectrumPlotter:
         """
         # Combine all datasets
         all_masses = []
+        ll_masses = []
+        dd_masses = []
+        
         for key, events in data.items():
             if 'M_pKLambdabar' in events.fields:
                 masses = ak.to_numpy(events['M_pKLambdabar'])
@@ -111,6 +114,12 @@ class MassSpectrumPlotter:
                 masses = masses[np.isfinite(masses) & (masses > 0)]
                 if len(masses) > 0:
                     all_masses.append(masses)
+                    
+                    # Separate LL and DD
+                    if '_LL' in key:
+                        ll_masses.append(masses)
+                    elif '_DD' in key:
+                        dd_masses.append(masses)
                     
                     # Also create individual plots for each dataset
                     self._create_mass_plot(masses, f"mass_spectrum_{key}", 
@@ -124,14 +133,22 @@ class MassSpectrumPlotter:
             self.logger.error("No mass data available for plotting! Did you calculate the invariant mass?")
             return
         
-        # Create combined plot
+        # Create combined plot (all data)
         all_masses = np.concatenate(all_masses)
         self._create_mass_plot(all_masses, "mass_spectrum_combined", 
                              mass_range, bins, resonances)
         
-        # Also create a wide-range plot to see the full spectrum
-        self._create_mass_plot(all_masses, "mass_spectrum_full", 
-                             mass_range=None, bins=150, resonances=resonances)
+        # Create combined LL plot
+        if ll_masses:
+            ll_masses_combined = np.concatenate(ll_masses)
+            self._create_mass_plot(ll_masses_combined, "mass_spectrum_combined_LL", 
+                                 mass_range, bins, resonances)
+        
+        # Create combined DD plot
+        if dd_masses:
+            dd_masses_combined = np.concatenate(dd_masses)
+            self._create_mass_plot(dd_masses_combined, "mass_spectrum_combined_DD", 
+                                 mass_range, bins, resonances)
     
     # Keep backward compatibility
     def plot_jpsi_mass_spectrum(self, data, mass_range=(2900, 3300), bins=50):
@@ -226,7 +243,7 @@ class MassSpectrumPlotter:
         ax.errorbar(bin_centers, hist, yerr=hist_errors, 
                    fmt='o', color='black', markersize=4,
                    capsize=2, capthick=1, elinewidth=1,
-                   label='Data')
+                   label=r'$B^+ \rightarrow pK^-\bar{\Lambda}$')
         
         # Mark known resonances if provided
         if resonances:

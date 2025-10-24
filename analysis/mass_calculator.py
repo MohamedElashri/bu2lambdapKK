@@ -9,9 +9,18 @@ import awkward as ak
 class MassCalculator:
     """Class for calculating invariant masses for B+ → pK⁻Λ̄ K+ analysis"""
     
-    def __init__(self):
-        """Initialize the mass calculator"""
+    # PDG Lambda mass (MeV/c^2)
+    LAMBDA_PDG_MASS = 1115.683
+    
+    def __init__(self, apply_lambda_correction=True):
+        """
+        Initialize the mass calculator
+        
+        Parameters:
+        - apply_lambda_correction: If True, apply Lambda mass correction to improve resolution
+        """
         self.logger = logging.getLogger("Bu2LambdaPKK.MassCalculator")
+        self.apply_lambda_correction = apply_lambda_correction
     
     def calculate_jpsi_candidates(self, data):
         """
@@ -72,10 +81,17 @@ class MassCalculator:
             # Calculate the invariant mass of pK⁻Λ̄
             m_pklambda = self._invariant_mass(p_p, p_k_minus, p_lambda)
             
-            # Add invariant mass to data
-            data_with_masses[key] = ak.with_field(events, m_pklambda, "M_pKLambdabar")
-            
-            self.logger.info(f"Added pK⁻Λ̄ mass to {len(events)} events")
+            # Apply Lambda mass correction if enabled
+            if self.apply_lambda_correction:
+                # Corrected mass = M_pKLambda - L0_MM + PDG_Lambda_mass
+                # This compensates for the measured Lambda mass deviating from PDG value
+                m_pklambda_corrected = m_pklambda - events.L0_MM + self.LAMBDA_PDG_MASS
+                data_with_masses[key] = ak.with_field(events, m_pklambda_corrected, "M_pKLambdabar")
+                self.logger.info(f"Added Lambda-corrected pK⁻Λ̄ mass to {len(events)} events")
+            else:
+                # Add invariant mass to data without correction
+                data_with_masses[key] = ak.with_field(events, m_pklambda, "M_pKLambdabar")
+                self.logger.info(f"Added pK⁻Λ̄ mass to {len(events)} events")
         
         return data_with_masses
     

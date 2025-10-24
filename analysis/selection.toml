@@ -10,11 +10,15 @@ date = "2025-10-24"
 [derived_branches]
 # Format: name = "expression"
 # These will be evaluated using the events data
-delta_z = "L0_ENDVERTEX_Z - L0_OWNPV_Z"
-lambda_mass_diff = "abs(L0_M - 1115.6)"
+delta_z = "L0_ENDVERTEX_Z - Bu_ENDVERTEX_Z"
+lambda_mass_diff = "abs(L0_MM - 1115.683)"
 kk_product = "h1_ProbNNk * h2_ProbNNk"
 # 3-body PID product (proton * h1 * h2)
 pid_product = "p_MC15TuneV1_ProbNNp * h1_ProbNNk * h2_ProbNNk"
+# Lambda corrected B+ mass (for B_region selection)
+lambda_corrected_bu_mass = "Bu_MM - L0_MM + 1115.683"
+# Lambda FD chi-squared (calculated from Delta_X, Delta_Y, Delta_Z)
+# This is computed separately in selection.py
 
 # Trigger Selection Cuts
 [trigger]
@@ -52,21 +56,28 @@ description = "Lambda (Λ0) selection cuts"
   branch = "delta_z"  # This is a derived branch
   operator = ">"
   value = 20.0
-  description = "ΔZ > 20 mm (Lambda decay vertex - primary vertex)"
+  description = "ΔZ > 20 mm (Lambda decay vertex - B+ decay vertex)"
   
   [[lambda.cuts]]
-  name = "lambda_FDCHI2"
-  branch = "L0_FDCHI2_OWNPV"
+  name = "lambda_FD_CHISQ"
+  branch = "L0_FD_CHISQ"  # This is a derived branch (computed in selection.py)
   operator = ">"
   value = 45.0
-  description = "Lambda flight distance χ²"
+  description = "Lambda flight distance χ² (calculated from Delta_X, Delta_Y, Delta_Z)"
   
   [[lambda.cuts]]
-  name = "lambda_mass_window"
-  branch = "lambda_mass_diff"  # This is a derived branch
+  name = "lambda_mass_window_lower"
+  branch = "L0_MM"
+  operator = ">"
+  value = 1111.0
+  description = "Lambda mass > 1111 MeV/c² (lower bound)"
+  
+  [[lambda.cuts]]
+  name = "lambda_mass_window_upper"
+  branch = "L0_MM"
   operator = "<"
-  value = 6.0
-  description = "|m(pπ⁻) - 1115.6| < 6 MeV/c²"
+  value = 1121.0
+  description = "Lambda mass < 1121 MeV/c² (upper bound)"
   
   [[lambda.cuts]]
   name = "lambda_proton_ProbNNp"
@@ -141,38 +152,84 @@ description = "B+ meson selection cuts"
   operator = ">"
   value = 175.0
   description = "B+ flight distance χ² > 175"
+  
+  [[bplus.cuts]]
+  name = "Bu_mass_window_lower"
+  branch = "lambda_corrected_bu_mass"  # This is a derived branch
+  operator = ">"
+  value = 5255.0
+  description = "Lambda-corrected B+ mass > 5255 MeV/c² (B_region lower bound)"
+  enabled = false  # Set to true to apply B_region cut
+  
+  [[bplus.cuts]]
+  name = "Bu_mass_window_upper"
+  branch = "lambda_corrected_bu_mass"  # This is a derived branch
+  operator = "<"
+  value = 5305.0
+  description = "Lambda-corrected B+ mass < 5305 MeV/c² (B_region upper bound)"
+  enabled = false  # Set to true to apply B_region cut
 
 # Cut Set Selection
 [cut_set]
-# Choose which set of cuts to apply: "tight" or "loose"
-active = "loose"  # Change to "loose" for looser cuts
+# Choose which set of cuts to apply: "tight", "tighter", or "loose"
+active = "tighter"  # Default to tighter cuts from old notebook
 
-# Tight Cuts (Default/Standard Analysis)
-# Based on final selection in L0barPKK.data_DD.ipynb notebook
+# Tight Cuts (Based on old KpKm_explore.ipynb notebook)
+# tight_cuts = good_Lambda_sep_100 & (Bu_PT>3500) & (prodProbKK>0.5) & (p_ProbNNp>0.5) & (Bu_FDCHI2_OWNPV>250.) & (Bu_IPCHI2_OWNPV<6) & good_Lambda_mass
 [tight]
-description = "Tight selection cuts for standard analysis"
+description = "Tight selection cuts from old notebook (without DTF chi2 cut)"
 
   [tight.proton]
-  p_ProbNNp = 0.05
+  p_ProbNNp = 0.5  # Tighter than loose (0.05)
   
   [tight.lambda]
-  delta_z = 20.0
-  FDCHI2 = 45.0
-  mass_window = 6.0
-  proton_ProbNNp = 0.2
+  delta_z = 5.0  # good_Lambda_sep_100: Delta_Z > 5
+  FD_CHISQ = 100.0  # good_Lambda_sep_100: L0_FD_CHISQ > 100
+  mass_window_lower = 1111.0  # good_Lambda_mass: L0_MM > 1111
+  mass_window_upper = 1121.0  # good_Lambda_mass: L0_MM < 1121
+  proton_ProbNNp = 0.2  # Default Lambda daughter proton cut
   
   [tight.kaon]
-  # Product of all three PID probabilities (p * h1 * h2)
-  # LL uses 0.50, DD uses 0.55 - using 0.50 as default
-  pid_product = 0.50
+  # prodProbKK > 0.5 (product of two kaon PID probabilities)
+  kk_product = 0.5
   
   [tight.bplus]
-  PT = 3000.0
-  DTF_chi2 = 30.0
-  # log(IPCHI2) < 1.70 for LL, < 2.00 for DD
-  # Using exp(1.70) ≈ 5.47 for LL as default
-  IPCHI2 = 5.47
-  FDCHI2 = 175.0
+  PT = 3500.0  # Bu_PT > 3500
+  DTF_chi2 = 999999.0  # No DTF chi2 cut in tight_cuts (effectively disabled)
+  IPCHI2 = 6.0  # Bu_IPCHI2_OWNPV < 6
+  FDCHI2 = 250.0  # Bu_FDCHI2_OWNPV > 250
+  # B_region cuts (disabled by default)
+  mass_window_lower = 5255.0
+  mass_window_upper = 5305.0
+  mass_window_enabled = true
+
+# Tighter Cuts (Based on old KpKm_explore.ipynb notebook)
+# tighter_cuts = tight_cuts & (Bu_DTF_chi2<40)
+[tighter]
+description = "Tighter selection cuts from old notebook (tight_cuts + DTF chi2 < 40)"
+
+  [tighter.proton]
+  p_ProbNNp = 0.5
+  
+  [tighter.lambda]
+  delta_z = 5.0
+  FD_CHISQ = 100.0
+  mass_window_lower = 1111.0
+  mass_window_upper = 1121.0
+  proton_ProbNNp = 0.2
+  
+  [tighter.kaon]
+  kk_product = 0.5
+  
+  [tighter.bplus]
+  PT = 3500.0
+  DTF_chi2 = 40.0  # Bu_DTF_chi2 < 40 (this is the key difference from tight)
+  IPCHI2 = 6.0
+  FDCHI2 = 250.0
+  # B_region cuts (can be enabled for final plots)
+  mass_window_lower = 5255.0
+  mass_window_upper = 5305.0
+  mass_window_enabled = true  # Disabled for higher statistics
 
 # Loose Cuts (Based on K⁻K⁺ mode slides)
 [loose]
