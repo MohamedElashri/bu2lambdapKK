@@ -76,8 +76,8 @@ Examples:
     
     parser.add_argument(
         "--data-dir", 
-        default="/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced", 
-        help="Directory containing data files (default: /share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced)"
+        default="/share/lazy/Mohamed/Bu2LambdaPPP/files/data", 
+        help="Directory containing data files (default: /share/lazy/Mohamed/Bu2LambdaPPP/files/data)"
     )
     
     parser.add_argument(

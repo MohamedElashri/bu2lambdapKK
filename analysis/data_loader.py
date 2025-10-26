@@ -20,7 +20,7 @@ class DataLoader:
         for year in years:
             files[year] = {}
             for polarity in polarities:
-                file_path = self.data_dir / f"dataBu2L0barPHH_{year}{polarity}_reduced.root"
+                file_path = self.data_dir / f"dataBu2L0barPHH_{year}{polarity}.root"
                 if file_path.exists():
                     files[year][polarity] = file_path
                 else:

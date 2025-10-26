@@ -50,7 +50,7 @@ matplotlib.rcParams.update({
     'ytick.labelsize': 14,
     'legend.fontsize': 13,
     'figure.titlesize': 18,
-    'text.usetex': True,  # Use LaTeX for text rendering
+    'text.usetex': False,  # Use LaTeX for text rendering
     'axes.linewidth': 1.5,
     'grid.linewidth': 0.8,
     'lines.linewidth': 2,
