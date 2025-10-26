@@ -35,7 +35,7 @@ def main():
     
     # Load data
     logger.info("\nLoading data...")
-    data_dir = "/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced"
+    data_dir = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
     loader = DataLoader(data_dir=data_dir)
     
     # Load a subset for quick testing

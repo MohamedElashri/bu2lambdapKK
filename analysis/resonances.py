@@ -70,8 +70,8 @@ Examples:
     parser.add_argument(
         '--data-dir',
         type=str,
-        default='/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced',
-        help='Directory containing data ROOT files (default: /share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced)'
+        default='/share/lazy/Mohamed/Bu2LambdaPPP/files/data',
+        help='Directory containing data ROOT files (default: /share/lazy/Mohamed/Bu2LambdaPPP/files/data)'
     )
     
     parser.add_argument(

@@ -24,7 +24,7 @@ def setup_logging(verbose=False):
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Diagnose event losses in B+ → pK⁻Λ̄ K+ analysis")
-    parser.add_argument("--data-dir", default="/share/lazy/Mohamed/Bu2LambdaPPP/RD/restripped.data/reduced", 
+    parser.add_argument("--data-dir", default="/share/lazy/Mohamed/Bu2LambdaPPP/files/data", 
                         help="Directory containing data files")
     parser.add_argument("--years", default="16,17,18", help="Years to process (comma-separated)")
     parser.add_argument("--polarity", default="MD,MU", help="Magnet polarities to process")
