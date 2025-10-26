@@ -2,7 +2,7 @@
 # Script to explore branches in the B+ → pK⁻Λ̄ K+ data files
 
 DATA_DIR="/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
-SAMPLE_FILE="dataBu2L0barPHH_16MD_reduced.root"
+SAMPLE_FILE="dataBu2L0barPHH_16MD.root"
 DECAY_CHANNEL="B2L0barPKpKm"
 TRACK_TYPE="LL"
 
