@@ -2,13 +2,47 @@
 # This file controls which branches are loaded from ROOT files
 # Supports both real data and MC (reconstructed data)
 
+# ============================================================================
+# BRANCH ALIASES - Handle differences between data and MC
+# ============================================================================
+[aliases]
+description = """
+Some branches have different names in data vs MC files.
+Define aliases here to use a common name in your analysis.
+Format: common_name = {data = "data_branch", mc = "mc_branch"}
+"""
+
+# PID branches - Data uses MC15TuneV1, MC uses MC12TuneV2/V3/V4
+# We prefer MC15TuneV1 for data (more recent), MC12TuneV4 for MC
+[aliases.pid]
+h1_ProbNNk = {data = "h1_MC15TuneV1_ProbNNk", mc = "h1_MC12TuneV4_ProbNNk"}
+h1_ProbNNp = {data = "h1_MC15TuneV1_ProbNNp", mc = "h1_MC12TuneV4_ProbNNp"}
+h1_ProbNNpi = {data = "h1_MC15TuneV1_ProbNNpi", mc = "h1_MC12TuneV4_ProbNNpi"}
+h1_ProbNNmu = {data = "h1_MC15TuneV1_ProbNNmu", mc = "h1_MC12TuneV4_ProbNNmu"}
+
+h2_ProbNNk = {data = "h2_MC15TuneV1_ProbNNk", mc = "h2_MC12TuneV4_ProbNNk"}
+h2_ProbNNp = {data = "h2_MC15TuneV1_ProbNNp", mc = "h2_MC12TuneV4_ProbNNp"}
+h2_ProbNNpi = {data = "h2_MC15TuneV1_ProbNNpi", mc = "h2_MC12TuneV4_ProbNNpi"}
+h2_ProbNNmu = {data = "h2_MC15TuneV1_ProbNNmu", mc = "h2_MC12TuneV4_ProbNNmu"}
+
+# Add other particle PID if needed
+Lp_ProbNNp = {data = "Lp_MC15TuneV1_ProbNNp", mc = "Lp_MC12TuneV4_ProbNNp"}
+Lp_ProbNNpi = {data = "Lp_MC15TuneV1_ProbNNpi", mc = "Lp_MC12TuneV4_ProbNNpi"}
+Lpi_ProbNNp = {data = "Lpi_MC15TuneV1_ProbNNp", mc = "Lpi_MC12TuneV4_ProbNNp"}
+Lpi_ProbNNpi = {data = "Lpi_MC15TuneV1_ProbNNpi", mc = "Lpi_MC12TuneV4_ProbNNpi"}
+p_ProbNNp = {data = "p_MC15TuneV1_ProbNNp", mc = "p_MC12TuneV4_ProbNNp"}
+p_ProbNNpi = {data = "p_MC15TuneV1_ProbNNpi", mc = "p_MC12TuneV4_ProbNNpi"}
+
 [branches]
 
-# Define branch sets - we can enable/disable entire categories
+# Define branch sets - you can enable/disable entire categories
+# Default sets loaded when no explicit configuration is provided
 load_sets = [
     "essential",      # Minimal branches for analysis
     "kinematics",     # Full kinematic variables
     "pid",            # Particle identification
+    "selection",      # Additional branches needed for selection cuts
+    "trigger",        # Trigger decision branches
     # "mc_truth",     # MC truth branches (only available in MC)
     # "advanced_dtf", # Advanced DTF variables
 ]
@@ -42,15 +76,15 @@ L0 = [
 ]
 
 # Λ daughters (proton and pion)
-Lp = ["Lp_P", "Lp_PT", "Lp_ETA", "Lp_IPCHI2_OWNPV"]
-Lpi = ["Lpi_P", "Lpi_PT", "Lpi_ETA", "Lpi_IPCHI2_OWNPV"]
+Lp = ["Lp_P", "Lp_PT", "Lp_ETA", "Lp_IPCHI2_OWNPV", "Lp_ID"]
+Lpi = ["Lpi_P", "Lpi_PT", "Lpi_ETA", "Lpi_IPCHI2_OWNPV", "Lpi_ID"]
 
 # Bachelor proton
-p = ["p_P", "p_PT", "p_ETA", "p_IPCHI2_OWNPV"]
+p = ["p_P", "p_PT", "p_ETA", "p_IPCHI2_OWNPV", "p_ID"]
 
 # Two hadrons (K+/K-)
-h1 = ["h1_P", "h1_PT", "h1_ETA", "h1_IPCHI2_OWNPV"]
-h2 = ["h2_P", "h2_PT", "h2_ETA", "h2_IPCHI2_OWNPV"]
+h1 = ["h1_P", "h1_PT", "h1_ETA", "h1_IPCHI2_OWNPV", "h1_ID"]
+h2 = ["h2_P", "h2_PT", "h2_ETA", "h2_IPCHI2_OWNPV", "h2_ID"]
 
 # Event information
 event = ["eventNumber", "runNumber", "nTracks"]
@@ -86,43 +120,68 @@ h2 = ["h2_PX", "h2_PY", "h2_PZ", "h2_PE"]
 [branches.pid]
 description = "Particle identification variables"
 
-# proton from L0
+# proton from L0 - using common alias names
 Lp = [
-    "Lp_MC15TuneV1_ProbNNp",
-    "Lp_MC15TuneV1_ProbNNpi",
-    "Lp_MC15TuneV1_ProbNNk",
+    "Lp_ProbNNp",
+    "Lp_ProbNNpi",
+    "Lp_ProbNNk",
 ]
 
 # pion from L0
 Lpi = [
-    "Lpi_MC15TuneV1_ProbNNpi",
-    "Lpi_MC15TuneV1_ProbNNp",
-    "Lpi_MC15TuneV1_ProbNNk",
+    "Lpi_ProbNNpi",
+    "Lpi_ProbNNp",
+    "Lpi_ProbNNk",
 ]
 
 # bachelor proton
 p = [
-    "p_MC15TuneV1_ProbNNp",
-    "p_MC15TuneV1_ProbNNpi",
-    "p_MC15TuneV1_ProbNNk",
-    "p_MC15TuneV1_ProbNNmu",
+    "p_ProbNNp",
+    "p_ProbNNpi",
+    "p_ProbNNk",
+    "p_ProbNNmu",
 ]
 
-# hadron 1 (K+ or K-) opposite charge to hadron 2 (K+ in KpKm sample)
+# hadron 1 (K+ or K-) - using common alias names
 h1 = [
-    "h1_MC15TuneV1_ProbNNk",
-    "h1_MC15TuneV1_ProbNNpi",
-    "h1_MC15TuneV1_ProbNNp",
-    "h1_MC15TuneV1_ProbNNmu",
+    "h1_ProbNNk",
+    "h1_ProbNNpi",
+    "h1_ProbNNp",
+    "h1_ProbNNmu",
 ]
 
-# hadron 2 (K+ or K-) - opposite charge to hadron 1 (K- in KpKm sample)
+# hadron 2 (K+ or K-) - using common alias names
 h2 = [
-    "h2_MC15TuneV1_ProbNNk",
-    "h2_MC15TuneV1_ProbNNpi",
-    "h2_MC15TuneV1_ProbNNp",
-    "h2_MC15TuneV1_ProbNNmu",
+    "h2_ProbNNk",
+    "h2_ProbNNpi",
+    "h2_ProbNNp",
+    "h2_ProbNNmu",
 ]
+
+
+# ============================================================================
+# SELECTION BRANCHES - Additional branches needed for selection cuts
+# ============================================================================
+[branches.selection]
+description = "Additional branches required for selection cuts"
+
+Bu = [
+    "Bu_DTF_chi2", "Bu_DTF_status",  # DTF quality
+    "Bu_MM",  # Mass for lambda-corrected mass calculation
+    "Bu_ENDVERTEX_X", "Bu_ENDVERTEX_Y", "Bu_ENDVERTEX_Z",  # Vertex position
+    "Bu_ENDVERTEX_XERR", "Bu_ENDVERTEX_YERR", "Bu_ENDVERTEX_ZERR",  # Vertex errors
+    "Bu_OWNPV_X", "Bu_OWNPV_Y", "Bu_OWNPV_Z",  # Primary vertex
+]
+
+L0 = [
+    "L0_MM",  # Mass (different from L0_M)
+    "L0_FDCHI2_OWNPV",  # Flight distance chi2
+    "L0_OWNPV_X", "L0_OWNPV_Y", "L0_OWNPV_Z",  # Primary vertex
+    "L0_ENDVERTEX_X", "L0_ENDVERTEX_Y", "L0_ENDVERTEX_Z",  # Decay vertex
+    "L0_ENDVERTEX_XERR", "L0_ENDVERTEX_YERR", "L0_ENDVERTEX_ZERR",  # Vertex errors
+]
+
+# Note: PID branches for selection are already in 'pid' set
 
 # ============================================================================
 # MC TRUTH BRANCHES - Only available in MC files
@@ -168,11 +227,13 @@ Bu = [
 description = "Trigger information"
 
 trigger_lines = [
-    "Bu_L0HadronDecision_TOS",
     "Bu_L0Global_TIS",
+    "Bu_L0HadronDecision_TOS",
     "Bu_Hlt1TrackMVADecision_TOS",
+    "Bu_Hlt1TwoTrackMVADecision_TOS",
     "Bu_Hlt2Topo2BodyDecision_TOS",
     "Bu_Hlt2Topo3BodyDecision_TOS",
+    "Bu_Hlt2Topo4BodyDecision_TOS",
 ]
 
 # ============================================================================
@@ -205,17 +266,17 @@ Kminus = ["Kminus_TRUEPT", "Kminus_TRUEP_E", "Kminus_TRUEP_X", "Kminus_TRUEP_Y",
 # ============================================================================
 [presets]
 
-# Minimal analysis - just enough for fits
+# Minimal analysis - just enough for simple plots (no selection)
 minimal = ["essential"]
 
-# Standard analysis - kinematics + PID
-standard = ["essential", "kinematics", "pid"]
+# Standard analysis - for most analyses (includes selection & trigger requirements)
+standard = ["essential", "kinematics", "pid", "selection", "trigger"]
 
-# Full data analysis
-full_data = ["essential", "kinematics", "pid", "advanced_dtf", "trigger"]
+# Full data analysis - everything
+full_data = ["essential", "kinematics", "pid", "selection", "trigger", "advanced_dtf"]
 
-# MC analysis (reconstructed)
-mc_reco = ["essential", "kinematics", "pid", "mc_truth"]
+# MC analysis (reconstructed) - includes MC truth branches
+mc_reco = ["essential", "kinematics", "pid", "selection", "trigger", "mc_truth"]
 
-# MC truth study
-mc_truth = ["truth_branches"]
+# MC truth study - for generator-level studies
+mc_truth = []  # Uses truth_branches section instead

@@ -35,7 +35,35 @@ class BranchConfig:
         with open(config_path, 'rb') as f:
             self.config = tomli.load(f)
         
+        # Build alias mappings for quick lookup
+        self._build_alias_maps()
+        
         self.logger.info(f"Loaded branch configuration from {config_path}")
+    
+    def _build_alias_maps(self):
+        """Build reverse lookup maps for aliases"""
+        self.data_to_common = {}  # data branch name -> common name
+        self.mc_to_common = {}    # mc branch name -> common name
+        self.common_to_data = {}  # common name -> data branch name
+        self.common_to_mc = {}    # common name -> mc branch name
+        
+        if 'aliases' not in self.config:
+            return
+        
+        # Process all alias groups (e.g., aliases.pid)
+        for group_name, aliases in self.config['aliases'].items():
+            if group_name == 'description':
+                continue
+            
+            for common_name, mapping in aliases.items():
+                if isinstance(mapping, dict) and 'data' in mapping and 'mc' in mapping:
+                    data_branch = mapping['data']
+                    mc_branch = mapping['mc']
+                    
+                    self.common_to_data[common_name] = data_branch
+                    self.common_to_mc[common_name] = mc_branch
+                    self.data_to_common[data_branch] = common_name
+                    self.mc_to_common[mc_branch] = common_name
     
     def get_branches_from_sets(self, sets: List[str], 
                                exclude_mc: bool = False) -> List[str]:
@@ -131,6 +159,60 @@ class BranchConfig:
         - List of set names
         """
         return self.config['branches'].get('load_sets', [])
+    
+    def resolve_aliases(self, branches: List[str], is_mc: bool = False) -> List[str]:
+        """
+        Resolve common branch names to actual data/MC branch names
+        
+        Parameters:
+        - branches: List of branch names (may include common aliases)
+        - is_mc: If True, resolve to MC names; otherwise resolve to data names
+        
+        Returns:
+        - List of actual branch names
+        """
+        resolved = []
+        mapping = self.common_to_mc if is_mc else self.common_to_data
+        
+        for branch in branches:
+            if branch in mapping:
+                # This is a common name, resolve it
+                actual_branch = mapping[branch]
+                resolved.append(actual_branch)
+                self.logger.debug(
+                    f"Resolved alias: {branch} -> {actual_branch} "
+                    f"({'MC' if is_mc else 'data'})"
+                )
+            else:
+                # Not an alias, use as-is
+                resolved.append(branch)
+        
+        return resolved
+    
+    def normalize_branches(self, branches: List[str], is_mc: bool = False) -> Dict[str, str]:
+        """
+        Create mapping from actual branch names to common names
+        
+        This is useful for renaming branches after loading so that
+        your analysis code can use common names regardless of data/MC
+        
+        Parameters:
+        - branches: List of actual branch names from file
+        - is_mc: If True, treat as MC branches; otherwise data branches
+        
+        Returns:
+        - Dictionary mapping actual_name -> common_name
+        """
+        mapping = self.mc_to_common if is_mc else self.data_to_common
+        rename_map = {}
+        
+        for branch in branches:
+            if branch in mapping:
+                common_name = mapping[branch]
+                rename_map[branch] = common_name
+                self.logger.debug(f"Will normalize: {branch} -> {common_name}")
+        
+        return rename_map
     
     def list_available_sets(self) -> List[str]:
         """List all available branch sets"""

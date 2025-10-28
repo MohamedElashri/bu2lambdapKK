@@ -14,7 +14,7 @@ delta_z = "L0_ENDVERTEX_Z - Bu_ENDVERTEX_Z"
 lambda_mass_diff = "abs(L0_MM - 1115.683)"
 kk_product = "h1_ProbNNk * h2_ProbNNk"
 # 3-body PID product (proton * h1 * h2)
-pid_product = "p_MC15TuneV1_ProbNNp * h1_ProbNNk * h2_ProbNNk"
+pid_product = "p_ProbNNp * h1_ProbNNk * h2_ProbNNk"
 # Lambda corrected B+ mass (for B_region selection)
 lambda_corrected_bu_mass = "Bu_MM - L0_MM + 1115.683"
 # Lambda FD chi-squared (calculated from Delta_X, Delta_Y, Delta_Z)
@@ -42,7 +42,7 @@ description = "Proton (p) selection cuts"
 
   [[proton.cuts]]
   name = "p_ProbNNp"
-  branch = "p_MC15TuneV1_ProbNNp"
+  branch = "p_ProbNNp"
   operator = ">"
   value = 0.05
   description = "Proton PID probability"
@@ -81,7 +81,7 @@ description = "Lambda (Λ0) selection cuts"
   
   [[lambda.cuts]]
   name = "lambda_proton_ProbNNp"
-  branch = "Lp_MC15TuneV1_ProbNNp"
+  branch = "Lp_ProbNNp"
   operator = ">"
   value = 0.2
   description = "Lambda daughter proton PID probability"

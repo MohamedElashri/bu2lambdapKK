@@ -6,7 +6,11 @@ import logging
 import uproot
 from pathlib import Path
 from typing import List, Optional, Dict
-from branch_config import BranchConfig
+
+try:
+    from .branch_config import BranchConfig
+except ImportError:
+    from branch_config import BranchConfig
 
 class DataLoader:
     """Class for loading B+ → pK⁻Λ̄ K+ data from ROOT files"""
@@ -45,7 +49,8 @@ class DataLoader:
                   track_types: List[str], channel_name: str,
                   branches: Optional[List[str]] = None,
                   preset: Optional[str] = None,
-                  branch_sets: Optional[List[str]] = None) -> Dict:
+                  branch_sets: Optional[List[str]] = None,
+                  use_aliases: bool = True) -> Dict:
         """
         Load data for specified years, polarities, and track types
         
@@ -57,6 +62,8 @@ class DataLoader:
         - branches: Explicit list of branches to load (overrides other options)
         - preset: Preset name from config (e.g., 'minimal', 'standard')
         - branch_sets: List of branch sets to load (e.g., ['essential', 'kinematics'])
+        - use_aliases: If True, resolve common names to data-specific names and
+                       normalize loaded branches back to common names
         
         If none of branches/preset/branch_sets specified, loads default sets from config.
         
@@ -87,6 +94,12 @@ class DataLoader:
             )
             self.logger.info(
                 f"Using default sets {default_sets}: {len(load_branches)} branches"
+            )
+        
+        # Resolve aliases to actual data branch names
+        if use_aliases:
+            load_branches = self.branch_config.resolve_aliases(
+                load_branches, is_mc=False
             )
         
         data_files = self._find_data_files(years, polarities)
@@ -125,9 +138,29 @@ class DataLoader:
                                 
                                 # Read specified branches into memory
                                 if validation['valid']:
-                                    data[key] = tree.arrays(
+                                    events = tree.arrays(
                                         validation['valid'], library='ak'
                                     )
+                                    
+                                    # Normalize branch names if using aliases
+                                    if use_aliases:
+                                        rename_map = self.branch_config.normalize_branches(
+                                            validation['valid'], is_mc=False
+                                        )
+                                        if rename_map:
+                                            import awkward as ak
+                                            # Rename branches from data names to common names
+                                            for old_name, new_name in rename_map.items():
+                                                events = ak.with_field(
+                                                    events, events[old_name], new_name
+                                                )
+                                                # Remove old field
+                                                events = ak.without_field(events, old_name)
+                                            self.logger.info(
+                                                f"Normalized {len(rename_map)} branch names to common names"
+                                            )
+                                    
+                                    data[key] = events
                                     self.logger.info(
                                         f"Loaded {len(data[key])} events for {key}"
                                     )

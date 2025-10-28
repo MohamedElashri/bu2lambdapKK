@@ -10,7 +10,11 @@ import logging
 import uproot
 from pathlib import Path
 from typing import Dict, List, Optional
-from branch_config import BranchConfig
+
+try:
+    from .branch_config import BranchConfig
+except ImportError:
+    from branch_config import BranchConfig
 
 class MCLoader:
     """Class for loading B+ → pK⁻Λ̄ K+ Monte Carlo data from ROOT files"""
@@ -80,7 +84,8 @@ class MCLoader:
                           branches: Optional[List[str]] = None,
                           preset: Optional[str] = None,
                           branch_sets: Optional[List[str]] = None,
-                          include_mc_truth: bool = False) -> Dict:
+                          include_mc_truth: bool = False,
+                          use_aliases: bool = True) -> Dict:
         """
         Load reconstructed MC data (similar to real data but with MC truth info)
         
@@ -94,6 +99,8 @@ class MCLoader:
         - preset: Preset name from config (e.g., 'mc_reco')
         - branch_sets: List of branch sets to load
         - include_mc_truth: If True, include MC truth branches from reconstructed tree
+        - use_aliases: If True, resolve common names to MC-specific names and
+                       normalize loaded branches back to common names
         
         Returns:
         - Dictionary with reconstructed MC data arrays
@@ -125,6 +132,12 @@ class MCLoader:
             )
             self.logger.info(
                 f"Using default sets {default_sets}: {len(load_branches)} branches"
+            )
+        
+        # Resolve aliases to actual MC branch names
+        if use_aliases:
+            load_branches = self.branch_config.resolve_aliases(
+                load_branches, is_mc=True
             )
         
         mc_files = self._find_mc_files(sample_name, years, polarities)
@@ -164,9 +177,29 @@ class MCLoader:
                                 
                                 # Read specified branches
                                 if validation['valid']:
-                                    data[key] = tree.arrays(
+                                    events = tree.arrays(
                                         validation['valid'], library='ak'
                                     )
+                                    
+                                    # Normalize branch names if using aliases
+                                    if use_aliases:
+                                        rename_map = self.branch_config.normalize_branches(
+                                            validation['valid'], is_mc=True
+                                        )
+                                        if rename_map:
+                                            import awkward as ak
+                                            # Rename branches from MC names to common names
+                                            for old_name, new_name in rename_map.items():
+                                                events = ak.with_field(
+                                                    events, events[old_name], new_name
+                                                )
+                                                # Remove old field
+                                                events = ak.without_field(events, old_name)
+                                            self.logger.info(
+                                                f"Normalized {len(rename_map)} branch names to common names"
+                                            )
+                                    
+                                    data[key] = events
                                     self.logger.info(
                                         f"Loaded {len(data[key])} reconstructed events for {key}"
                                     )
