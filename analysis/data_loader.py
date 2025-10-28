@@ -5,14 +5,28 @@ Module for loading data from ROOT files using uproot
 import logging
 import uproot
 from pathlib import Path
+from typing import List, Optional, Dict
+from branch_config import BranchConfig
 
 class DataLoader:
     """Class for loading B+ → pK⁻Λ̄ K+ data from ROOT files"""
     
-    def __init__(self, data_dir):
-        """Initialize with data directory path"""
+    def __init__(self, data_dir: str, branch_config: Optional[BranchConfig] = None):
+        """
+        Initialize with data directory path
+        
+        Parameters:
+        - data_dir: Path to directory containing data files
+        - branch_config: BranchConfig instance (created automatically if None)
+        """
         self.data_dir = Path(data_dir)
         self.logger = logging.getLogger("Bu2LambdaPKK.DataLoader")
+        
+        # Initialize branch configuration
+        if branch_config is None:
+            self.branch_config = BranchConfig()
+        else:
+            self.branch_config = branch_config
         
     def _find_data_files(self, years, polarities):
         """Find data files for specified years and polarities"""
@@ -27,7 +41,11 @@ class DataLoader:
                     self.logger.warning(f"File not found: {file_path}")
         return files
     
-    def load_data(self, years, polarities, track_types, channel_name):
+    def load_data(self, years: List[str], polarities: List[str], 
+                  track_types: List[str], channel_name: str,
+                  branches: Optional[List[str]] = None,
+                  preset: Optional[str] = None,
+                  branch_sets: Optional[List[str]] = None) -> Dict:
         """
         Load data for specified years, polarities, and track types
         
@@ -36,10 +54,41 @@ class DataLoader:
         - polarities: List of polarities ['MD', 'MU']
         - track_types: List of track types ['LL', 'DD']
         - channel_name: Name of the decay channel (e.g., 'B2L0barPKpKm')
+        - branches: Explicit list of branches to load (overrides other options)
+        - preset: Preset name from config (e.g., 'minimal', 'standard')
+        - branch_sets: List of branch sets to load (e.g., ['essential', 'kinematics'])
+        
+        If none of branches/preset/branch_sets specified, loads default sets from config.
         
         Returns:
         - Dictionary with data arrays
         """
+        # Determine which branches to load
+        if branches is not None:
+            load_branches = branches
+            self.logger.info(f"Loading {len(branches)} explicitly specified branches")
+        elif preset is not None:
+            load_branches = self.branch_config.get_branches_from_preset(
+                preset, exclude_mc=True
+            )
+            self.logger.info(f"Using preset '{preset}': {len(load_branches)} branches")
+        elif branch_sets is not None:
+            load_branches = self.branch_config.get_branches_from_sets(
+                branch_sets, exclude_mc=True
+            )
+            self.logger.info(
+                f"Using branch sets {branch_sets}: {len(load_branches)} branches"
+            )
+        else:
+            # Load default sets from config
+            default_sets = self.branch_config.get_default_load_sets()
+            load_branches = self.branch_config.get_branches_from_sets(
+                default_sets, exclude_mc=True
+            )
+            self.logger.info(
+                f"Using default sets {default_sets}: {len(load_branches)} branches"
+            )
+        
         data_files = self._find_data_files(years, polarities)
         data = {}
         
@@ -56,18 +105,42 @@ class DataLoader:
                             try:
                                 tree = file[tree_path]
                                 
+                                # Validate branches
+                                available_branches = list(tree.keys())
+                                validation = self.branch_config.validate_branches(
+                                    load_branches, available_branches
+                                )
+                                
+                                if validation['missing']:
+                                    self.logger.warning(
+                                        f"Missing {len(validation['missing'])} branches "
+                                        f"in {channel_path}"
+                                    )
+                                
                                 # Store with a meaningful key
                                 key = f"{year}_{polarity}_{track_type}"
-                                self.logger.info(f"Loading {key}...")
+                                self.logger.info(
+                                    f"Loading {key} with {validation['found']} branches..."
+                                )
                                 
-                                # Read all branches into memory
-                                data[key] = tree.arrays()
-                                
-                                self.logger.info(f"Loaded {len(data[key])} events for {key}")
+                                # Read specified branches into memory
+                                if validation['valid']:
+                                    data[key] = tree.arrays(
+                                        validation['valid'], library='ak'
+                                    )
+                                    self.logger.info(
+                                        f"Loaded {len(data[key])} events for {key}"
+                                    )
+                                else:
+                                    self.logger.error(
+                                        f"No valid branches to load for {key}"
+                                    )
                                 
                             except Exception as e:
                                 self.logger.error(f"Error loading {tree_path}: {e}")
                         else:
-                            self.logger.warning(f"Channel {channel_path} not found in {file_path}")
+                            self.logger.warning(
+                                f"Channel {channel_path} not found in {file_path}"
+                            )
         
         return data

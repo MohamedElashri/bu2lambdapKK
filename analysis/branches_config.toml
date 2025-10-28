@@ -1,0 +1,221 @@
+# Branch Configuration for B+ → Λ̄ p K+ K- Analysis
+# This file controls which branches are loaded from ROOT files
+# Supports both real data and MC (reconstructed data)
+
+[branches]
+
+# Define branch sets - we can enable/disable entire categories
+load_sets = [
+    "essential",      # Minimal branches for analysis
+    "kinematics",     # Full kinematic variables
+    "pid",            # Particle identification
+    # "mc_truth",     # MC truth branches (only available in MC)
+    # "advanced_dtf", # Advanced DTF variables
+]
+
+# ============================================================================
+# ESSENTIAL BRANCHES - Always needed for basic analysis
+# ============================================================================
+[branches.essential]
+description = "Minimal set of branches required for analysis"
+
+# B+ meson
+Bu = [
+    "Bu_M",           # Invariant mass
+    "Bu_PT",          # Transverse momentum
+    "Bu_P",           # Momentum
+    "Bu_ETA",         # Pseudorapidity
+    "Bu_PHI",         # Azimuthal angle
+    "Bu_IPCHI2_OWNPV", # Impact parameter chi2
+    "Bu_DIRA_OWNPV",  # Direction angle
+]
+
+# Λ̄ baryon
+L0 = [
+    "L0_M",           # Invariant mass
+    "L0_PT",          # Transverse momentum
+    "L0_P",           # Momentum
+    "L0_ETA",         # Pseudorapidity
+    "L0_PHI",         # Azimuthal angle
+    "L0_IPCHI2_OWNPV",
+    "L0_DIRA_OWNPV",
+]
+
+# Λ daughters (proton and pion)
+Lp = ["Lp_P", "Lp_PT", "Lp_ETA", "Lp_IPCHI2_OWNPV"]
+Lpi = ["Lpi_P", "Lpi_PT", "Lpi_ETA", "Lpi_IPCHI2_OWNPV"]
+
+# Bachelor proton
+p = ["p_P", "p_PT", "p_ETA", "p_IPCHI2_OWNPV"]
+
+# Two hadrons (K+/K-)
+h1 = ["h1_P", "h1_PT", "h1_ETA", "h1_IPCHI2_OWNPV"]
+h2 = ["h2_P", "h2_PT", "h2_ETA", "h2_IPCHI2_OWNPV"]
+
+# Event information
+event = ["eventNumber", "runNumber", "nTracks"]
+
+# ============================================================================
+# KINEMATIC BRANCHES - Extended kinematic information
+# ============================================================================
+[branches.kinematics]
+description = "Extended kinematic variables"
+
+Bu = [
+    "Bu_PX", "Bu_PY", "Bu_PZ", "Bu_PE",
+    "Bu_OWNPV_X", "Bu_OWNPV_Y", "Bu_OWNPV_Z",
+    "Bu_OWNPV_CHI2", "Bu_OWNPV_NDOF",
+    "Bu_FD_OWNPV", "Bu_FDCHI2_OWNPV",
+]
+
+L0 = [
+    "L0_PX", "L0_PY", "L0_PZ", "L0_PE",
+    "L0_ENDVERTEX_X", "L0_ENDVERTEX_Y", "L0_ENDVERTEX_Z",
+    "L0_FD_OWNPV", "L0_FDCHI2_OWNPV",
+]
+
+Lp = ["Lp_PX", "Lp_PY", "Lp_PZ", "Lp_PE"]
+Lpi = ["Lpi_PX", "Lpi_PY", "Lpi_PZ", "Lpi_PE"]
+p = ["p_PX", "p_PY", "p_PZ", "p_PE"]
+h1 = ["h1_PX", "h1_PY", "h1_PZ", "h1_PE"]
+h2 = ["h2_PX", "h2_PY", "h2_PZ", "h2_PE"]
+
+# ============================================================================
+# PARTICLE IDENTIFICATION (PID) BRANCHES
+# ============================================================================
+[branches.pid]
+description = "Particle identification variables"
+
+# proton from L0
+Lp = [
+    "Lp_MC15TuneV1_ProbNNp",
+    "Lp_MC15TuneV1_ProbNNpi",
+    "Lp_MC15TuneV1_ProbNNk",
+]
+
+# pion from L0
+Lpi = [
+    "Lpi_MC15TuneV1_ProbNNpi",
+    "Lpi_MC15TuneV1_ProbNNp",
+    "Lpi_MC15TuneV1_ProbNNk",
+]
+
+# bachelor proton
+p = [
+    "p_MC15TuneV1_ProbNNp",
+    "p_MC15TuneV1_ProbNNpi",
+    "p_MC15TuneV1_ProbNNk",
+    "p_MC15TuneV1_ProbNNmu",
+]
+
+# hadron 1 (K+ or K-) opposite charge to hadron 2 (K+ in KpKm sample)
+h1 = [
+    "h1_MC15TuneV1_ProbNNk",
+    "h1_MC15TuneV1_ProbNNpi",
+    "h1_MC15TuneV1_ProbNNp",
+    "h1_MC15TuneV1_ProbNNmu",
+]
+
+# hadron 2 (K+ or K-) - opposite charge to hadron 1 (K- in KpKm sample)
+h2 = [
+    "h2_MC15TuneV1_ProbNNk",
+    "h2_MC15TuneV1_ProbNNpi",
+    "h2_MC15TuneV1_ProbNNp",
+    "h2_MC15TuneV1_ProbNNmu",
+]
+
+# ============================================================================
+# MC TRUTH BRANCHES - Only available in MC files
+# ============================================================================
+[branches.mc_truth]
+description = "MC truth information (only in MC)"
+mc_only = true  # Flag to indicate these are MC-only branches
+
+Bu = [
+    "Bu_TRUEPT", "Bu_TRUEP_E", "Bu_TRUEP_X", "Bu_TRUEP_Y", "Bu_TRUEP_Z",
+    "Bu_TRUEID", "Bu_TRUETAU",
+    "Bu_TRUEORIGINVERTEX_X", "Bu_TRUEORIGINVERTEX_Y", "Bu_TRUEORIGINVERTEX_Z",
+    "Bu_TRUEENDVERTEX_X", "Bu_TRUEENDVERTEX_Y", "Bu_TRUEENDVERTEX_Z",
+]
+
+L0 = [
+    "L0_TRUEPT", "L0_TRUEP_E", "L0_TRUEP_X", "L0_TRUEP_Y", "L0_TRUEP_Z",
+    "L0_TRUEID", "L0_TRUETAU",
+]
+
+Lp = ["Lp_TRUEPT", "Lp_TRUEP_E", "Lp_TRUEID"]
+Lpi = ["Lpi_TRUEPT", "Lpi_TRUEP_E", "Lpi_TRUEID"]
+p = ["p_TRUEPT", "p_TRUEP_E", "p_TRUEID"]
+h1 = ["h1_TRUEPT", "h1_TRUEP_E", "h1_TRUEID"]
+h2 = ["h2_TRUEPT", "h2_TRUEP_E", "h2_TRUEID"]
+
+# ============================================================================
+# ADVANCED DTF BRANCHES - Decay Tree Fitter results
+# ============================================================================
+[branches.advanced_dtf]
+description = "Advanced Decay Tree Fitter variables"
+
+Bu = [
+    "Bu_DTF_M", "Bu_DTF_CHI2", "Bu_DTF_NDOF",
+    "Bu_DTFL0_M", "Bu_DTFL0_CHI2", "Bu_DTFL0_NDOF",
+    "Bu_DTF_Lambda0_M", "Bu_DTF_Lambda0_P",
+]
+
+# ============================================================================
+# TRIGGER BRANCHES
+# ============================================================================
+[branches.trigger]
+description = "Trigger information"
+
+trigger_lines = [
+    "Bu_L0HadronDecision_TOS",
+    "Bu_L0Global_TIS",
+    "Bu_Hlt1TrackMVADecision_TOS",
+    "Bu_Hlt2Topo2BodyDecision_TOS",
+    "Bu_Hlt2Topo3BodyDecision_TOS",
+]
+
+# ============================================================================
+# MC TRUTH TREE BRANCHES - From MCDecayTree (generator level)
+# ============================================================================
+[truth_branches]
+description = "Branches from MC truth tree (MCDecayTree)"
+# These have different particle names than reconstructed data
+
+Bplus = [
+    "Bplus_TRUEP_E", "Bplus_TRUEP_X", "Bplus_TRUEP_Y", "Bplus_TRUEP_Z",
+    "Bplus_TRUEPT", "Bplus_MC_MOTHER_ID",
+    "Bplus_TRUEORIGINVERTEX_X", "Bplus_TRUEORIGINVERTEX_Y", "Bplus_TRUEORIGINVERTEX_Z",
+    "Bplus_TRUEENDVERTEX_X", "Bplus_TRUEENDVERTEX_Y", "Bplus_TRUEENDVERTEX_Z",
+]
+
+"Lambda~0" = [
+    "Lambda~0_TRUEP_E", "Lambda~0_TRUEP_X", "Lambda~0_TRUEP_Y", "Lambda~0_TRUEP_Z",
+    "Lambda~0_TRUEPT",
+]
+
+pplus = ["pplus_TRUEPT", "pplus_TRUEP_E", "pplus_TRUEP_X", "pplus_TRUEP_Y", "pplus_TRUEP_Z"]
+piplus = ["piplus_TRUEPT", "piplus_TRUEP_E"]
+"p~minus" = ["p~minus_TRUEPT", "p~minus_TRUEP_E"]
+Kplus = ["Kplus_TRUEPT", "Kplus_TRUEP_E", "Kplus_TRUEP_X", "Kplus_TRUEP_Y", "Kplus_TRUEP_Z"]
+Kminus = ["Kminus_TRUEPT", "Kminus_TRUEP_E", "Kminus_TRUEP_X", "Kminus_TRUEP_Y", "Kminus_TRUEP_Z"]
+
+# ============================================================================
+# PRESETS - Quick configuration presets
+# ============================================================================
+[presets]
+
+# Minimal analysis - just enough for fits
+minimal = ["essential"]
+
+# Standard analysis - kinematics + PID
+standard = ["essential", "kinematics", "pid"]
+
+# Full data analysis
+full_data = ["essential", "kinematics", "pid", "advanced_dtf", "trigger"]
+
+# MC analysis (reconstructed)
+mc_reco = ["essential", "kinematics", "pid", "mc_truth"]
+
+# MC truth study
+mc_truth = ["truth_branches"]

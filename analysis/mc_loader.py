@@ -10,6 +10,7 @@ import logging
 import uproot
 from pathlib import Path
 from typing import Dict, List, Optional
+from branch_config import BranchConfig
 
 class MCLoader:
     """Class for loading B+ → pK⁻Λ̄ K+ Monte Carlo data from ROOT files"""
@@ -25,15 +26,22 @@ class MCLoader:
         'etac': 'MC_B2etacK',           # ηc
     }
     
-    def __init__(self, mc_dir: str):
+    def __init__(self, mc_dir: str, branch_config: Optional[BranchConfig] = None):
         """
         Initialize with MC directory path
         
         Parameters:
         - mc_dir: Path to directory containing MC files
+        - branch_config: BranchConfig instance (created automatically if None)
         """
         self.mc_dir = Path(mc_dir)
         self.logger = logging.getLogger("Bu2LambdaPKK.MCLoader")
+        
+        # Initialize branch configuration
+        if branch_config is None:
+            self.branch_config = BranchConfig()
+        else:
+            self.branch_config = branch_config
         
     def _find_mc_files(self, sample_name: str, years: List[str], 
                       polarities: List[str]) -> Dict:
@@ -69,7 +77,10 @@ class MCLoader:
     def load_reconstructed(self, sample_name: str, years: List[str], 
                           polarities: List[str], track_types: List[str], 
                           channel_name: str, 
-                          branches: Optional[List[str]] = None) -> Dict:
+                          branches: Optional[List[str]] = None,
+                          preset: Optional[str] = None,
+                          branch_sets: Optional[List[str]] = None,
+                          include_mc_truth: bool = False) -> Dict:
         """
         Load reconstructed MC data (similar to real data but with MC truth info)
         
@@ -79,11 +90,43 @@ class MCLoader:
         - polarities: List of polarities ['MD', 'MU']
         - track_types: List of track types ['LL', 'DD']
         - channel_name: Name of the decay channel (e.g., 'B2L0barPKpKm')
-        - branches: Optional list of branches to load (loads all if None)
+        - branches: Explicit list of branches to load (overrides other options)
+        - preset: Preset name from config (e.g., 'mc_reco')
+        - branch_sets: List of branch sets to load
+        - include_mc_truth: If True, include MC truth branches from reconstructed tree
         
         Returns:
         - Dictionary with reconstructed MC data arrays
         """
+        # Determine which branches to load
+        if branches is not None:
+            load_branches = branches
+            self.logger.info(f"Loading {len(branches)} explicitly specified branches")
+        elif preset is not None:
+            load_branches = self.branch_config.get_branches_from_preset(
+                preset, exclude_mc=not include_mc_truth
+            )
+            self.logger.info(f"Using preset '{preset}': {len(load_branches)} branches")
+        elif branch_sets is not None:
+            load_branches = self.branch_config.get_branches_from_sets(
+                branch_sets, exclude_mc=not include_mc_truth
+            )
+            self.logger.info(
+                f"Using branch sets {branch_sets}: {len(load_branches)} branches"
+            )
+        else:
+            # Load default sets from config
+            default_sets = self.branch_config.get_default_load_sets()
+            # Include mc_truth set if requested
+            if include_mc_truth and 'mc_truth' not in default_sets:
+                default_sets = default_sets + ['mc_truth']
+            load_branches = self.branch_config.get_branches_from_sets(
+                default_sets, exclude_mc=not include_mc_truth
+            )
+            self.logger.info(
+                f"Using default sets {default_sets}: {len(load_branches)} branches"
+            )
+        
         mc_files = self._find_mc_files(sample_name, years, polarities)
         data = {}
         
@@ -100,19 +143,37 @@ class MCLoader:
                             try:
                                 tree = file[tree_path]
                                 
+                                # Validate branches
+                                available_branches = list(tree.keys())
+                                validation = self.branch_config.validate_branches(
+                                    load_branches, available_branches
+                                )
+                                
+                                if validation['missing']:
+                                    self.logger.warning(
+                                        f"Missing {len(validation['missing'])} branches "
+                                        f"in {channel_path}"
+                                    )
+                                
                                 # Store with a meaningful key
                                 key = f"{year}_{polarity}_{track_type}"
-                                self.logger.info(f"Loading reconstructed MC {key}...")
-                                
-                                # Read specified branches or all branches
-                                if branches:
-                                    data[key] = tree.arrays(branches, library='ak')
-                                else:
-                                    data[key] = tree.arrays(library='ak')
-                                
                                 self.logger.info(
-                                    f"Loaded {len(data[key])} reconstructed events for {key}"
+                                    f"Loading reconstructed MC {key} with "
+                                    f"{validation['found']} branches..."
                                 )
+                                
+                                # Read specified branches
+                                if validation['valid']:
+                                    data[key] = tree.arrays(
+                                        validation['valid'], library='ak'
+                                    )
+                                    self.logger.info(
+                                        f"Loaded {len(data[key])} reconstructed events for {key}"
+                                    )
+                                else:
+                                    self.logger.error(
+                                        f"No valid branches to load for {key}"
+                                    )
                                 
                             except Exception as e:
                                 self.logger.error(f"Error loading {tree_path}: {e}")
@@ -126,7 +187,8 @@ class MCLoader:
     def load_truth(self, sample_name: str, years: List[str], 
                    polarities: List[str], 
                    mc_tree_name: Optional[str] = None,
-                   branches: Optional[List[str]] = None) -> Dict:
+                   branches: Optional[List[str]] = None,
+                   use_config: bool = True) -> Dict:
         """
         Load MC truth data (generator-level information)
         
@@ -135,11 +197,25 @@ class MCLoader:
         - years: List of years ['16', '17', '18']
         - polarities: List of polarities ['MD', 'MU']
         - mc_tree_name: Name of MC truth tree (auto-detected if None)
-        - branches: Optional list of branches to load (loads all if None)
+        - branches: Explicit list of branches to load
+        - use_config: If True and branches is None, use truth_branches from config
         
         Returns:
         - Dictionary with MC truth data arrays
         """
+        # Determine which branches to load
+        if branches is not None:
+            load_branches = branches
+            self.logger.info(f"Loading {len(branches)} explicitly specified branches")
+        elif use_config:
+            load_branches = self.branch_config.get_truth_branches()
+            self.logger.info(
+                f"Using truth_branches from config: {len(load_branches)} branches"
+            )
+        else:
+            load_branches = None  # Load all branches
+            self.logger.info("Loading all available truth branches")
+        
         mc_files = self._find_mc_files(sample_name, years, polarities)
         data = {}
         
@@ -166,17 +242,40 @@ class MCLoader:
                             
                             # Store with a meaningful key
                             key = f"{year}_{polarity}"
-                            self.logger.info(f"Loading MC truth {key}...")
                             
-                            # Read specified branches or all branches
-                            if branches:
-                                data[key] = tree.arrays(branches, library='ak')
+                            # If we have specific branches to load, validate them
+                            if load_branches is not None:
+                                available_branches = list(tree.keys())
+                                validation = self.branch_config.validate_branches(
+                                    load_branches, available_branches
+                                )
+                                
+                                if validation['missing']:
+                                    self.logger.warning(
+                                        f"Missing {len(validation['missing'])} truth branches"
+                                    )
+                                
+                                self.logger.info(
+                                    f"Loading MC truth {key} with "
+                                    f"{validation['found']} branches..."
+                                )
+                                
+                                if validation['valid']:
+                                    data[key] = tree.arrays(
+                                        validation['valid'], library='ak'
+                                    )
+                                else:
+                                    self.logger.error(
+                                        f"No valid branches to load for {key}"
+                                    )
                             else:
+                                self.logger.info(f"Loading MC truth {key} (all branches)...")
                                 data[key] = tree.arrays(library='ak')
                             
-                            self.logger.info(
-                                f"Loaded {len(data[key])} truth events for {key}"
-                            )
+                            if key in data:
+                                self.logger.info(
+                                    f"Loaded {len(data[key])} truth events for {key}"
+                                )
                             
                         except Exception as e:
                             self.logger.error(f"Error loading {tree_path}: {e}")
