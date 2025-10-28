@@ -1,0 +1,353 @@
+# Selection Study Configuration for B+ → pK⁻Λ̄ K+ Analysis
+# Focus: J/ψ Signal vs Background Discrimination
+
+[metadata]
+description = "Selection optimization study for B+ → pK⁻Λ̄ K+ with J/ψ focus"
+version = "1.0"
+date = "2025-10-28"
+author = "Mohamed Elashri"
+
+[data_paths]
+# Paths to data and MC files
+data_dir = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+mc_dir = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc"
+
+[data_selection]
+# Data taking configuration
+years = ["16", "17", "18"]
+polarities = ["MD", "MU"]
+track_types = ["LL", "DD"]
+channel_name = "B2L0barPKpKm"
+
+[mc_selection]
+# MC samples for J/ψ study
+signal_samples = ["Jpsi"]  # J/ψ signal MC (combined SS and OS)
+background_samples = ["KpKm"]  # Non-resonant background MC
+channel_name = "B2L0barPKpKm"
+
+# Branch loading configuration
+branch_preset = "standard"  # Use 'standard' preset from branch_config.toml
+
+[study_regions]
+# M(pK⁻Λ̄) region for J/ψ studies
+jpsi_range = [3000, 3200]        # MeV (full study region around J/ψ)
+jpsi_window = [3070, 3120]       # MeV (tight window for yield counting, ±2σ)
+sideband_left = [3000, 3050]     # MeV (left sideband for background estimation)
+sideband_right = [3150, 3200]    # MeV (right sideband for background estimation)
+
+# B+ mass window (optional constraint)
+use_bu_mass_window = false       # Toggle B+ mass constraint (default: off)
+bu_mass_range = [5255, 5305]     # MeV (Lambda-corrected B+ mass)
+
+# Future extension: other resonances
+# eta_c_range = [2950, 3020]
+# chic0_range = [3380, 3450]
+# psi2s_range = [3650, 3720]
+
+[study_phases]
+# Control which phases to run
+run_lambda = true
+run_pid = true
+run_bplus = true
+run_jpsi = true
+
+# ============================================================================
+# LAMBDA QUALITY VARIABLES
+# ============================================================================
+[lambda_variables]
+description = "Lambda (Λ̄) reconstruction quality criteria"
+enabled = true
+
+    [lambda_variables.lambda_fdchi2]
+  name = "Lambda FD χ²"
+  branch = "L0_FDCHI2_OWNPV"  # Lambda flight distance chi-squared
+  operator = ">"
+  description = "Lambda flight distance significance"
+  scan_range = [0, 500]
+  scan_points = 100
+  plot_range = [0, 500]
+  plot_bins = 100
+  log_y = true
+  enabled = true
+  
+  [lambda_variables.delta_z]
+  branch = "delta_z"
+  description = "ΔZ (L0_Z - Bu_Z), must be positive"
+  scan_range = [0, 30]
+  scan_steps = 51
+  current_tight = 5.0
+  current_loose = 20.0
+  operator = ">"
+  enforce_positive = true  # Flag for validation
+  plot_range = [0, 30]
+  
+  [lambda_variables.lp_probnnp]
+  branch = "Lp_ProbNNp"
+  description = "Lambda daughter proton PID"
+  scan_range = [0.0, 1.0]
+  scan_steps = 51
+  current_tight = 0.2
+  current_loose = 0.1
+  operator = ">"
+  plot_range = [0.0, 1.0]
+  
+  [lambda_variables.lambda_mass_low]
+  branch = "L0_MM"
+  description = "Lambda mass lower bound"
+  value = 1111.0
+  operator = ">"
+  fixed = true  # Don't scan this
+  plot_range = [1100, 1130]
+  
+  [lambda_variables.lambda_mass_high]
+  branch = "L0_MM"
+  description = "Lambda mass upper bound"
+  value = 1121.0
+  operator = "<"
+  fixed = true
+  plot_range = [1100, 1130]
+
+# ============================================================================
+# PID VARIABLES (THE CROWN JEWEL!)
+# ============================================================================
+[pid_variables]
+description = "Particle Identification - THE CROWN JEWEL of signal/background discrimination"
+enabled = true
+
+  [pid_variables.p_probnnp]
+  branch = "p_ProbNNp"
+  description = "Proton PID probability"
+  scan_range = [0.0, 1.0]
+  scan_steps = 51
+  current_tight = 0.5
+  current_loose = 0.05
+  operator = ">"
+  plot_range = [0.0, 1.0]
+  
+  [pid_variables.h1_probnnk]
+  branch = "h1_ProbNNk"
+  description = "Kaon 1 PID probability"
+  scan_range = [0.0, 1.0]
+  scan_steps = 51
+  current_tight = 0.2
+  current_loose = 0.1
+  operator = ">"
+  plot_range = [0.0, 1.0]
+  
+  [pid_variables.h2_probnnk]
+  branch = "h2_ProbNNk"
+  description = "Kaon 2 PID probability"
+  scan_range = [0.0, 1.0]
+  scan_steps = 51
+  current_tight = 0.2
+  current_loose = 0.1
+  operator = ">"
+  plot_range = [0.0, 1.0]
+  
+  [pid_variables.kk_product]
+  branch = "kk_product"  # Derived: h1_ProbNNk * h2_ProbNNk
+  description = "Product of two kaon PID probabilities"
+  scan_range = [0.0, 1.0]
+  scan_steps = 51
+  current_tight = 0.5
+  current_loose = 0.05
+  operator = ">"
+  is_derived = true
+  plot_range = [0.0, 1.0]
+  
+  [pid_variables.pid_product]
+  branch = "pid_product"  # Derived: p_ProbNNp * h1_ProbNNk * h2_ProbNNk
+  description = "Product of all three PID probabilities (p × h1 × h2)"
+  scan_range = [0.0, 1.0]
+  scan_steps = 51
+  current_tight = 0.50
+  current_loose = 0.20
+  operator = ">"
+  is_derived = true
+  plot_range = [0.0, 1.0]
+
+# ============================================================================
+# B+ QUALITY VARIABLES
+# ============================================================================
+[bplus_variables]
+description = "B+ meson reconstruction quality criteria"
+enabled = true
+
+  [bplus_variables.bu_pt]
+  branch = "Bu_PT"
+  description = "B+ transverse momentum"
+  scan_range = [2000, 5000]
+  scan_steps = 31
+  current_tight = 3500.0
+  current_loose = 3000.0
+  operator = ">"
+  plot_range = [2000, 6000]
+  
+  [bplus_variables.bu_dtf_chi2]
+  branch = "Bu_DTF_chi2"
+  description = "B+ DTF χ²"
+  scan_range = [0, 50]
+  scan_steps = 51
+  current_tight = 40.0
+  current_loose = 30.0
+  operator = "<"
+  plot_range = [0, 50]
+  
+  [bplus_variables.bu_ipchi2]
+  branch = "Bu_IPCHI2_OWNPV"
+  description = "B+ impact parameter χ²"
+  scan_range = [0, 20]
+  scan_steps = 41
+  current_tight = 6.0
+  current_loose = 10.0
+  operator = "<"
+  plot_range = [0, 20]
+  
+  [bplus_variables.bu_fdchi2]
+  branch = "Bu_FDCHI2_OWNPV"
+  description = "B+ flight distance χ²"
+  scan_range = [0, 500]
+  scan_steps = 51
+  current_tight = 250.0
+  current_loose = 175.0
+  operator = ">"
+  plot_range = [0, 500]
+
+# ============================================================================
+# PLOT SETTINGS
+# ============================================================================
+[plot_settings]
+style = "LHCb2"
+figsize = [10, 7]
+dpi = 300
+format = "pdf"
+save_png = false  # Also save PNG versions
+
+  [plot_settings.colors]
+  jpsi_signal = "#E41A1C"       # Red - J/ψ signal MC
+  kpkm_background = "#377EB8"   # Blue - KpKm background MC
+  data = "#000000"              # Black - Real data
+  tight_cut = "#2CA02C"         # Green - Tight cut line
+  loose_cut = "#FF7F00"         # Orange - Loose cut line
+  optimal_cut = "#9467BD"       # Purple - Optimal cut line
+  
+  [plot_settings.bins]
+  # Number of bins for each variable
+  lambda_fdchi2 = 100
+  delta_z = 100
+  lp_probnnp = 50
+  lambda_mass = 50
+  p_probnnp = 50
+  h1_probnnk = 50
+  h2_probnnk = 50
+  kk_product = 50
+  pid_product = 50
+  bu_pt = 50
+  bu_dtf_chi2 = 50
+  bu_ipchi2 = 50
+  bu_fdchi2 = 50
+  jpsi_mass_spectrum = 100
+  
+  [plot_settings.labels]
+  # Axis labels (can use LaTeX math mode)
+  lambda_fdchi2 = "$\\Lambda$ FD $\\chi^2$"
+  delta_z = "$\\Delta Z$ [mm]"
+  lp_probnnp = "$\\Lambda_p$ ProbNNp"
+  lambda_mass = "$M(p\\pi^-)$ [MeV/$c^2$]"
+  p_probnnp = "Proton ProbNNp"
+  h1_probnnk = "$K_{+}$ ProbNNk"
+  h2_probnnk = "$K_{-}$ ProbNNk"
+  kk_product = "$K_1 \\times K_2$ ProbNN Product"
+  pid_product = "$p \\times K_1 \\times K_2$ PID Product"
+  bu_pt = "$B^+$ $p_T$ [MeV/$c$]"
+  bu_dtf_chi2 = "$B^+$ DTF $\\chi^2$"
+  bu_ipchi2 = "$B^+$ IP $\\chi^2$"
+  bu_fdchi2 = "$B^+$ FD $\\chi^2$"
+  jpsi_mass = "$M(pK^-\\bar{\\Lambda})$ [MeV/$c^2$]"
+
+# ============================================================================
+# OUTPUT SETTINGS
+# ============================================================================
+[output]
+base_dir = "output"
+overwrite = true
+save_intermediate = true
+verbose = true
+
+# Subdirectory structure
+lambda_dir = "lambda_quality"
+pid_dir = "pid_selection"
+bplus_dir = "bplus_quality"
+jpsi_dir = "jpsi_region"
+comparison_dir = "comparison"
+efficiency_dir = "efficiency_scans"
+reports_dir = "reports"
+
+# Report formats
+generate_txt_report = true
+generate_csv_tables = true
+generate_json_summary = true
+
+# ============================================================================
+# OPTIMIZATION SETTINGS
+# ============================================================================
+[optimization]
+# Criteria for finding optimal cuts
+min_efficiency = 0.70         # Minimum acceptable signal efficiency
+max_efficiency_loss = 0.15    # Maximum efficiency loss from optimal point
+
+# For 2D optimization
+create_2d_maps = true
+optimize_2d_pairs = [
+    ["lambda_fdchi2", "delta_z"],
+    ["p_probnnp", "h1_probnnk"],
+    ["p_probnnp", "pid_product"]
+]
+
+# ============================================================================
+# VALIDATION SETTINGS
+# ============================================================================
+[validation]
+check_delta_z_positive = true
+consistency_threshold = 0.05   # 5% variation allowed
+min_events_per_bin = 10
+
+# Statistical requirements
+min_signal_events = 100
+calculate_uncertainties = true
+propagate_errors = true
+
+# ============================================================================
+# TRIGGER REQUIREMENTS
+# ============================================================================
+[trigger]
+enabled = true
+
+  [trigger.L0]
+  description = "L0 trigger requirement"
+  expression = "(Bu_L0Global_TIS) | (Bu_L0HadronDecision_TOS)"
+  
+  [trigger.HLT1]
+  description = "HLT1 trigger requirement"
+  expression = "(Bu_Hlt1TrackMVADecision_TOS) | (Bu_Hlt1TwoTrackMVADecision_TOS)"
+  
+  [trigger.HLT2]
+  description = "HLT2 trigger requirement"
+  expression = "(Bu_Hlt2Topo2BodyDecision_TOS) | (Bu_Hlt2Topo3BodyDecision_TOS) | (Bu_Hlt2Topo4BodyDecision_TOS)"
+
+# ============================================================================
+# PRESELECTION CUTS
+# ============================================================================
+[preselection]
+# Minimal cuts applied before study
+bu_dtf_status = 0  # DTF must converge
+remove_nan = true
+remove_inf = true
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+[logging]
+level = "INFO"  # DEBUG, INFO, WARNING, ERROR
+log_file = "selection_study.log"
+console_output = true
