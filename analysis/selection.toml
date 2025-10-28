@@ -2,7 +2,7 @@
 # This file defines all selection cuts applied to the data
 
 [metadata]
-description = "Selection cuts for B+ → Λ0  p h1 h2 decay channel"
+description = "Selection cuts for B+ → Λ0 p h1 h2 decay channel"
 version = "1.0"
 date = "2025-10-28"
 
