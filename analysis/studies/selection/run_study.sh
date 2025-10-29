@@ -23,7 +23,7 @@ VENV_PATH="$ROOT_DIR/.venv"
 
 # Configuration
 CONFIG_FILE="${1:-selection_study_config.toml}"
-PYTHON_SCRIPT="selection_study.py"
+PYTHON_SCRIPT="main.py"
 OUTPUT_DIR="output"
 LOG_FILE="$OUTPUT_DIR/run_study.log"
 
