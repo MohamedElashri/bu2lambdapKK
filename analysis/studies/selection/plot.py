@@ -66,123 +66,6 @@ class StudyPlotter:
             'ytick.minor.width': 1.0,
         })
     
-    def plot_cutflow(self, cutflow: Dict, output_name: str = "cutflow"):
-        """
-        Plot sequential cutflow comparison
-        
-        Parameters:
-        - cutflow: Dictionary from EfficiencyCalculator.generate_cutflow()
-        - output_name: Output filename
-        """
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-        
-        # Get cut names from first dataset
-        first_dataset = list(cutflow.keys())[0]
-        cut_names = list(cutflow[first_dataset].keys())
-        x_pos = np.arange(len(cut_names))
-        
-        # Plot 1: Absolute event counts
-        width = 0.8 / len(cutflow)  # Width of bars
-        
-        for i, (dataset_name, cuts) in enumerate(cutflow.items()):
-            counts = [cuts[cut_name]['n_passed'] for cut_name in cut_names]
-            color = self.colors.get(dataset_name, f'C{i}')
-            ax1.bar(x_pos + i * width, counts, width, label=dataset_name, color=color)
-        
-        ax1.set_xlabel('Cut Stage')
-        ax1.set_ylabel('Events')
-        ax1.set_title('Cutflow: Event Counts')
-        ax1.set_xticks(x_pos)
-        ax1.set_xticklabels(cut_names, rotation=45, ha='right')
-        ax1.legend()
-        ax1.grid(True, alpha=0.3, axis='y')
-        ax1.set_yscale('log')
-        
-        # Plot 2: Efficiencies
-        for dataset_name, cuts in cutflow.items():
-            efficiencies = [cuts[cut_name]['abs_efficiency'] * 100 for cut_name in cut_names]
-            color = self.colors.get(dataset_name, 'blue')
-            ax2.plot(x_pos, efficiencies, 'o-', linewidth=2, markersize=8,
-                    label=dataset_name, color=color)
-        
-        ax2.set_xlabel('Cut Stage')
-        ax2.set_ylabel('Cumulative Efficiency [%]')
-        ax2.set_title('Cutflow: Efficiencies')
-        ax2.set_xticks(x_pos)
-        ax2.set_xticklabels(cut_names, rotation=45, ha='right')
-        ax2.legend()
-        ax2.grid(True, alpha=0.3)
-        ax2.set_ylim([0, 105])
-        
-        # Save
-        output_path = self.output_dir / f"{output_name}.{self.plot_config.get('format', 'pdf')}"
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=self.plot_config.get('dpi', 300))
-        plt.close()
-        
-        self.logger.info(f"Saved cutflow plot: {output_path}")
-    
-    def plot_signal_to_background(self, signal_counts: List[float], 
-                                  background_counts: List[float],
-                                  cut_labels: List[str],
-                                  output_name: str = "signal_to_background"):
-        """
-        Plot signal/background ratio evolution
-        
-        Parameters:
-        - signal_counts: Signal event counts at each cut stage
-        - background_counts: Background event counts at each cut stage
-        - cut_labels: Labels for cut stages
-        - output_name: Output filename
-        """
-        # Calculate S/B ratio
-        sb_ratios = []
-        for s, b in zip(signal_counts, background_counts):
-            if b > 0:
-                sb_ratios.append(s / b)
-            else:
-                sb_ratios.append(0)
-        
-        # Calculate significance
-        significance = []
-        for s, b in zip(signal_counts, background_counts):
-            if s + b > 0:
-                significance.append(s / np.sqrt(s + b))
-            else:
-                significance.append(0)
-        
-        # Create plot
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
-        
-        x_pos = np.arange(len(cut_labels))
-        
-        # S/B ratio
-        ax1.plot(x_pos, sb_ratios, 'o-', linewidth=2, markersize=8,
-                color=self.colors.get('sb_ratio', '#E41A1C'))
-        ax1.set_ylabel('Signal / Background')
-        ax1.set_title('Signal to Background Ratio')
-        ax1.set_xticks(x_pos)
-        ax1.set_xticklabels(cut_labels, rotation=45, ha='right')
-        ax1.grid(True, alpha=0.3)
-        
-        # Significance
-        ax2.plot(x_pos, significance, 's-', linewidth=2, markersize=8,
-                color=self.colors.get('significance', '#377EB8'))
-        ax2.set_xlabel('Cut Stage')
-        ax2.set_ylabel('S / √(S+B)')
-        ax2.set_title('Signal Significance')
-        ax2.set_xticks(x_pos)
-        ax2.set_xticklabels(cut_labels, rotation=45, ha='right')
-        ax2.grid(True, alpha=0.3)
-        
-        # Save
-        output_path = self.output_dir / f"{output_name}.{self.plot_config.get('format', 'pdf')}"
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=self.plot_config.get('dpi', 300))
-        plt.close()
-        
-        self.logger.info(f"Saved S/B plot: {output_path}")
-    
     def plot_combined_efficiency(self, data: ak.Array, variables_config: dict,
                                  phase_name: str, output_name: str):
         """
@@ -474,9 +357,6 @@ class StudyPlotter:
                 ax.set_yscale('log')
                 ax.set_ylim(0.5, ymax * 5)
             
-            # Add S/√B value as text
-            self._add_cut_info_text(ax, cut_info)
-            
             # Add LHCb label
             hep.lhcb.text("Simulation", loc=0, ax=ax, fontsize=14)
             
@@ -559,9 +439,6 @@ class StudyPlotter:
             if self._use_log_scale(var_name):
                 ax.set_yscale('log')
                 ax.set_ylim(0.5, ymax * 5)
-            
-            # Add efficiency info as text (from MC optimization)
-            self._add_cut_info_text(ax, cut_info, is_data=True)
             
             # Add LHCb label
             hep.lhcb.text("", loc=0, ax=ax, fontsize=14)
@@ -676,22 +553,3 @@ class StudyPlotter:
             # Accepted region is LEFT of cut
             ax.axvspan(plot_range[0], cut_value, alpha=0.15, color='green',
                       label='Accepted Region', zorder=0)
-    
-    def _add_cut_info_text(self, ax, cut_info: dict, is_data: bool = False):
-        """Add text box with cut information"""
-        s_over_sqrtb = cut_info['s_over_sqrtb']
-        signal_eff = cut_info['signal_eff']
-        bkg_rej = cut_info['bkg_rej']
-        
-        if is_data:
-            textstr = f'Optimal cut from MC:\n'
-        else:
-            textstr = ''
-        
-        textstr += f'S/√B = {s_over_sqrtb:.2f}\n'
-        textstr += f'Signal Eff. = {signal_eff:.1%}\n'
-        textstr += f'Bkg. Rej. = {bkg_rej:.1%}'
-        
-        ax.text(0.97, 0.97, textstr, transform=ax.transAxes,
-               fontsize=12, verticalalignment='top', horizontalalignment='right',
-               bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='gray'))
