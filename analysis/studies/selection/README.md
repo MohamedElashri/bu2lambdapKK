@@ -1,120 +1,523 @@
 # Selection Optimization Study for B+ → pK⁻Λ̄ K+
 
-**Focus: J/ψ Signal vs Background Discrimination**
+**Grid Search Optimization for J/ψ Signal Selection**
 
-This study implements a comprehensive hierarchical selection optimization for the B+ → pK⁻Λ̄ K+ analysis, focusing on maximizing J/ψ signal purity while maintaining high efficiency.
+A two-phase selection optimization study that maximizes S/√B on MC (Phase 1), then applies optimal cuts to data (Phase 2) with comprehensive cut visualizations.
+
+---
 
 ## Overview
 
-The study follows a hierarchical approach to selection optimization:
+This study implements an automated **grid search optimization** to find optimal selection cuts for J/ψ signal in the B+ → pK⁻Λ̄ K+ decay:
 
-1. **Phase 1: Lambda Quality** - Ensure good Λ reconstruction
-2. **Phase 2: PID Selection** - Maximize signal/background discrimination
-3. **Phase 3: B+ Quality** - Select well-reconstructed B+ candidates
-4. **Phase 4: J/ψ Region Analysis** - Study signal purity in J/ψ mass region
+### **Two-Phase Workflow**
+
+1. **Phase 1: MC Optimization** 
+   - Scan cut values on J/ψ signal MC
+   - Calculate S/√B for each cut combination
+   - Find optimal cuts that maximize S/√B
+   - Generate cut visualization plots showing where cuts are applied
+
+2. **Phase 2: Data Application**
+   - Apply optimal cuts (from Phase 1) to real data
+   - Extract signal and background yields
+   - Generate cut visualization plots on data
+   - Produce final J/ψ mass spectrum
+
+### **Key Features**
+
+✅ **Grid Search Optimization**: Automated 1D scans for each variable  
+✅ **S/√B Maximization**: Physics-motivated figure of merit  
+✅ **Cut Visualizations**: See exactly where cuts are applied (MC and Data)  
+✅ **Centralized Plotting**: Consistent LHCb styling via `plot.py`  
+✅ **No Hardcoded Cuts**: All cuts determined from data-driven optimization  
+
+---
 
 ## Quick Start
 
 ```bash
-# Run the full study
+# Run the full two-phase study
 ./run_study.sh
 
-# Or with custom config
-./run_study.sh my_config.toml
+# Or run directly with Python
+python main.py
 
-# Run specific phase only
-python3 selection_study.py --phase pid
+# With custom config
+python main.py --config my_config.toml
 ```
+
+**Output**: 25 PDF plots + tables in `output/` directory
+
+---
 
 ## Study Structure
 
 ```
 selection/
-├── selection_study_config.toml   # Configuration file
-├── selection_study.py             # Main implementation
-├── run_study.sh                   # Execution script
-├── README.md                      # This file
-├── plan.md                        # Detailed study plan
-└── output/                        # Generated outputs
-    ├── selection_study.log        # Execution log
-    ├── lambda_*.pdf               # Phase 1 plots
-    ├── pid_*.pdf                  # Phase 2 plots 
-    ├── bplus_*.pdf                # Phase 3 plots
-    └── jpsi_mass.pdf              # Phase 4 mass spectrum
+├── main.py                          # Main study coordinator
+├── plot.py                          # Centralized plotting (LHCb style)
+├── jpsi_analyzer.py                 # J/ψ region analysis
+├── variable_analyzer.py             # Variable distribution analysis
+├── selection_efficiency.py          # Efficiency calculations
+├── config.toml                      # Configuration file
+├── run_study.sh                     # Execution script with checks
+├── README.md                        # This file
+└── output/                          # Generated outputs (32 files)
+    ├── mc/                          # Phase 1 outputs
+    │   ├── cut_tables/
+    │   │   ├── optimization_scan_full.csv
+    │   │   ├── optimal_cuts_summary.txt
+    │   │   └── optimization_results.md
+    │   └── cut_visualizations/      # 12 MC cut plots
+    │       ├── lambda_fdchi2_cut_visualization.pdf
+    │       ├── p_probnnp_cut_visualization.pdf
+    │       └── ...
+    └── data/                        # Phase 2 outputs
+        ├── cut_tables/
+        │   ├── data_cuts_applied.csv
+        │   └── data_yields_summary.txt
+        ├── cut_visualizations/      # 12 Data cut plots
+        │   ├── lambda_fdchi2_cut_visualization.pdf
+        │   └── ...
+        └── jpsi_analysis/
+            └── jpsi_mass_data_after_cuts.pdf
 ```
+
+```
+
+---
 
 ## Configuration
 
-The study is configured via `selection_study_config.toml`. Key sections:
+All settings in `config.toml`:
 
-### 1. Data and MC Samples
+### 1. Study Workflow
 
 ```toml
-[mc_samples]
-signal_samples = ["Jpsi_SS", "Jpsi_OS"]     # J/ψ signal MC
-background_samples = ["KpKm"]                # Non-resonant background
+[study_workflow]
+run_mc_optimization = true     # Phase 1: Grid search on MC
+run_data_application = true    # Phase 2: Apply cuts to data
+```
 
-[data_samples]
-years = [2016, 2017, 2018]
+### 2. Data and MC Selection
+
+```toml
+[data_selection]
+years = ["16", "17", "18"]
 polarities = ["MD", "MU"]
 track_types = ["LL", "DD"]
-channel = "B2L0barPKpKm"
+channel_name = "B2L0barPKpKm"
+
+[mc_selection]
+signal_sample = "Jpsi"         # J/ψ signal MC (SS + OS combined)
+channel_name = "B2L0barPKpKm"
 ```
 
-### 2. Selection Variables
-
-#### Phase 1: Lambda Variables
-- `L0_FD_CHISQ`: Λ flight distance χ²
-- `delta_z`: Vertex separation (must be positive!)
-- `Lp_ProbNNp`: Proton PID from Λ
-- `Lambda_mass_window`: Λ mass window cut
-
-#### Phase 2: PID Variables
-- `p_ProbNNp`: Prompt proton PID probability
-- `h1_ProbNNk`: K⁻ PID probability (from pK⁻)
-- `h2_ProbNNk`: K+ PID probability (bachelor)
-- `kk_product`: Combined K⁻K+ PID
-- `pid_product`: Combined p × K⁻ × K+ PID
-
-
-#### Phase 3: B+ Variables
-- `Bu_PT`: B+ transverse momentum
-- `Bu_DTF_chi2`: B+ decay tree fit χ²
-- `Bu_IPCHI2`: B+ impact parameter χ²
-- `Bu_FDCHI2`: B+ flight distance χ²
-
-### 3. J/ψ Study Region
+### 3. J/ψ Study Regions
 
 ```toml
-[jpsi_study]
-jpsi_range = [3000, 3200]          # Full study region (MeV)
-jpsi_window = [3070, 3120]         # Signal window (MeV)
-left_sideband = [3000, 3050]       # Left sideband (MeV)
-right_sideband = [3150, 3200]      # Right sideband (MeV)
+[study_regions]
+jpsi_range = [3000, 3200]        # Full region around J/ψ
+jpsi_window = [3070, 3120]       # Signal window (±2σ)
+sideband_left = [3000, 3050]     # Left sideband
+sideband_right = [3150, 3200]    # Right sideband
 ```
 
-### 4. Cut Optimization
+### 4. Variables to Optimize
+
+The study optimizes **12 variables** across three categories:
+
+#### Lambda Variables (Λ̄ reconstruction quality)
+- `lambda_fdchi2`: Λ flight distance χ²
+- `delta_z`: ΔZ (L0_Z - Bu_Z), must be positive
+- `lp_probnnp`: Lambda daughter proton PID
+
+#### PID Variables (THE CROWN JEWEL 👑)
+- `p_probnnp`: Proton PID probability
+- `h1_probnnk`: Kaon 1 PID probability
+- `h2_probnnk`: Kaon 2 PID probability
+- `kk_product`: Combined K×K PID product
+- `pid_product`: Combined p×K₁×K₂ PID product
+
+#### B+ Variables (B+ quality)
+- `bu_pt`: B+ transverse momentum
+- `bu_dtf_chi2`: B+ DTF χ²
+- `bu_ipchi2`: B+ impact parameter χ²
+- `bu_fdchi2`: B+ flight distance χ²
 
 Each variable has:
-- `current_tight`: Current tight cut value
-- `current_loose`: Current loose cut value
-- `scan_range`: Range to scan for optimization
-- `scan_points`: Number of points in scan
-- `operator`: Comparison operator (>, <, >=, <=)
-
-Example:
 ```toml
-[pid_selection.p_ProbNNp]
-branch = "p_ProbNNp"
-description = "Prompt proton PID"
+[lambda_variables.delta_z]
+branch = "delta_z"
+description = "ΔZ (L0_Z - Bu_Z), must be positive"
+scan_range = [0, 30]           # Range to scan
+scan_steps = 51                # Number of scan points
+operator = ">"                 # Cut operator (>, <, >=, <=)
+plot_range = [0, 30]           # Range for plotting
+enabled = true                 # Include in optimization
+```
+
+### 5. Plot Settings
+
+```toml
+[plot_settings]
+style = "LHCb2"
+dpi = 300
+format = "pdf"
+
+[plot_settings.colors]
+jpsi_signal = "#E41A1C"        # Red
+data = "#000000"               # Black
+data_sideband = "#377EB8"      # Blue
+optimal_cut = "#9467BD"        # Purple
+
+[plot_settings.labels]
+# LaTeX-formatted axis labels
+p_probnnp = "Proton ProbNNp"
+jpsi_mass = "$M(pK^-\\bar{\\Lambda})$ [MeV/$c^2$]"
+```
+
+---
+
+## Phase 1: MC Optimization (Grid Search)
+
+### What It Does
+
+1. **Loads J/ψ signal MC** into signal window and sidebands
+2. **Grid search for each variable**:
+   - Scan cut values across configured range
+   - For each cut value, calculate:
+     - S (signal events passing cut)
+     - B (background events passing cut)
+     - S/√B (figure of merit)
+     - Signal efficiency
+     - Background rejection
+3. **Find optimal cut** that maximizes S/√B
+4. **Save results**:
+   - Full scan table: `optimization_scan_full.csv`
+   - Optimal cuts: `optimal_cuts_summary.txt`
+   - Markdown report: `optimization_results.md`
+5. **Generate cut visualizations**:
+   - One plot per variable showing:
+     - Signal MC distribution (red)
+     - Background MC distribution (blue)
+     - Optimal cut line (purple dashed)
+     - Accepted region (green transparent box)
+     - S/√B, efficiency, rejection metrics
+
+### Example Output
+
+```
+=== Cut Optimization via Grid Search ===
+Signal events (J/ψ window): 49,467
+Background events (sidebands): 4,198
+
+Scanning 12 variables:
+  lambda_fdchi2: [0, 500] (20 steps)
+  delta_z: [0, 30] (51 steps)
+  p_probnnp: [0.0, 1.0] (51 steps)
+  ...
+
+Optimization complete! Found optimal cuts for 12 variables.
+
+Creating MC Cut Visualization Plots:
+  Plotting lambda_fdchi2 (L0_FDCHI2_OWNPV > 78.9474)
+  Plotting p_probnnp (p_ProbNNp > 0.7400)
+  ...
+Saved 12 cut visualization plots to output/mc/cut_visualizations
+```
+
+### Optimal Cuts Table (Example)
+
+```
+OPTIMAL CUTS FROM GRID SEARCH (Maximizing S/√B)
+
+p_probnnp:
+  Optimal cut value: 0.7400
+  S/√B at optimum: 31.45
+  Signal efficiency: 87.3%
+  Background rejection: 94.2%
+  Signal (S): 43,156.0
+  Background (B): 189.0
+```
+
+---
+
+## Phase 2: Data Application
+
+### What It Does
+
+1. **Loads real data** in J/ψ region
+2. **Applies optimal cuts sequentially**:
+   - Start with all data in J/ψ region
+   - Apply each cut one by one
+   - Track efficiency at each step
+3. **Calculate final yields**:
+   - Events in signal window
+   - Background estimate from sidebands
+   - Signal purity
+4. **Save results**:
+   - Cut summary: `data_cuts_applied.csv`
+   - Yields: `data_yields_summary.txt`
+5. **Generate visualizations**:
+   - Cut visualization plots (data distributions with cut lines)
+   - Final J/ψ mass spectrum after all cuts
+
+### Example Output
+
+```
+=== Applying Optimal Cuts to Data ===
+Starting with 50,977 events in J/ψ region
+
+Applying optimal cuts:
+  lambda_fdchi2: L0_FDCHI2_OWNPV > 78.9474
+    Events: 50,977 → 41,398 (eff: 81.21%)
+  p_probnnp: p_ProbNNp > 0.7400
+    Events: 21,569 → 6,768 (eff: 31.38%)
+  ...
+
+Final Data Yields:
+  Initial events: 50,977
+  After optimal cuts: 517
+  Overall efficiency: 1.01%
+
+Signal Window [3070-3120 MeV]:
+  Events in signal window: 186
+  Expected background: 118.5
+  Estimated signal: 67.5
+  Signal purity: 36.3%
+```
+
+---
+
+## Output Files
+
+### Tables
+
+#### `mc/cut_tables/optimization_scan_full.csv`
+Complete grid search results for all variables
+
+#### `mc/cut_tables/optimal_cuts_summary.txt`
+Best cut for each variable with performance metrics
+
+#### `mc/cut_tables/optimization_results.md`
+Markdown-formatted tables for easy viewing
+
+#### `data/cut_tables/data_cuts_applied.csv`
+Sequential cut application on data with efficiencies
+
+#### `data/cut_tables/data_yields_summary.txt`
+Final yields and signal purity
+
+### Plots
+
+#### MC Cut Visualizations (`mc/cut_visualizations/*.pdf`)
+- 12 plots showing MC distributions with optimal cuts
+- **Red**: J/ψ signal MC
+- **Blue**: Sideband background
+- **Purple dashed line**: Optimal cut value
+- **Green box**: Accepted region
+- **Info box**: S/√B, efficiency, rejection
+
+#### Data Cut Visualizations (`data/cut_visualizations/*.pdf`)
+- 12 plots showing data distributions with optimal cuts
+- **Black**: Real data
+- **Purple dashed line**: Optimal cut (from MC)
+- **Green box**: Accepted region
+- **Info box**: Cut performance from MC optimization
+
+#### J/ψ Mass Spectrum (`data/jpsi_analysis/jpsi_mass_data_after_cuts.pdf`)
+- Final mass spectrum after all cuts
+- Signal window highlighted
+- Sideband regions shown
+
+---
+
+## Plotting Infrastructure
+
+### Centralized in `plot.py`
+
+All plotting uses the `StudyPlotter` class with:
+
+✅ **Consistent LHCb styling**: `mplhep.style.LHCb2`  
+✅ **Proper fonts**: Serif (Computer Modern Roman), size 14-18  
+✅ **Publication quality**: 300 DPI, vector PDF format  
+✅ **Automatic styling**: Font sizes, line widths, colors configured once  
+
+```python
+class StudyPlotter:
+    def plot_cut_visualizations_mc(...)      # MC cut plots
+    def plot_cut_visualizations_data(...)    # Data cut plots
+    def plot_data_mass_spectrum(...)         # Mass spectrum
+    def plot_cutflow(...)                    # Cutflow comparison
+    def plot_2d_correlation(...)             # 2D efficiency maps
+```
+
+### Font Configuration
+
+```python
+Font settings applied to ALL plots:
+- Base font size: 14
+- Axis labels: 16
+- Titles: 18
+- Legend: 13
+- Font family: Serif (Computer Modern Roman)
+- Line widths: 2.5 (data), 1.5 (axes)
+- LaTeX math: Computer Modern
+```
+
+**No more inconsistent fonts or inline plotting code!**
+
+---
+
+## Implementation Details
+
+### Module Structure
+
+```
+main.py (SelectionStudy)
+├── Coordinates two-phase workflow
+├── Calls grid search optimization
+└── Manages output directories
+
+plot.py (StudyPlotter)
+├── All plotting functions
+├── Font configuration
+└── LHCb styling
+
+jpsi_analyzer.py (JPsiAnalyzer)
+├── Mass calculation
+├── Region application (signal/sidebands)
+└── Purity calculations
+
+variable_analyzer.py (VariableAnalyzer)
+├── Variable distribution analysis
+└── Cut efficiency calculations
+
+selection_efficiency.py (EfficiencyCalculator)
+├── Single cut efficiency
+├── Efficiency scans
+└── Cutflow generation
+```
+
+---
+
+## Extending the Study
+
+### Add New Variables
+
+1. **Add to config** (`config.toml`):
+
+```toml
+[bplus_variables.new_variable]
+branch = "Bu_NewBranch"
+description = "Description of new variable"
 operator = ">"
-current_tight = 0.5
-current_loose = 0.2
-scan_range = [0.0, 0.95]
-scan_points = 50
-plot_range = [0.0, 1.0]
+scan_range = [0, 100]
+scan_steps = 51
+plot_range = [0, 120]
 enabled = true
 ```
+
+2. **Run study** - automatic optimization!
+
+### Study Other Resonances
+
+Change the mass regions in config:
+
+```toml
+[study_regions]
+# For ψ(2S): M ≈ 3686 MeV
+jpsi_range = [3600, 3800]
+jpsi_window = [3666, 3706]
+sideband_left = [3600, 3650]
+sideband_right = [3750, 3800]
+```
+
+---
+
+## Physics Notes
+
+### S/√B Figure of Merit
+
+**Why S/√B?**
+- Standard in HEP for optimizing cuts
+- Balance between signal efficiency and background rejection
+- Maximizing S/√B ≈ maximizing discovery significance
+
+### Delta_z Sign
+
+The `delta_z` variable **must be positive**:
+```
+delta_z = z_decay(Λ) - z_production(B+)
+```
+- Λ travels forward before decaying → positive ΔZ
+- Negative values indicate reconstruction issues
+
+### Background Estimation
+
+Background in signal window estimated from sidebands:
+```python
+bkg_in_signal = N_sidebands × (width_signal / width_sidebands)
+```
+
+Assumes flat background across J/ψ region.
+
+---
+
+## Troubleshooting
+
+### Low Statistics Warning
+
+**Issue**: Few events after cuts  
+**Solution**: Check optimal cut values in `optimal_cuts_summary.txt`
+
+### Branch Not Found
+
+**Issue**: `Branch X not found in data`  
+**Solution**: Verify branch names in config match ROOT branches
+
+### Fonts Look Wrong
+
+**Issue**: Plots have inconsistent fonts  
+**Solution**: ✅ Already fixed! All plotting goes through `plot.py`
+
+---
+
+## Dependencies
+
+### Python Packages
+- `awkward` ≥ 2.0
+- `uproot` ≥ 5.0
+- `numpy`, `pandas`
+- `matplotlib`, `mplhep`
+- `toml`
+
+---
+
+## Quick Reference Commands
+
+```bash
+# Full study
+./run_study.sh
+
+# Check outputs
+ls -R output/
+
+# View optimal cuts
+cat output/mc/cut_tables/optimal_cuts_summary.txt
+
+# View data yields
+cat output/data/cut_tables/data_yields_summary.txt
+```
+
+---
+
+**Version**: 2.0  
+**Last Updated**: October 28, 2025  
+**Author**: Mohamed Elashri  
+**Study Focus**: J/ψ selection optimization via grid search
 
 ## Outputs
 
@@ -190,7 +593,7 @@ This study is designed to be easily extended to other charmonium resonances (ψ(
 
 ### Step 1: Update Configuration
 
-Edit `selection_study_config.toml`:
+Edit `config.toml`:
 
 ```toml
 [jpsi_study]

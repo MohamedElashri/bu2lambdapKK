@@ -22,7 +22,7 @@ ROOT_DIR="$( cd "$SCRIPT_DIR/../../.." && pwd )"
 VENV_PATH="$ROOT_DIR/.venv"
 
 # Configuration
-CONFIG_FILE="${1:-selection_study_config.toml}"
+CONFIG_FILE="${1:-config.toml}"
 PYTHON_SCRIPT="main.py"
 OUTPUT_DIR="output"
 LOG_FILE="$OUTPUT_DIR/run_study.log"
@@ -117,11 +117,11 @@ print_info "Logging to: $LOG_FILE"
 echo ""
 
 # Run the study
-print_info "Executing study phases:"
-print_info "  Phase 1: Lambda Selection Variables"
-print_info "  Phase 2: PID Selection (THE CROWN JEWEL)"
-print_info "  Phase 3: B+ Quality Variables"
-print_info "  Phase 4: J/ψ Region Analysis"
+print_info "Executing two-phase workflow:"
+print_info "  Phase 1: MC Optimization - Grid search on J/ψ signal MC (12 variables)"
+print_info "           Maximize S/√B to find optimal cuts"
+print_info "  Phase 2: Data Application - Apply optimal cuts to real data"
+print_info "           Generate mass spectrum and yield estimates"
 echo ""
 
 # Execute with output to both console and log file

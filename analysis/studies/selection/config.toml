@@ -1,11 +1,17 @@
 # Selection Study Configuration for B+ → pK⁻Λ̄ K+ Analysis
-# Focus: J/ψ Signal vs Background Discrimination
+# Three-Phase Study: MC Optimization → Data Application → Combined Comparison
 
 [metadata]
 description = "Selection optimization study for B+ → pK⁻Λ̄ K+ with J/ψ focus"
-version = "1.0"
+version = "2.0"
 date = "2025-10-28"
 author = "Mohamed Elashri"
+
+[study_workflow]
+# Phase 1: Optimize cuts on MC (signal efficiency)
+run_mc_optimization = true
+# Phase 2: Apply optimized cuts to real data (with trigger, sideband analysis)
+run_data_application = true
 
 [data_paths]
 # Paths to data and MC files
@@ -21,12 +27,20 @@ channel_name = "B2L0barPKpKm"
 
 [mc_selection]
 # MC samples for J/ψ study
-signal_samples = ["Jpsi"]  # J/ψ signal MC (combined SS and OS)
-background_samples = ["KpKm"]  # Non-resonant background MC
+signal_sample = "Jpsi"  # J/ψ signal MC (combined SS and OS) - for efficiency studies
 channel_name = "B2L0barPKpKm"
 
 # Branch loading configuration
 branch_preset = "standard"  # Use 'standard' preset from branch_config.toml
+
+[mc_normalization]
+# MC to data normalization
+normalize_to_data = true
+normalization_method = "sideband"  # Options: "sideband", "luminosity", "manual"
+# For sideband method: normalize MC to data in sidebands
+# For luminosity method: use cross-section × BR × efficiency × luminosity
+# For manual method: provide explicit scale factor
+manual_scale_factor = 1.0
 
 [study_regions]
 # M(pK⁻Λ̄) region for J/ψ studies
@@ -44,12 +58,17 @@ bu_mass_range = [5255, 5305]     # MeV (Lambda-corrected B+ mass)
 # chic0_range = [3380, 3450]
 # psi2s_range = [3650, 3720]
 
-[study_phases]
-# Control which phases to run
-run_lambda = true
-run_pid = true
-run_bplus = true
-run_jpsi = true
+[cut_optimization]
+# Which variable groups to optimize (Phase 1: MC optimization)
+optimize_lambda = true
+optimize_pid = true
+optimize_bplus = true
+
+# Cut selection strategy
+cut_strategy = "tight"  # Options: "loose", "tight", "optimal"
+# tight: prioritize purity (fewer events, cleaner)
+# loose: prioritize efficiency (more events, more background)
+# optimal: balance between efficiency and purity
 
 # ============================================================================
 # LAMBDA QUALITY VARIABLES
@@ -176,10 +195,10 @@ enabled = true
   [bplus_variables.bu_pt]
   branch = "Bu_PT"
   description = "B+ transverse momentum"
-  scan_range = [2000, 5000]
+  scan_range = [2000, 3000]
   scan_steps = 31
-  current_tight = 3500.0
-  current_loose = 3000.0
+  current_tight = 3000.0
+  current_loose = 2500.0
   operator = ">"
   plot_range = [2000, 6000]
   
@@ -221,12 +240,11 @@ style = "LHCb2"
 figsize = [10, 7]
 dpi = 300
 format = "pdf"
-save_png = false  # Also save PNG versions
 
   [plot_settings.colors]
   jpsi_signal = "#E41A1C"       # Red - J/ψ signal MC
-  kpkm_background = "#377EB8"   # Blue - KpKm background MC
   data = "#000000"              # Black - Real data
+  data_sideband = "#377EB8"     # Blue - Data sidebands (background)
   tight_cut = "#2CA02C"         # Green - Tight cut line
   loose_cut = "#FF7F00"         # Orange - Loose cut line
   optimal_cut = "#9467BD"       # Purple - Optimal cut line
@@ -249,21 +267,21 @@ save_png = false  # Also save PNG versions
   jpsi_mass_spectrum = 100
   
   [plot_settings.labels]
-  # Axis labels (can use LaTeX math mode)
-  lambda_fdchi2 = "$\\Lambda$ FD $\\chi^2$"
-  delta_z = "$\\Delta Z$ [mm]"
-  lp_probnnp = "$\\Lambda_p$ ProbNNp"
-  lambda_mass = "$M(p\\pi^-)$ [MeV/$c^2$]"
-  p_probnnp = "Proton ProbNNp"
-  h1_probnnk = "$K_{+}$ ProbNNk"
-  h2_probnnk = "$K_{-}$ ProbNNk"
-  kk_product = "$K_1 \\times K_2$ ProbNN Product"
-  pid_product = "$p \\times K_1 \\times K_2$ PID Product"
-  bu_pt = "$B^+$ $p_T$ [MeV/$c$]"
-  bu_dtf_chi2 = "$B^+$ DTF $\\chi^2$"
-  bu_ipchi2 = "$B^+$ IP $\\chi^2$"
-  bu_fdchi2 = "$B^+$ FD $\\chi^2$"
-  jpsi_mass = "$M(pK^-\\bar{\\Lambda})$ [MeV/$c^2$]"
+  # Axis labels with proper LaTeX math mode
+  lambda_fdchi2 = "$\\chi^{2}_{\\mathrm{FD}}(\\Lambda)$"
+  delta_z = "$\\Delta z$ [mm]"
+  lp_probnnp = "$\\mathrm{ProbNN}_p(\\Lambda \\rightarrow p)$"
+  lambda_mass = "$M(p\\pi^{-})$ [MeV/$c^{2}$]"
+  p_probnnp = "$\\mathrm{ProbNN}_p$"
+  h1_probnnk = "$\\mathrm{ProbNN}_{K}(K^{-})$"
+  h2_probnnk = "$\\mathrm{ProbNN}_{K}(K^{+})$"
+  kk_product = "$\\mathrm{ProbNN}_{K}(K^{-}) \\times \\mathrm{ProbNN}_{K}(K^{+})$"
+  pid_product = "$\\mathrm{ProbNN}_{p} \\times \\mathrm{ProbNN}_{K}(K^{-}) \\times \\mathrm{ProbNN}_{K}(K^{+})$"
+  bu_pt = "$p_{\\mathrm{T}}(B^{+})$ [MeV/$c$]"
+  bu_dtf_chi2 = "$\\chi^{2}_{\\mathrm{DTF}}(B^{+})$"
+  bu_ipchi2 = "$\\chi^{2}_{\\mathrm{IP}}(B^{+})$"
+  bu_fdchi2 = "$\\chi^{2}_{\\mathrm{FD}}(B^{+})$"
+  jpsi_mass = "$M(pK^{-}\\bar{\\Lambda})$ [MeV/$c^{2}$]"
 
 # ============================================================================
 # OUTPUT SETTINGS
@@ -274,19 +292,18 @@ overwrite = true
 save_intermediate = true
 verbose = true
 
-# Subdirectory structure
-lambda_dir = "lambda_quality"
-pid_dir = "pid_selection"
-bplus_dir = "bplus_quality"
-jpsi_dir = "jpsi_region"
-comparison_dir = "comparison"
-efficiency_dir = "efficiency_scans"
-reports_dir = "reports"
+# Three-phase output structure
+mc_dir = "mc"              # Phase 1: MC optimization (grid search)
+data_dir = "data"          # Phase 2: Real data with optimal cuts applied
 
-# Report formats
-generate_txt_report = true
-generate_csv_tables = true
-generate_json_summary = true
+# Subdirectories within each phase
+[output.mc_subdirs]
+optimization = "optimization_results"
+tables = "cut_tables"
+
+[output.data_subdirs]
+jpsi_mass = "jpsi_analysis"
+tables = "cut_tables"
 
 # ============================================================================
 # OPTIMIZATION SETTINGS

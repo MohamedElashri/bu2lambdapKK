@@ -127,15 +127,8 @@ class SelectionStudy:
             if isinstance(subdir, str):  # Only process string values
                 (data_base / subdir).mkdir(parents=True, exist_ok=True)
         
-        # Phase 3: Combined plots
-        combined_base = self.output_dir / self.config['output']['combined_dir']
-        combined_subdirs = self.config['output'].get('combined_subdirs', {})
-        for subdir in combined_subdirs.values():
-            if isinstance(subdir, str):  # Only process string values
-                (combined_base / subdir).mkdir(parents=True, exist_ok=True)
-        
-        total_dirs = len(mc_subdirs) + len(data_subdirs) + len(combined_subdirs)
-        self.logger.info(f"Created three-phase output structure with {total_dirs} subdirectories")
+        total_dirs = len(mc_subdirs) + len(data_subdirs)
+        self.logger.info(f"Created two-phase output structure with {total_dirs} subdirectories")
     
     def setup_logging(self):
         """Setup logging to file and console"""
@@ -305,240 +298,12 @@ class SelectionStudy:
         
         self.logger.info("\nPhase 2 complete! Data analysis finished.")
     
-    def phase3_combined_plots(self):
-        """
-        PHASE 3: Create MC vs Data visualization plots showing optimal cuts
-        
-        Goal: Visualize where optimal cuts are applied on full distributions
-        Output: combined/ directory with:
-            - MC vs Data comparison plots for each variable showing cut location
-            - Mass spectrum showing signal/sideband regions
-        """
-        self.logger.info("="*80)
-        self.logger.info("PHASE 3: CUT VISUALIZATION (MC vs Data)")
-        self.logger.info("="*80)
-        
-        # Update output paths for Phase 3
-        self._set_phase_output_dir('combined')
-        
-        # Create mass spectrum with regions marked
-        self._create_validation_mass_plot()
-        
-        # Create distribution plots with cut lines
-        self._create_validation_distribution_plots()
-        
-        self.logger.info("\nPhase 3 complete! Cut visualization plots created.")
-    
-    def _apply_optimal_cuts_to_mc(self):
-        """Apply the optimal cuts to MC data for validation"""
-        self.logger.info("\n--- Applying Optimal Cuts to MC ---")
-        
-        if not hasattr(self, 'optimal_cuts') or not self.optimal_cuts:
-            self.logger.error("No optimal cuts available!")
-            return
-        
-        mc_region = self.jpsi_analyzer.apply_jpsi_region(self.jpsi_signal)
-        mc_after_cuts = mc_region
-        
-        for var_name, cut_data in self.optimal_cuts.items():
-            branch = cut_data['branch']
-            operator = cut_data['operator']
-            cut_value = cut_data['cut_value']
-            
-            if branch in mc_after_cuts.fields:
-                branch_data = mc_after_cuts[branch]
-                
-                # Handle jagged arrays by extracting only if needed
-                if hasattr(branch_data, 'ndim') and branch_data.ndim > 1:
-                    # For jagged arrays, take first element
-                    branch_data = ak.firsts(branch_data, axis=1)
-                
-                if operator == '>':
-                    mask = branch_data > cut_value
-                elif operator == '<':
-                    mask = branch_data < cut_value
-                else:
-                    continue
-                
-                # Fill None values in mask with False
-                mask = ak.fill_none(mask, False)
-                mc_after_cuts = mc_after_cuts[mask]
-        
-        self.mc_after_optimal_cuts = mc_after_cuts
-        self.logger.info(f"MC events after optimal cuts: {len(mc_after_cuts):,}")
-    
-    def _create_validation_mass_plot(self):
-        """Create MC vs Data mass spectrum showing signal/sideband regions"""
-        self.logger.info("\n--- Creating Mass Spectrum with Regions ---")
-        
-        import matplotlib.pyplot as plt
-        
-        # Get full MC and data in J/ψ region (before optimal cuts)
-        mc_jpsi_region = self.jpsi_analyzer.apply_jpsi_region(self.jpsi_signal)
-        data_jpsi_region = self.jpsi_analyzer.apply_jpsi_region(self.real_data)
-        
-        # Calculate masses
-        mc_mass = ak.to_numpy(self.jpsi_analyzer.calculate_mass(mc_jpsi_region))
-        data_mass = ak.to_numpy(self.jpsi_analyzer.calculate_mass(data_jpsi_region))
-        
-        # Create plot
-        fig, ax = plt.subplots(figsize=(12, 8))
-        n_bins = 100
-        
-        # Plot MC (scaled)
-        if len(mc_mass) > 0:
-            counts_mc, bins_mc = np.histogram(mc_mass, bins=n_bins, range=self.jpsi_analyzer.jpsi_range)
-            bin_centers = (bins_mc[:-1] + bins_mc[1:]) / 2
-            counts_mc_scaled = counts_mc * self.mc_scale_factor
-            ax.step(bin_centers, counts_mc_scaled, where='mid', linewidth=2,
-                   label=f'J/ψ MC (scaled ×{self.mc_scale_factor:.2f})',
-                   color='#E41A1C', alpha=0.7)
-        
-        # Plot data
-        if len(data_mass) > 0:
-            ax.hist(data_mass, bins=n_bins, range=self.jpsi_analyzer.jpsi_range,
-                   histtype='step', linewidth=2, label='Data',
-                   color='#000000')
-        
-        # Highlight signal window (region used for optimization)
-        ax.axvspan(self.jpsi_analyzer.jpsi_window[0], self.jpsi_analyzer.jpsi_window[1],
-                  alpha=0.3, color='green', label=f'Signal window [{self.jpsi_analyzer.jpsi_window[0]}-{self.jpsi_analyzer.jpsi_window[1]} MeV]')
-        
-        # Mark sideband regions
-        ax.axvspan(self.jpsi_analyzer.left_sideband[0], self.jpsi_analyzer.left_sideband[1],
-                  alpha=0.2, color='orange', label='Left sideband')
-        ax.axvspan(self.jpsi_analyzer.right_sideband[0], self.jpsi_analyzer.right_sideband[1],
-                  alpha=0.2, color='orange', label='Right sideband')
-        
-        ax.set_xlabel('$M(pK^-\\bar{\\Lambda})$ [MeV/$c^2$]', fontsize=14)
-        ax.set_ylabel('Events / bin', fontsize=14)
-        ax.set_title('J/$\\psi$ Mass Spectrum: MC vs Data', fontsize=16)
-        ax.legend(fontsize=11)
-        ax.grid(True, alpha=0.3)
-        
-        # Save
-        output_dir = self.phase_output_dir / "mass_spectra"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / "jpsi_mass_spectrum.pdf"
-        fig.savefig(output_file, bbox_inches='tight')
-        plt.close(fig)
-        
-        self.logger.info(f"Saved mass spectrum: {output_file}")
-    
-    def _create_validation_distribution_plots(self):
-        """Create MC vs Data distribution plots showing optimal cut locations"""
-        self.logger.info("\n--- Creating Cut Visualization Plots ---")
-        
-        import matplotlib.pyplot as plt
-        
-        output_dir = self.phase_output_dir / "distributions"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Get full MC and data in J/ψ region (before cuts)
-        mc_jpsi_region = self.jpsi_analyzer.apply_jpsi_region(self.jpsi_signal)
-        data_jpsi_region = self.jpsi_analyzer.apply_jpsi_region(self.real_data)
-        
-        # Collect all variables with optimal cuts
-        variables_to_plot = []
-        for var_name, cut_data in self.optimal_cuts.items():
-            # Find variable config
-            var_config = None
-            for section_name in ['lambda_variables', 'pid_variables', 'bplus_variables']:
-                section = self.config.get(section_name, {})
-                if var_name in section and isinstance(section[var_name], dict):
-                    var_config = section[var_name]
-                    break
-            
-            if var_config:
-                variables_to_plot.append({
-                    'name': var_name,
-                    'branch': cut_data['branch'],
-                    'label': var_config.get('label', var_name),
-                    'range': var_config.get('plot_range'),
-                    'cut_value': cut_data['cut_value'],
-                    'operator': cut_data['operator']
-                })
-        
-        self.logger.info(f"Creating {len(variables_to_plot)} cut visualization plots...")
-        
-        for var_info in variables_to_plot:
-            branch = var_info['branch']
-            
-            # Extract data from MC and Data (full distributions before cuts)
-            if branch not in mc_jpsi_region.fields or branch not in data_jpsi_region.fields:
-                continue
-            
-            mc_values = self.safe_extract(mc_jpsi_region[branch])
-            data_values = self.safe_extract(data_jpsi_region[branch])
-            
-            if len(mc_values) == 0 and len(data_values) == 0:
-                continue
-            
-            # Create plot
-            fig, ax = plt.subplots(figsize=(12, 8))
-            
-            # Determine range
-            plot_range = var_info['range']
-            if plot_range is None and len(mc_values) > 0 and len(data_values) > 0:
-                all_values = np.concatenate([mc_values, data_values])
-                p1, p99 = np.percentile(all_values[np.isfinite(all_values)], [1, 99])
-                plot_range = (p1, p99)
-            
-            if not plot_range:
-                continue
-            
-            # Plot MC (scaled, semi-transparent filled histogram)
-            if len(mc_values) > 0:
-                ax.hist(mc_values, bins=50, range=plot_range,
-                       alpha=0.4, label=f'J/ψ MC (scaled ×{self.mc_scale_factor:.2f})',
-                       weights=np.ones_like(mc_values) * self.mc_scale_factor,
-                       color='#E41A1C', edgecolor='#E41A1C', linewidth=1.5)
-            
-            # Plot Data (step histogram)
-            if len(data_values) > 0:
-                ax.hist(data_values, bins=50, range=plot_range,
-                       histtype='step', linewidth=2, label='Data',
-                       color='#000000')
-            
-            # Draw cut line and highlight accepted region
-            cut_value = var_info['cut_value']
-            operator = var_info['operator']
-            
-            # Draw vertical line at cut
-            ax.axvline(cut_value, color='blue', linestyle='--', linewidth=2.5,
-                      label=f'Optimal cut: {operator} {cut_value:.3f}')
-            
-            # Highlight accepted region with transparent box
-            if operator == '>':
-                # Accept values > cut_value
-                ax.axvspan(cut_value, plot_range[1], alpha=0.15, color='green',
-                          label='Accepted region')
-            elif operator == '<':
-                # Accept values < cut_value
-                ax.axvspan(plot_range[0], cut_value, alpha=0.15, color='green',
-                          label='Accepted region')
-            
-            ax.set_xlabel(var_info['label'], fontsize=14)
-            ax.set_ylabel('Events', fontsize=14)
-            ax.set_title(f'{var_info["label"]} - Optimal Cut Visualization', fontsize=16)
-            ax.legend(fontsize=11, loc='best')
-            ax.grid(True, alpha=0.3)
-            
-            # Save
-            output_file = output_dir / f"{var_info['name']}_cut_visualization.pdf"
-            fig.savefig(output_file, bbox_inches='tight')
-            plt.close(fig)
-        
-        self.logger.info(f"Saved cut visualization plots to: {output_dir}")
-    
     def _set_phase_output_dir(self, phase: str):
         """Set output directory for current phase"""
         if phase == 'mc':
             self.phase_output_dir = self.output_dir / self.config['output']['mc_dir']
         elif phase == 'data':
             self.phase_output_dir = self.output_dir / self.config['output']['data_dir']
-        elif phase == 'combined':
-            self.phase_output_dir = self.output_dir / self.config['output']['combined_dir']
         else:
             self.phase_output_dir = self.output_dir
         
@@ -797,11 +562,11 @@ class SelectionStudy:
     
     def _normalize_mc_to_data(self):
         """
-        Normalize MC to data scale using sideband method
+        Normalize MC to data scale using signal window method
         
         This calculates a scale factor to make MC and data comparable.
-        The scale factor is determined by matching MC and data event counts
-        in the J/ψ sidebands (where we expect similar distributions).
+        For J/ψ signal MC, we normalize to the signal yield in data
+        (total events in signal window - background from sidebands).
         """
         norm_config = self.config.get('mc_normalization', {})
         method = norm_config.get('normalization_method', 'sideband')
@@ -812,23 +577,41 @@ class SelectionStudy:
             return
         
         if method == 'sideband':
-            # Extract sideband data
-            left_sb_mc, right_sb_mc = self.jpsi_analyzer.apply_sidebands(self.jpsi_signal)
-            left_sb_data, right_sb_data = self.jpsi_analyzer.apply_sidebands(self.real_data)
+            # For J/ψ signal MC: normalize to signal yield in data
+            # Get MC in signal window
+            mc_signal_window = self.jpsi_analyzer.apply_signal_window(
+                self.jpsi_analyzer.apply_jpsi_region(self.jpsi_signal)
+            )
+            n_mc_signal = len(mc_signal_window)
             
-            # Count events in sidebands
-            n_mc_sidebands = len(left_sb_mc) + len(right_sb_mc)
+            # Get data in signal window
+            data_jpsi_region = self.jpsi_analyzer.apply_jpsi_region(self.real_data)
+            data_signal_window = self.jpsi_analyzer.apply_signal_window(data_jpsi_region)
+            n_data_signal_window = len(data_signal_window)
+            
+            # Estimate background in signal window from sidebands
+            left_sb_data, right_sb_data = self.jpsi_analyzer.apply_sidebands(self.real_data)
             n_data_sidebands = len(left_sb_data) + len(right_sb_data)
             
-            if n_mc_sidebands > 0:
-                # Scale factor: data/MC in sidebands
-                self.mc_scale_factor = n_data_sidebands / n_mc_sidebands
-                self.logger.info(f"Sideband normalization:")
-                self.logger.info(f"  MC events in sidebands: {n_mc_sidebands:,}")
-                self.logger.info(f"  Data events in sidebands: {n_data_sidebands:,}")
+            sideband_width = (self.jpsi_analyzer.left_sideband[1] - self.jpsi_analyzer.left_sideband[0]) + \
+                           (self.jpsi_analyzer.right_sideband[1] - self.jpsi_analyzer.right_sideband[0])
+            signal_width = self.jpsi_analyzer.jpsi_window[1] - self.jpsi_analyzer.jpsi_window[0]
+            n_bkg_in_signal = n_data_sidebands * (signal_width / sideband_width)
+            
+            # Signal yield = total - background
+            n_data_signal = n_data_signal_window - n_bkg_in_signal
+            
+            if n_mc_signal > 0:
+                # Scale factor: signal in data / signal in MC
+                self.mc_scale_factor = n_data_signal / n_mc_signal
+                self.logger.info(f"Signal window normalization:")
+                self.logger.info(f"  MC signal events: {n_mc_signal:,}")
+                self.logger.info(f"  Data in signal window: {n_data_signal_window:,}")
+                self.logger.info(f"  Background estimate: {n_bkg_in_signal:.1f}")
+                self.logger.info(f"  Data signal yield: {n_data_signal:.1f}")
                 self.logger.info(f"  Scale factor (data/MC): {self.mc_scale_factor:.4f}")
             else:
-                self.logger.warning("No MC events in sidebands! Using scale factor = 1.0")
+                self.logger.warning("No MC events in signal window! Using scale factor = 1.0")
                 self.mc_scale_factor = 1.0
         
         elif method == 'luminosity':
@@ -1000,6 +783,9 @@ class SelectionStudy:
         
         # Store optimal cuts for Phase 2
         self.optimal_cuts = optimal_cuts
+        
+        # Create cut visualization plots for MC using the plotter
+        self.study_plotter.plot_cut_visualizations_mc(jpsi_signal_window, jpsi_sidebands, optimal_cuts)
         
         self.logger.info(f"\nOptimization complete! Found optimal cuts for {len(optimal_cuts)} variables.")
     
@@ -1187,10 +973,11 @@ class SelectionStudy:
         # Save cut summary table
         self._save_data_cut_summary(cut_summary, final_count, signal_events, bkg_in_signal, signal_purity)
         
-        # Plot mass spectrum after cuts
-        output_dir = self.phase_output_dir / "jpsi_analysis"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        self._plot_data_mass_spectrum_after_cuts(data_after_cuts, data_sidebands, output_dir)
+        # Create cut visualization plots for data using the plotter
+        self.study_plotter.plot_cut_visualizations_data(data_region, self.optimal_cuts)
+        
+        # Plot mass spectrum after cuts using the plotter
+        self.study_plotter.plot_data_mass_spectrum(data_after_cuts, data_sidebands, self.jpsi_analyzer)
         
         # Store for Phase 3
         self.data_after_optimal_cuts = data_after_cuts
@@ -1228,52 +1015,6 @@ class SelectionStudy:
             f.write(f"  Signal purity: {signal_purity:.1f}%\n")
         
         self.logger.info(f"Saved yields summary to {summary_file}")
-    
-    def _plot_data_mass_spectrum_after_cuts(self, data_after_cuts: ak.Array, 
-                                             sidebands_after_cuts: ak.Array, output_dir: Path):
-        """Plot J/ψ mass spectrum after applying optimal cuts"""
-        import matplotlib.pyplot as plt
-        import mplhep as hep
-        
-        # Calculate masses
-        data_mass = ak.to_numpy(self.jpsi_analyzer.calculate_mass(data_after_cuts))
-        sideband_mass = ak.to_numpy(self.jpsi_analyzer.calculate_mass(sidebands_after_cuts))
-        
-        # Create plot
-        fig, ax = plt.subplots(figsize=(12, 8))
-        n_bins = 100
-        
-        # Plot full data after cuts
-        if len(data_mass) > 0:
-            ax.hist(data_mass, bins=n_bins, range=self.jpsi_analyzer.jpsi_range,
-                   histtype='step', linewidth=2, label='Data (after optimal cuts)',
-                   color='#000000')
-        
-        # Plot sidebands after cuts
-        if len(sideband_mass) > 0:
-            ax.hist(sideband_mass, bins=n_bins, range=self.jpsi_analyzer.jpsi_range,
-                   histtype='step', linewidth=2, label='Sidebands (background)',
-                   color='#377EB8', linestyle='--')
-        
-        # Mark regions
-        ax.axvspan(self.jpsi_analyzer.jpsi_window[0], self.jpsi_analyzer.jpsi_window[1],
-                  alpha=0.2, color='green', label='Signal window')
-        
-        ax.set_xlabel('$M(pK^-\\bar{\\Lambda})$ [MeV/$c^2$]')
-        ax.set_ylabel('Events / bin')
-        ax.set_title('J/$\\psi$ Mass Spectrum in Data (After Optimal Cuts)')
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        
-        hep.lhcb.text("Preliminary", loc=0)
-        
-        # Save
-        output_file = output_dir / "jpsi_mass_data_after_cuts.pdf"
-        fig.savefig(output_file, bbox_inches='tight')
-        plt.close(fig)
-        
-        self.logger.info(f"Saved data mass spectrum: {output_file}")
-    
     
     def _prepare_cutflow_data(self) -> Dict[str, ak.Array]:
         """
@@ -2173,18 +1914,6 @@ class SelectionStudy:
             
             self.phase2_data_application()
         
-        # ====================================================================
-        # PHASE 3: COMBINED PLOTS
-        # ====================================================================
-        if self.config['study_workflow'].get('run_combined_plots', True):
-            self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 3: COMBINED PLOTS (MC vs Data Comparison)")
-            self.logger.info("="*80)
-            self.logger.info("Goal: Create normalized MC vs data plots for presentations")
-            self.logger.info("Output: combined/ directory\n")
-            
-            self.phase3_combined_plots()
-        
         self.logger.info("\n" + "="*80)
         self.logger.info("SELECTION STUDY COMPLETE")
         self.logger.info(f"All outputs saved to: {self.output_dir}")
@@ -2213,8 +1942,8 @@ Examples:
     )
     
     parser.add_argument('-c', '--config', 
-                       default='selection_study_config.toml',
-                       help='Path to configuration file (default: selection_study_config.toml)')
+                       default='config.toml',
+                       help='Path to configuration file (default: config.toml)')
     
     parser.add_argument('--phase',
                        choices=['lambda', 'pid', 'bplus', 'jpsi', 'all'],
