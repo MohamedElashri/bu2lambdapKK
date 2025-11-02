@@ -27,9 +27,11 @@ This study implements an automated **grid search optimization** to find optimal 
 ### **Key Features**
 
 ✅ **Grid Search Optimization**: Automated 1D scans for each variable  
+✅ **2D Grid Optimization**: NEW! Comprehensive multi-dimensional optimization  
 ✅ **S/√B Maximization**: Physics-motivated figure of merit  
 ✅ **Cut Visualizations**: See exactly where cuts are applied (MC and Data)  
 ✅ **Centralized Plotting**: Consistent LHCb styling via `plot.py`  
+✅ **MC vs Data Comparison**: Validate cuts with side-by-side optimization  
 ✅ **No Hardcoded Cuts**: All cuts determined from data-driven optimization  
 
 ---
@@ -60,15 +62,28 @@ selection/
 ├── jpsi_analyzer.py                 # J/ψ region analysis
 ├── variable_analyzer.py             # Variable distribution analysis
 ├── selection_efficiency.py          # Efficiency calculations
+├── grid_optimizer.py                # NEW! 2D grid search optimization
 ├── config.toml                      # Configuration file
 ├── run_study.sh                     # Execution script with checks
 ├── README.md                        # This file
-└── output/                          # Generated outputs (32 files)
+├── GRID_OPTIMIZATION.md             # NEW! 2D grid optimization documentation
+└── output/                          # Generated outputs
     ├── mc/                          # Phase 1 outputs
     │   ├── cut_tables/
     │   │   ├── optimization_scan_full.csv
     │   │   ├── optimal_cuts_summary.txt
     │   │   └── optimization_results.md
+    │   ├── grid_optimization/       # NEW! 2D grid results
+    │   │   ├── grid_optimization_mc.csv
+    │   │   ├── grid_optimization_data.csv
+    │   │   ├── top_20_cuts_mc.txt
+    │   │   ├── top_20_cuts_data.txt
+    │   │   ├── grid_optimization_mc.md
+    │   │   ├── grid_optimization_data.md
+    │   │   └── grid_comparison/
+    │   │       ├── s_over_sqrtb_comparison.pdf
+    │   │       ├── best_cuts_comparison.pdf
+    │   │       └── efficiency_rejection_scatter.pdf
     │   └── cut_visualizations/      # 12 MC cut plots
     │       ├── lambda_fdchi2_cut_visualization.pdf
     │       ├── p_probnnp_cut_visualization.pdf
@@ -177,6 +192,77 @@ optimal_cut = "#9467BD"        # Purple
 p_probnnp = "Proton ProbNNp"
 jpsi_mass = "$M(pK^-\\bar{\\Lambda})$ [MeV/$c^2$]"
 ```
+
+---
+
+## 2D Grid Search Optimization
+
+In addition to the 1D optimization, the study now includes a **comprehensive 2D grid search** that tests all combinations of cuts simultaneously.
+
+### What's New?
+
+- **Multi-dimensional optimization**: Tests all possible combinations of cut values
+- **MC and Data tables**: Generates optimization tables for both datasets
+- **Comparison plots**: Visualize differences between MC and Data optima
+- **Ranked results**: Tables sorted by S/√B with top combinations highlighted
+
+### Output Tables
+
+The 2D grid optimization creates tables where:
+- **Rows** = Different combinations of cuts
+- **Columns** = Variables (with cut values) + metrics
+- **Last columns** = Signal, Background, S/√B, efficiencies
+
+Example table structure:
+
+| p_probnnp | h1_probnnk | pid_product | bu_pt | Signal | Background | S/√B | Sig Eff | Bkg Rej |
+|-----------|------------|-------------|-------|--------|------------|------|---------|---------|
+| 0.550 | 0.250 | 0.600 | 3200 | 1198.0 | 198.0 | 85.14 | 82% | 79% |
+| 0.600 | 0.250 | 0.550 | 3200 | 1156.0 | 182.0 | 85.69 | 79% | 81% |
+| ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
+### Configuration
+
+Enable/disable and control in `config.toml`:
+
+```toml
+[optimization]
+perform_2d_grid = true         # Enable 2D grid optimization
+grid_scan_steps = 10           # Points per variable (10^n_vars combinations!)
+```
+
+⚠️ **Warning**: Computation grows exponentially!
+- 5 variables × 10 steps = 100,000 combinations (~2 min)
+- 5 variables × 15 steps = 759,375 combinations (~10 min)
+- 5 variables × 20 steps = 3,200,000 combinations (~1 hour)
+
+### Files Generated
+
+In `output/mc/grid_optimization/`:
+
+**CSV Tables:**
+- `grid_optimization_mc.csv` - Full MC optimization results
+- `grid_optimization_data.csv` - Full Data optimization results
+
+**Summaries:**
+- `top_20_cuts_mc.txt` - Top 20 cut combinations for MC
+- `top_20_cuts_data.txt` - Top 20 cut combinations for Data
+
+**Markdown:**
+- `grid_optimization_mc.md` - Human-readable MC results
+- `grid_optimization_data.md` - Human-readable Data results
+
+**Comparison Plots** (in `grid_comparison/`):
+- `s_over_sqrtb_comparison.pdf` - S/√B distributions
+- `best_cuts_comparison.pdf` - Optimal cut values MC vs Data
+- `efficiency_rejection_scatter.pdf` - Efficiency vs rejection trade-off
+
+### Reading the Results
+
+The tables are sorted by S/√B (highest first):
+
+1. **Rank 1** = Best overall combination
+2. **Rank 2-20** = Close alternatives
 
 ---
 

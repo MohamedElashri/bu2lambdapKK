@@ -38,16 +38,19 @@ from selection_efficiency import EfficiencyCalculator
 from variable_analyzer import VariableAnalyzer
 from plot import StudyPlotter
 from jpsi_analyzer import JPsiAnalyzer
+from grid_optimizer import GridOptimizer
 
 
 class SelectionStudy:
     """
     Main coordinator for selection optimization study
     
-    Three-phase workflow:
-    1. MC Optimization: Optimize cuts on signal MC for efficiency
+    Two-phase workflow with 2D grid optimization:
+    1. MC Optimization: 
+       - 1D scans to optimize cuts on signal MC for efficiency
+       - 2D grid search to find global optimum across all variables
     2. Data Application: Apply optimized cuts to real data with trigger
-    3. Combined Plots: Create normalized MC vs data comparison plots
+    3. Comparison: Create normalized MC vs data comparison plots
     """
     def __init__(self, config_path: str):
         """
@@ -92,11 +95,21 @@ class SelectionStudy:
         self.var_analyzer = VariableAnalyzer(self.config, self.output_dir, self.logger)
         self.study_plotter = StudyPlotter(self.config, self.output_dir, self.logger)
         self.jpsi_analyzer = JPsiAnalyzer(self.config, self.output_dir, self.logger)
+        self.grid_optimizer = GridOptimizer(self.config, self.output_dir, self.logger)
         
         self.logger.info("="*80)
         self.logger.info("Selection Study Initialized")
         self.logger.info(f"Description: {self.config['metadata']['description']}")
         self.logger.info(f"Output: {self.output_dir}")
+        self.logger.info("")
+        self.logger.info("Optimization Features:")
+        self.logger.info("  ✓ 1D Grid Search: Independent variable optimization")
+        if self.config.get('optimization', {}).get('perform_2d_grid', True):
+            self.logger.info("  ✓ 2D Grid Search: Multi-dimensional optimization (ENABLED)")
+            n_steps = self.config.get('optimization', {}).get('grid_scan_steps', 10)
+            self.logger.info(f"    Grid resolution: {n_steps} steps per variable")
+        else:
+            self.logger.info("  ✗ 2D Grid Search: Multi-dimensional optimization (DISABLED)")
         self.logger.info("="*80)
     
     @staticmethod
@@ -112,8 +125,8 @@ class SelectionStudy:
         return np.array(data)
     
     def _create_output_structure(self):
-        """Create organized output subdirectories for three-phase workflow"""
-        # Phase 1: MC optimization
+        """Create organized output subdirectories for two-phase workflow with 2D optimization"""
+        # Phase 1: MC optimization (1D + 2D grid search)
         mc_base = self.output_dir / self.config['output']['mc_dir']
         mc_subdirs = self.config['output'].get('mc_subdirs', {})
         for subdir in mc_subdirs.values():
@@ -258,14 +271,22 @@ class SelectionStudy:
         """
         PHASE 1: Optimize selection cuts using J/ψ MC with S/√B metric
         
-        Goal: Scan cut values, calculate S/√B for each combination, find optimal cuts
+        Two optimization strategies:
+        1. 1D Grid Search: Scan each variable independently
+        2. 2D Grid Search: Test all combinations of cuts simultaneously
+        
+        Goal: Find optimal cuts that maximize S/√B for signal/background separation
+        
         Output: mc/ directory with:
-            - optimization_table.csv: All cut combinations with S/√B values
+            - optimization_table.csv: 1D scan results per variable
+            - grid_optimization_mc.csv: 2D grid with all combinations
+            - grid_optimization_data.csv: 2D grid for data validation
             - best_cuts_summary.txt: Recommended cuts
             - cutflow_table.csv: Event counts at each cut stage
+            - Comparison plots: MC vs Data optimization
         """
         self.logger.info("="*80)
-        self.logger.info("PHASE 1: MC OPTIMIZATION (S/√B Maximization)")
+        self.logger.info("PHASE 1: MC OPTIMIZATION (1D + 2D Grid Search)")
         self.logger.info("="*80)
         
         # Update output paths for Phase 1
@@ -273,6 +294,10 @@ class SelectionStudy:
         
         # Perform multidimensional cut optimization
         self.optimize_cuts_grid_search()
+        
+        # Perform 2D grid optimization (new feature)
+        if self.config.get('optimization', {}).get('perform_2d_grid', True):
+            self.perform_2d_grid_optimization()
         
         self.logger.info("\nPhase 1 complete! Optimal cuts identified.")
     
@@ -716,6 +741,105 @@ class SelectionStudy:
         self.study_plotter.plot_cut_visualizations_mc(jpsi_signal_window, jpsi_sidebands, optimal_cuts)
         
         self.logger.info(f"\nOptimization complete! Found optimal cuts for {len(optimal_cuts)} variables.")
+    
+    def perform_2d_grid_optimization(self):
+        """
+        Perform 2D grid search optimization for MC and Data
+        
+        This creates comprehensive tables where:
+        - Variables are columns
+        - Cut combinations are rows
+        - S/√B is calculated for each combination
+        
+        Generates separate tables for MC and Data for comparison.
+        """
+        self.logger.info("\n" + "="*80)
+        self.logger.info("2D GRID SEARCH OPTIMIZATION")
+        self.logger.info("="*80)
+        self.logger.info("Scanning all combinations of cuts to maximize S/√B")
+        
+        # Create output directory for 2D optimization
+        grid_output_dir = self.phase_output_dir / "grid_optimization"
+        grid_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Update grid optimizer output directory
+        self.grid_optimizer.output_dir = grid_output_dir
+        
+        # Get signal and background for MC
+        jpsi_signal_region = self.jpsi_analyzer.apply_jpsi_region(self.jpsi_signal)
+        jpsi_signal_window = self.jpsi_analyzer.apply_signal_window(jpsi_signal_region)
+        
+        left_sb, right_sb = self.jpsi_analyzer.apply_sidebands(self.jpsi_signal)
+        jpsi_sidebands = ak.concatenate([left_sb, right_sb], axis=0)
+        
+        self.logger.info("\nMC Dataset:")
+        self.logger.info(f"  Signal (J/ψ window): {len(jpsi_signal_window):,} events")
+        self.logger.info(f"  Background (sidebands): {len(jpsi_sidebands):,} events")
+        
+        # Collect variables to scan (use fewer points for 2D grid to keep it manageable)
+        scan_variables = []
+        for section_name in ['lambda_variables', 'pid_variables', 'bplus_variables']:
+            section_vars = self.config.get(section_name, {})
+            for var_name, var_config in section_vars.items():
+                if var_name in ['description', 'enabled'] or not isinstance(var_config, dict):
+                    continue
+                if not var_config.get('enabled', True):
+                    continue
+                if 'scan_range' in var_config and not var_config.get('fixed', False):
+                    # For 2D grid, use fewer steps (configurable)
+                    grid_steps = self.config.get('optimization', {}).get('grid_scan_steps', 10)
+                    var_config_copy = var_config.copy()
+                    var_config_copy['scan_steps'] = grid_steps
+                    scan_variables.append((var_name, var_config_copy))
+        
+        if len(scan_variables) == 0:
+            self.logger.warning("No variables configured for 2D grid optimization")
+            return
+        
+        self.logger.info(f"\nVariables to scan: {len(scan_variables)}")
+        for var_name, var_config in scan_variables:
+            self.logger.info(f"  {var_name}: {var_config['scan_steps']} points")
+        
+        # Perform 2D grid search on MC
+        self.logger.info("\n--- Performing 2D Grid Search on MC ---")
+        mc_results = self.grid_optimizer.perform_2d_grid_search(
+            jpsi_signal_window, 
+            jpsi_sidebands,
+            scan_variables,
+            dataset_name="MC"
+        )
+        
+        # Perform 2D grid search on Data
+        self.logger.info("\n--- Performing 2D Grid Search on Data ---")
+        
+        # Get signal and background for Data
+        data_region = self.jpsi_analyzer.apply_jpsi_region(self.real_data)
+        data_signal_window = self.jpsi_analyzer.apply_signal_window(data_region)
+        
+        data_left_sb, data_right_sb = self.jpsi_analyzer.apply_sidebands(self.real_data)
+        data_sidebands = ak.concatenate([data_left_sb, data_right_sb], axis=0)
+        
+        self.logger.info("\nData Dataset:")
+        self.logger.info(f"  Signal window: {len(data_signal_window):,} events")
+        self.logger.info(f"  Background (sidebands): {len(data_sidebands):,} events")
+        
+        data_results = self.grid_optimizer.perform_2d_grid_search(
+            data_signal_window,
+            data_sidebands,
+            scan_variables,
+            dataset_name="Data"
+        )
+        
+        # Create comparison plots
+        if len(mc_results) > 0 and len(data_results) > 0:
+            self.logger.info("\n--- Creating MC vs Data Comparison Plots ---")
+            var_names = [var_name for var_name, _ in scan_variables]
+            self.grid_optimizer.create_comparison_plots(mc_results, data_results, var_names)
+        
+        self.logger.info("\n" + "="*80)
+        self.logger.info("2D GRID OPTIMIZATION COMPLETE")
+        self.logger.info(f"Results saved to: {grid_output_dir}")
+        self.logger.info("="*80)
     
     def _save_optimal_cuts_summary(self, optimal_cuts: dict, tables_dir: Path):
         """Save a text summary of the optimal cuts found."""
@@ -1410,9 +1534,9 @@ class SelectionStudy:
         self.logger.info(f"Saved recommendations: {report_path}")
     
     def run(self):
-        """Execute full three-phase study"""
+        """Execute full two-phase study with 2D grid optimization"""
         self.logger.info("="*80)
-        self.logger.info("SELECTION OPTIMIZATION STUDY - THREE-PHASE WORKFLOW")
+        self.logger.info("SELECTION OPTIMIZATION STUDY - TWO-PHASE WORKFLOW")
         self.logger.info("="*80)
         self.logger.info(f"Description: {self.config['metadata']['description']}")
         self.logger.info("")
@@ -1421,13 +1545,15 @@ class SelectionStudy:
         self.load_data()
         
         # ====================================================================
-        # PHASE 1: MC OPTIMIZATION
+        # PHASE 1: MC OPTIMIZATION (1D + 2D Grid Search)
         # ====================================================================
         if self.config['study_workflow'].get('run_mc_optimization', True):
             self.logger.info("\n" + "="*80)
-            self.logger.info("PHASE 1: MC OPTIMIZATION (Signal Efficiency)")
+            self.logger.info("PHASE 1: MC OPTIMIZATION (1D + 2D Grid Search)")
             self.logger.info("="*80)
             self.logger.info("Goal: Optimize cuts on J/ψ MC to maximize signal efficiency")
+            self.logger.info("Strategy 1: 1D grid search per variable")
+            self.logger.info("Strategy 2: 2D grid search across all combinations")
             self.logger.info("Output: mc/ directory\n")
             
             self.phase1_mc_optimization()
@@ -1453,21 +1579,29 @@ class SelectionStudy:
 def main():
     """Main entry point with argument parsing"""
     parser = argparse.ArgumentParser(
-        description='Selection Optimization Study for B+ → pK⁻Λ̄ K+ Analysis',
+        description='Selection Optimization Study for B+ → pK⁻Λ̄ K+ Analysis (with 2D Grid Optimization)',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run full study with default config
+  # Run full two-phase study with 1D and 2D optimization
   python main.py
   
   # Run with custom config
   python main.py -c my_config.toml
   
-  # Run specific phase only
-  python main.py --phase lambda
-  python main.py --phase pid
-  python main.py --phase bplus
-  python main.py --phase jpsi
+  # Enable verbose output for debugging
+  python main.py -v
+  
+Features:
+  • Phase 1: MC Optimization
+    - 1D grid search: Optimize each variable independently
+    - 2D grid search: Find global optimum across all variables
+    - Generate MC and Data optimization tables for comparison
+  
+  • Phase 2: Data Application
+    - Apply optimal cuts to real data
+    - Calculate yields and purities
+    - Generate mass spectra and cut visualizations
         """
     )
     
@@ -1488,7 +1622,7 @@ Examples:
     if args.verbose:
         study.logger.setLevel(logging.DEBUG)
     
-    # Run two-phase study
+    # Run two-phase study with 2D grid optimization
     study.run()
 
 

@@ -53,14 +53,14 @@ description = "Lambda (Λ0) selection cuts"
 
   [[lambda.cuts]]
   name = "lambda_delta_z"
-  branch = "delta_z"  # This is a derived branch
+  branch = "delta_z" # This is a derived branch (computed in selection.py)
   operator = ">"
   value = 20.0
   description = "ΔZ > 20 mm (Lambda decay vertex - B+ decay vertex)"
   
   [[lambda.cuts]]
   name = "lambda_FD_CHISQ"
-  branch = "L0_FD_CHISQ"  # This is a derived branch (computed in selection.py)
+  branch = "L0_FD_CHISQ"  
   operator = ">"
   value = 45.0
   description = "Lambda flight distance χ² (calculated from Delta_X, Delta_Y, Delta_Z)"

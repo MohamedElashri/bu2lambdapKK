@@ -313,6 +313,11 @@ tables = "cut_tables"
 min_efficiency = 0.70         # Minimum acceptable signal efficiency
 max_efficiency_loss = 0.15    # Maximum efficiency loss from optimal point
 
+# 2D Grid Optimization
+perform_2d_grid = true        # Enable 2D grid search optimization
+grid_scan_steps = 10          # Number of steps per variable (fewer than 1D for speed)
+                              # Total combinations = grid_scan_steps ^ n_variables
+
 # For 2D optimization
 create_2d_maps = true
 optimize_2d_pairs = [
