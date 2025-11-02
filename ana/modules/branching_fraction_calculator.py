@@ -1,0 +1,281 @@
+class BranchingFractionCalculator:
+    """
+    Calculate branching fraction ratios relative to J/ψ
+    
+    Key formula:
+    
+    Br(B⁺ → cc̄ X) × Br(cc̄ → Λ̄pK⁻)
+    ─────────────────────────────── = Σ(N_cc/ε_cc) / Σ(N_J/ψ/ε_J/ψ)
+    Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)
+    
+    These ratios are physics-meaningful and don't require
+    knowing individual branching fractions!
+    """
+    
+    def __init__(self, 
+                 yields: Dict[str, Dict[str, Tuple[float, float]]],
+                 efficiencies: Dict[str, Dict[str, float]],
+                 config: TOMLConfig):
+        """
+        Args:
+            yields: {year: {state: (value, error)}}
+            efficiencies: {state: {year: ε_total}}
+            config: Configuration object
+        """
+        self.yields = yields
+        self.efficiencies = efficiencies
+        self.config = config
+        
+    def calculate_efficiency_corrected_yield(self, 
+                                            state: str) -> Tuple[float, float]:
+        """
+        Calculate Σ(N^year / ε^year) for a given state
+        
+        Sum over all years, propagating uncertainties
+        
+        Returns:
+            (corrected_yield, error)
+        """
+        corrected_yields = []
+        errors_sq = []
+        
+        for year in sorted(self.yields.keys()):
+            n_year, n_err = self.yields[year][state]
+            eps_year = self.efficiencies[state][year]
+            
+            if eps_year > 0:
+                corrected = n_year / eps_year
+                # Propagate uncertainty (assuming ε uncertainty negligible for draft)
+                error = n_err / eps_year
+                
+                corrected_yields.append(corrected)
+                errors_sq.append(error**2)
+        
+        total_corrected = sum(corrected_yields)
+        total_error = np.sqrt(sum(errors_sq))
+        
+        return total_corrected, total_error
+    
+    def calculate_ratio_to_jpsi(self, state: str) -> Tuple[float, float]:
+        """
+        Calculate ratio of branching fractions relative to J/ψ
+        
+        R = [Br(B⁺→cc̄ X) × Br(cc̄→Λ̄pK⁻)] / [Br(B⁺→J/ψ X) × Br(J/ψ→Λ̄pK⁻)]
+          = Σ(N_cc/ε_cc) / Σ(N_J/ψ/ε_J/ψ)
+        
+        Returns:
+            (ratio, error)
+        """
+        # Efficiency-corrected yields
+        yield_cc, err_cc = self.calculate_efficiency_corrected_yield(state)
+        yield_jpsi, err_jpsi = self.calculate_efficiency_corrected_yield("jpsi")
+        
+        # Ratio
+        ratio = yield_cc / yield_jpsi if yield_jpsi > 0 else 0.0
+        
+        # Error propagation: R = A/B → σ_R = R × sqrt((σ_A/A)² + (σ_B/B)²)
+        rel_err_cc = err_cc / yield_cc if yield_cc > 0 else 0.0
+        rel_err_jpsi = err_jpsi / yield_jpsi if yield_jpsi > 0 else 0.0
+        
+        error = ratio * np.sqrt(rel_err_cc**2 + rel_err_jpsi**2)
+        
+        return ratio, error
+    
+    def calculate_all_ratios(self) -> pd.DataFrame:
+        """
+        Calculate all branching fraction ratios
+        
+        Results:
+        - ηc/J/ψ
+        - χc0/J/ψ
+        - χc1/J/ψ
+        - χc1/χc0 (derived from above)
+        
+        Returns:
+            DataFrame with results
+        """
+        results = []
+        
+        print("\n" + "="*80)
+        print("BRANCHING FRACTION RATIOS (Statistical uncertainties only)")
+        print("="*80)
+        
+        # Direct ratios to J/ψ
+        for state in ["etac", "chic0", "chic1"]:
+            ratio, error = self.calculate_ratio_to_jpsi(state)
+            
+            print(f"\nBr(B⁺ → {state} X) × Br({state} → Λ̄pK⁻)")
+            print(f"───────────────────────────────────────────")
+            print(f"Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)")
+            print(f"= {ratio:.3f} ± {error:.3f}")
+            
+            results.append({
+                "numerator": state,
+                "denominator": "jpsi",
+                "ratio": ratio,
+                "stat_error": error
+            })
+        
+        # Derived ratio: χc1/χc0
+        ratio_chic1_jpsi, err1 = self.calculate_ratio_to_jpsi("chic1")
+        ratio_chic0_jpsi, err0 = self.calculate_ratio_to_jpsi("chic0")
+        
+        ratio_chic1_chic0 = ratio_chic1_jpsi / ratio_chic0_jpsi if ratio_chic0_jpsi > 0 else 0.0
+        
+        # Error propagation for derived ratio
+        rel_err1 = err1 / ratio_chic1_jpsi if ratio_chic1_jpsi > 0 else 0.0
+        rel_err0 = err0 / ratio_chic0_jpsi if ratio_chic0_jpsi > 0 else 0.0
+        error_chic1_chic0 = ratio_chic1_chic0 * np.sqrt(rel_err1**2 + rel_err0**2)
+        
+        print(f"\nBr(B⁺ → χc1 X) × Br(χc1 → Λ̄pK⁻)")
+        print(f"───────────────────────────────────────────")
+        print(f"Br(B⁺ → χc0 X) × Br(χc0 → Λ̄pK⁻)")
+        print(f"= {ratio_chic1_chic0:.3f} ± {error_chic1_chic0:.3f}")
+        
+        results.append({
+            "numerator": "chic1",
+            "denominator": "chic0",
+            "ratio": ratio_chic1_chic0,
+            "stat_error": error_chic1_chic0
+        })
+        
+        df = pd.DataFrame(results)
+        
+        # Save
+        output_dir = Path(self.config.paths["output"]["tables_dir"])
+        df.to_csv(output_dir / "branching_fraction_ratios.csv", index=False)
+        
+        return df
+    
+    def check_yield_consistency_per_year(self) -> pd.DataFrame:
+        """
+        Check consistency of yields per year
+        Following Table 28 in reference analysis
+        
+        Plot: N/(L×ε) vs year
+        Should be consistent if detector stable
+        
+        Returns:
+            DataFrame with N/(L×ε) for each (state, year)
+        """
+        results = []
+        
+        for state in ["jpsi", "etac", "chic0", "chic1"]:
+            for year in sorted(self.yields.keys()):
+                n_year, n_err = self.yields[year][state]
+                eps_year = self.efficiencies[state][year]
+                lumi = self.config.luminosity["integrated_luminosity"][year]
+                
+                if eps_year > 0 and lumi > 0:
+                    normalized_yield = n_year / (lumi * eps_year)
+                    error = n_err / (lumi * eps_year)
+                    
+                    results.append({
+                        "state": state,
+                        "year": year,
+                        "N": n_year,
+                        "L": lumi,
+                        "eps": eps_year,
+                        "N_over_L_eps": normalized_yield,
+                        "error": error
+                    })
+        
+        df = pd.DataFrame(results)
+        
+        # Plot
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        axes = axes.flatten()
+        
+        for i, state in enumerate(["jpsi", "etac", "chic0", "chic1"]):
+            ax = axes[i]
+            data_state = df[df["state"] == state]
+            
+            years = [int(y) for y in data_state["year"]]
+            values = data_state["N_over_L_eps"].values
+            errors = data_state["error"].values
+            
+            ax.errorbar(years, values, yerr=errors, fmt='o-', 
+                       markersize=8, capsize=5, linewidth=2)
+            ax.set_xlabel("Year", fontsize=12)
+            ax.set_ylabel("N / (L × ε)", fontsize=12)
+            ax.set_title(f"{state}", fontsize=14)
+            ax.grid(True, alpha=0.3)
+            ax.set_xticks(years)
+        
+        plt.tight_layout()
+        
+        # Save
+        plot_dir = Path(self.config.paths["output"]["plots_dir"])
+        plt.savefig(plot_dir / "yield_consistency_check.png", dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        print("\n✓ Yield consistency check saved")
+        
+        # Also save table
+        output_dir = Path(self.config.paths["output"]["tables_dir"])
+        df.to_csv(output_dir / "yield_consistency.csv", index=False)
+        
+        return df
+    
+    def generate_final_summary(self, ratios_df: pd.DataFrame):
+        """
+        Generate final summary of results
+        
+        Creates:
+        1. Markdown summary
+        2. LaTeX table
+        3. Summary plot
+        """
+        output_dir = Path(self.config.paths["output"]["results_dir"])
+        output_dir.mkdir(exist_ok=True, parents=True)
+        
+        # Markdown summary
+        md = "# Branching Fraction Ratios - Final Results\n\n"
+        md += "## Self-Normalization to J/ψ\n\n"
+        md += "All results are **statistical uncertainties only** (draft analysis).\n\n"
+        md += "Systematic uncertainties and external branching fraction uncertainties\n"
+        md += "will be added in full analysis.\n\n"
+        
+        md += "## Results\n\n"
+        md += "| Ratio | Value | Stat. Error |\n"
+        md += "|-------|-------|-------------|\n"
+        
+        for _, row in ratios_df.iterrows():
+            num = row["numerator"]
+            den = row["denominator"]
+            val = row["ratio"]
+            err = row["stat_error"]
+            
+            md += f"| Br(B⁺→{num} X)×Br({num}→Λ̄pK⁻) / "
+            md += f"Br(B⁺→{den} X)×Br({den}→Λ̄pK⁻) | "
+            md += f"{val:.3f} | ±{err:.3f} |\n"
+        
+        md += "\n## Comparison with Theory\n\n"
+        md += "For χc states, NRQCD predicts (Colour Octet dominance):\n"
+        md += "- Br(χc1)/Br(χc0) ≈ 3\n"
+        md += "- Br(χc2)/Br(χc0) ≈ 5\n\n"
+        
+        md += f"Our result: Br(χc1)/Br(χc0) = {ratios_df[ratios_df['numerator']=='chic1']['ratio'].values[0]:.3f}\n\n"
+        md += "**Note**: These predictions were not observed in B⁺→φφ analysis either.\n\n"
+        
+        md += "## Next Steps\n\n"
+        md += "1. ✓ Draft analysis complete with statistical uncertainties\n"
+        md += "2. ⚠️ Add systematic uncertainties:\n"
+        md += "   - Fit model variations\n"
+        md += "   - Selection optimization uncertainties\n"
+        md += "   - Efficiency uncertainties\n"
+        md += "   - Multiple candidate effects\n"
+        md += "3. ⚠️ Complete efficiency calculations:\n"
+        md += "   - Reconstruction efficiency (currently placeholder)\n"
+        md += "   - Stripping efficiency (currently placeholder)\n"
+        md += "4. ⚠️ Consider interference effects (if significant)\n"
+        md += "5. ⚠️ Measure multiple candidate fraction\n"
+        
+        with open(output_dir / "final_results.md", "w") as f:
+            f.write(md)
+        
+        print("\n" + "="*80)
+        print("FINAL RESULTS SUMMARY")
+        print("="*80)
+        print(md)
+        print(f"\n✓ Saved to: {output_dir / 'final_results.md'}")

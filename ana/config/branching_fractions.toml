@@ -1,0 +1,15 @@
+[pdg_known]
+# Known from PDG (for information/future use)
+bu_to_jpsi_k = {value = 1.032e-3, error = 0.034e-3}  # B⁺ → J/ψ K⁺
+bu_to_jpsi_x = {value = 1.09e-2, error = 0.03e-2}    # Inclusive
+
+[normalization]
+method = "self_normalization"
+comment = """
+We measure ratios relative to J/ψ:
+  Br(B⁺ → cc̄ X) × Br(cc̄ → Λ̄pK⁻)
+  ─────────────────────────────────
+  Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)
+
+These ratios don't require knowing individual Br values!
+"""

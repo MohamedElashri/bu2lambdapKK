@@ -1,0 +1,14 @@
+[data]
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+years = [2016, 2017, 2018]
+magnets = ["MD", "MU"]
+
+[mc]
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc"
+states = ["Jpsi", "etac", "chic0", "chic1", "KpKm"]
+
+[output]
+plots_dir = "./plots"
+tables_dir = "./tables"
+results_dir = "./results"
+docs_dir = "./docs"

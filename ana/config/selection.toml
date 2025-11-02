@@ -1,0 +1,162 @@
+# ═══════════════════════════════════════════════════════════════
+# SELECTION CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+[lambda_selection]
+# FIXED cuts (not optimized, applied to all states)
+mass_min = 1111.0  # MeV/c²
+mass_max = 1121.0  # MeV/c²
+fd_chisq_min = 250.0
+delta_z_min = 5.0  # mm (note: delta_z in mm, not significance!)
+proton_probnnp_min = 0.3
+
+[lambda_selection.notes]
+comment = """
+Lambda selection is FIXED (not state-dependent).
+These are pre-selection cuts ensuring good Lambda reconstruction.
+Applied before FOM optimization.
+"""
+
+[bu_fixed_selection.notes]
+comment = """
+B+ mass cut using Lambda-corrected mass.
+This accounts for Lambda mass constraint effects.
+FIXED window, not optimized.
+"""
+
+[bu_optimizable_selection]
+# Variables to optimize with FOM scan
+# Format: {variable_name}.{begin/end/step}
+
+[bu_optimizable_selection.pt]
+begin = 2000.0   # MeV/c
+end = 10000.0
+step = 500.0
+cut_type = "greater"
+description = "B+ transverse momentum"
+
+[bu_optimizable_selection.dtf_chi2]
+begin = 0.0
+end = 50.0
+step = 2.0
+cut_type = "less"
+description = "B+ decay tree fit χ²"
+
+[bu_optimizable_selection.ipchi2]
+begin = 0.0
+end = 25.0
+step = 1.0
+cut_type = "less"
+description = "B+ impact parameter χ² to PV (should be small - B from PV)"
+
+[bu_optimizable_selection.fdchi2]
+begin = 0.0
+end = 500.0
+step = 20.0
+cut_type = "greater"
+description = "B+ flight distance χ² from PV (should be large - B flies)"
+
+[bachelor_p_optimizable_selection]
+# Bachelor antiproton cuts to optimize
+
+[bachelor_p_optimizable_selection.probnnp]
+begin = 0.0
+end = 0.5
+step = 0.05
+cut_type = "greater"
+description = "Bachelor p̄ PID probability"
+
+[bachelor_p_optimizable_selection.track_chi2ndof]
+begin = 0.0
+end = 5.0
+step = 0.25
+cut_type = "less"
+description = "Bachelor p̄ track quality"
+
+[bachelor_p_optimizable_selection.ipchi2]
+begin = 0.0
+end = 100.0
+step = 5.0
+cut_type = "greater"
+description = "Bachelor p̄ IP χ² to PV (should be large - not from PV)"
+
+[kplus_optimizable_selection]
+# K+ cuts to optimize
+
+[kplus_optimizable_selection.probnnk]
+begin = 0.0
+end = 0.5
+step = 0.05
+cut_type = "greater"
+description = "K+ PID probability"
+
+[kplus_optimizable_selection.track_chi2ndof]
+begin = 0.0
+end = 5.0
+step = 0.25
+cut_type = "less"
+description = "K+ track quality"
+
+[kplus_optimizable_selection.ipchi2]
+begin = 0.0
+end = 100.0
+step = 5.0
+cut_type = "greater"
+description = "K+ IP χ² to PV"
+
+[kminus_optimizable_selection]
+# K- cuts to optimize (same structure as K+)
+
+[kminus_optimizable_selection.probnnk]
+begin = 0.0
+end = 0.5
+step = 0.05
+cut_type = "greater"
+description = "K- PID probability"
+
+[kminus_optimizable_selection.track_chi2ndof]
+begin = 0.0
+end = 5.0
+step = 0.25
+cut_type = "less"
+description = "K- track quality"
+
+[kminus_optimizable_selection.ipchi2]
+begin = 0.0
+end = 100.0
+step = 5.0
+cut_type = "greater"
+description = "K- IP χ² to PV"
+
+[optimization_strategy]
+method = "2d_scan"
+comment = """
+Perform 2D optimization:
+- Rows: Different variables to optimize
+- Columns: Different charmonium states
+
+For each (variable, state) pair:
+1. Apply all other cuts (fixed + previously optimized)
+2. Scan variable from begin to end with step
+3. Compute FOM at each point
+4. Select optimal value (maximum FOM)
+
+Order of optimization:
+1. B+ variables (highest impact)
+2. Bachelor p̄ variables
+3. K+/K- variables (optimize together if similar)
+"""
+
+[optimization_strategy.notes]
+important = """
+⚠️ Different states may need different cuts!
+   - ηc: Lowest mass, softer particles → may need softer cuts
+   - J/ψ: Highest statistics → can use tighter cuts
+   - χc states: Medium requirements
+
+The optimization is STATE-DEPENDENT, producing separate
+cut values for each charmonium state.
+
+However, for simplicity in first iteration, we can optimize
+for χc states (limiting precision) and use same for all.
+"""

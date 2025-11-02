@@ -1,0 +1,46 @@
+[pdg_masses]
+# All masses in MeV/c²
+lambda = 1115.683
+proton = 938.272
+kaon = 493.677
+jpsi = 3096.916
+etac_1s = 2983.9  # ηc(1S) - first charmonium state above threshold
+chic0 = 3414.71
+chic1 = 3510.67
+
+[pdg_widths]
+# All widths in MeV/c²
+jpsi = 0.093       # Essentially zero, very narrow
+etac_1s = 32.0     # ηc(1S) natural width
+chic0 = 10.5
+chic1 = 0.84
+
+[mass_windows]
+# Fixed mass windows for selection (not optimized)
+lambda = [1111.0, 1121.0]
+bu_corrected = [5255.0, 5305.0]
+charmonium_fit_range = [2800.0, 4000.0]
+
+[signal_regions]
+# For FOM calculation: define signal region for each state
+# Format: center (mass), window (half-width)
+
+[signal_regions.jpsi]
+center = 3096.916
+window = 15.0  # ±15 MeV → ~3σ detector resolution (very narrow state)
+comment = "Resolution-limited, very narrow natural width"
+
+[signal_regions.etac]
+center = 2983.9
+window = 64.0  # ±64 MeV → 2×Γ for natural width
+comment = "Broad state, window based on natural width"
+
+[signal_regions.chic0]
+center = 3414.71
+window = 21.0  # ±21 MeV → 2×Γ
+comment = "Medium width state"
+
+[signal_regions.chic1]
+center = 3510.67
+window = 20.0  # ±20 MeV → resolution limited
+comment = "Narrow state, resolution-limited like J/ψ"
