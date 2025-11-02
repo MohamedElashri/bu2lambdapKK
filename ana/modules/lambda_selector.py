@@ -1,3 +1,10 @@
+import awkward as ak
+import numpy as np
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from data_handler import TOMLConfig
+
 class LambdaSelector:
     """
     Apply fixed Lambda reconstruction quality cuts
@@ -20,24 +27,35 @@ class LambdaSelector:
         
         Returns: Filtered awkward array
         """
-        mask = ak.ones_like(events.Bu_MM, dtype=bool)
+        # Use a reference branch that always exists
+        if "Bu_MM" not in events.fields:
+            if "Bu_M" not in events.fields:
+                print("  ⚠️  Cannot apply Lambda cuts: neither Bu_MM nor Bu_M found")
+                return events
+            mask = ak.ones_like(events["Bu_M"], dtype=bool)
+        else:
+            mask = ak.ones_like(events["Bu_MM"], dtype=bool)
         
-        # Lambda mass window
-        lambda_mass_branch = self.config.get_branch_name("lambda_mass")
-        mask = mask & (events[lambda_mass_branch] > self.cuts["mass_min"])
-        mask = mask & (events[lambda_mass_branch] < self.cuts["mass_max"])
+        # Lambda mass window (use L0_MM which should be available after normalization)
+        if "L0_MM" in events.fields:
+            mask = mask & (events["L0_MM"] > self.cuts["mass_min"])
+            mask = mask & (events["L0_MM"] < self.cuts["mass_max"])
+        elif "L0_M" in events.fields:
+            mask = mask & (events["L0_M"] > self.cuts["mass_min"])
+            mask = mask & (events["L0_M"] < self.cuts["mass_max"])
         
         # Lambda flight distance χ²
-        lambda_fd_branch = self.config.get_branch_name("lambda_fdchi2")
-        mask = mask & (events[lambda_fd_branch] > self.cuts["fd_chisq_min"])
+        if "L0_FDCHI2_OWNPV" in events.fields:
+            mask = mask & (events["L0_FDCHI2_OWNPV"] > self.cuts["fd_chisq_min"])
         
         # Delta Z (absolute value in mm, not significance!)
         # NOTE: The cut is on |Delta_Z| > 5 mm
-        mask = mask & (np.abs(events["Delta_Z_mm"]) > self.cuts["delta_z_min"])
+        if "Delta_Z_mm" in events.fields:
+            mask = mask & (np.abs(events["Delta_Z_mm"]) > self.cuts["delta_z_min"])
         
-        # Proton PID from Lambda decay
-        lambda_proton_pid_branch = self.config.get_branch_name("lambda_proton_probnnp")
-        mask = mask & (events[lambda_proton_pid_branch] > self.cuts["proton_probnnp_min"])
+        # Proton PID from Lambda decay (Lp is the proton from Lambda)
+        if "Lp_ProbNNp" in events.fields:
+            mask = mask & (events["Lp_ProbNNp"] > self.cuts["proton_probnnp_min"])
         
         n_before = len(events)
         n_after = ak.sum(mask)

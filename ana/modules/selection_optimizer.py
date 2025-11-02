@@ -1,5 +1,13 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
+import awkward as ak
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import Dict, List, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from data_handler import TOMLConfig
 
 class SelectionOptimizer:
     """
@@ -175,8 +183,9 @@ class SelectionOptimizer:
                 if var_name == "notes":  # Skip notes section
                     continue
                 
-                # Get actual branch name
-                branch_name = self.config.get_branch_name(f"{category}_{var_name}")
+                # Get actual branch name - this needs to be determined from the config
+                # For now, use the variable name directly as it should match normalized names
+                branch_name = var_config.get("branch", f"{category}_{var_name}")
                 
                 print(f"\n{'='*60}")
                 print(f"Optimizing: {category}.{var_name}")
