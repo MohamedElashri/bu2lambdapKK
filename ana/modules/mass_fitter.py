@@ -1,56 +1,109 @@
-import zfit
-from zfit import z
-import tensorflow as tf
+"""
+Mass Fitting Module for B+ -> Lambda pK-K+ Analysis
 
-class InvariantMassFitter:
+Implements RooFit-based simultaneous mass fitting for charmonium states.
+Following plan.md Phase 5 specification.
+"""
+
+import ROOT
+import numpy as np
+import awkward as ak
+import matplotlib.pyplot as plt
+from pathlib import Path
+from typing import Dict, Tuple, Any
+import os
+
+# Enable RooFit batch mode for better performance
+ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
+
+
+class MassFitter:
     """
-    Fit M(Λ̄pK⁻) invariant mass distribution
-    Simultaneous fit to all charmonium states
+    RooFit-based Mass Fitting for B+ -> Lambda pK-K+ Analysis
     
-    Strategy (following reference analysis Section 5):
-    - Fit each YEAR separately (combining MagDown + MagUp)
-    - Constrain masses/widths to be same across years
-    - Extract yields per year for efficiency correction
+    Fits M(Λ̄pK⁻) invariant mass distribution to extract charmonium yields.
+    
+    Strategy (following plan.md Phase 5):
+    - Fit each YEAR separately (MagDown + MagUp already combined)
+    - Share physical parameters (masses, widths, resolution) across years
+    - Extract separate yields per year (needed for efficiency correction)
+    - Use RooVoigtian (RBW ⊗ Gaussian) for signal shapes
+    - Exponential background
+    
+    Signal PDFs per state:
+    - J/ψ: RBW ⊗ Gaussian, Γ_J/ψ fixed to PDG (0.093 MeV)
+    - ηc: RBW ⊗ Gaussian, Γ_ηc floating (broad state)
+    - χc0: RBW ⊗ Gaussian, Γ_χc0 floating (broad state)
+    - χc1: RBW ⊗ Gaussian, Γ_χc1 fixed to PDG (0.84 MeV)
+    
+    Background: Exponential exp(-α × M)
     """
     
-    def __init__(self, config: TOMLConfig):
+    def __init__(self, config: Any):
+        """
+        Initialize mass fitter with configuration
+        
+        Args:
+            config: TOMLConfig object with particles, paths configuration
+        """
         self.config = config
         self.fit_range = config.particles["mass_windows"]["charmonium_fit_range"]
         
-        # Model parameters (shared across years)
+        # Shared parameters across years (will be created on first use)
         self.masses = {}      # M_J/ψ, M_ηc, M_χc0, M_χc1
-        self.widths = {}      # Γ_J/ψ (fixed), Γ_ηc, Γ_χc0, Γ_χc1 (fixed)
-        self.resolution = {}  # σ_ηc (floating), ratios fixed from MC
+        self.widths = {}      # Γ states (some fixed, some floating)
+        self.resolution = None  # Single resolution parameter (shared)
         
-    def build_signal_model(self, state: str, mass_obs: zfit.Space) -> zfit.pdf.BasePDF:
+        # Observable (shared across all fits)
+        self.mass_var = None
+        
+    def setup_observable(self) -> ROOT.RooRealVar:
         """
-        Build signal PDF for one charmonium state
+        Define RooRealVar for M(Λ̄pK⁻) invariant mass
         
-        Model: RBW ⊗ Gaussian (simplified, no double Gaussian for draft)
+        Returns:
+            RooRealVar for mass observable
+        """
+        if self.mass_var is None:
+            self.mass_var = ROOT.RooRealVar(
+                "M_LpKm",
+                "M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]",
+                self.fit_range[0],
+                self.fit_range[1]
+            )
+        return self.mass_var
+    
+    def create_signal_pdf(self, state: str, mass_var: ROOT.RooRealVar) -> ROOT.RooVoigtian:
+        """
+        Create signal PDF for one charmonium state
         
-        RBW with Blatt-Weisskopf form factors:
-        RBW(m) = m × Γ_f / [(m² - M²)² + M²Γ_f²]
+        Uses RooVoigtian (Relativistic Breit-Wigner ⊗ Gaussian)
         
-        where Γ_f includes:
-        - Phase space factor (momentum K)
-        - Blatt-Weisskopf form factor F(L)
-        - Threshold effects
-        
-        Orbital angular momenta (from quantum numbers):
-        - J/ψ (1⁻⁻): Need to verify if allowed! Assuming L=1 for now
-        - ηc(1S) (0⁻⁺): L = 1
-        - χc0 (0⁺⁺): L = 0
-        - χc1 (1⁺⁺): L = 2
-        
-        NOTE: For draft, use simplified RBW. Full form factors later.
+        Args:
+            state: State name ("jpsi", "etac", "chic0", "chic1")
+            mass_var: Observable mass variable
+            
+        Returns:
+            RooVoigtian PDF for this state
         """
         state_lower = state.lower()
         
-        # Mass parameter (shared across years, but fit separately per state)
+        # Map state names to config keys
+        config_key_map = {
+            "jpsi": "jpsi",
+            "etac": "etac_1s",
+            "chic0": "chic0",
+            "chic1": "chic1"
+        }
+        config_key = config_key_map.get(state_lower, state_lower)
+        
+        # Mass parameter (shared across years)
         if state_lower not in self.masses:
-            pdg_mass = self.config.particles["pdg_masses"][state_lower.replace("chic", "chic")]
-            self.masses[state_lower] = zfit.Parameter(
+            pdg_mass = self.config.particles["pdg_masses"][config_key]
+            
+            self.masses[state_lower] = ROOT.RooRealVar(
                 f"M_{state}",
+                f"M_{state} [MeV/c^{{2}}]",
                 pdg_mass,
                 pdg_mass - 50,  # Allow ±50 MeV variation
                 pdg_mass + 50
@@ -58,302 +111,414 @@ class InvariantMassFitter:
         
         # Width parameter
         if state_lower not in self.widths:
-            pdg_width = self.config.particles["pdg_widths"][state_lower.replace("chic", "chic")]
+            pdg_width = self.config.particles["pdg_widths"][config_key]
             
             # Fix narrow states (J/ψ, χc1) to PDG values
             if state_lower in ["jpsi", "chic1"]:
-                self.widths[state_lower] = zfit.Parameter(
+                self.widths[state_lower] = ROOT.RooRealVar(
                     f"Gamma_{state}",
-                    pdg_width,
-                    floating=False  # Fixed
+                    f"#Gamma_{state} [MeV/c^{{2}}]",
+                    pdg_width
                 )
+                self.widths[state_lower].setConstant(True)
             else:
-                # Float for ηc and χc0 (broader states)
-                self.widths[state_lower] = zfit.Parameter(
+                # Float for ηc and χc0 (broader states with larger uncertainties)
+                self.widths[state_lower] = ROOT.RooRealVar(
                     f"Gamma_{state}",
+                    f"#Gamma_{state} [MeV/c^{{2}}]",
                     pdg_width,
-                    0.1,  # Minimum 0.1 MeV
-                    100.0  # Maximum 100 MeV
+                    0.1,    # Minimum 0.1 MeV
+                    100.0   # Maximum 100 MeV
                 )
         
-        # Resolution (Gaussian width)
-        # For draft: single Gaussian per state
-        # Full analysis: double Gaussian with ratios fixed from MC
-        if "sigma_etac" not in self.resolution:
-            self.resolution["sigma_etac"] = zfit.Parameter(
-                "sigma_etac",
-                5.0,  # Initial guess ~5 MeV
-                1.0,
-                15.0
+        # Resolution (shared Gaussian width - same detector for all states)
+        if self.resolution is None:
+            self.resolution = ROOT.RooRealVar(
+                "sigma_resolution",
+                "#sigma_{resolution} [MeV/c^{2}]",
+                5.0,   # Initial guess ~5 MeV
+                1.0,   # Minimum
+                20.0   # Maximum
             )
         
-        # Resolution ratios (fixed from MC - TO BE DETERMINED)
-        # For now, assume all states have similar resolution
-        sigma = self.resolution["sigma_etac"]
-        
-        # Build Relativistic Breit-Wigner
-        # For draft: use zfit's built-in Voigt (RBW ⊗ Gaussian)
-        signal_pdf = zfit.pdf.Voigt(
-            m=self.masses[state_lower],
-            gamma=self.widths[state_lower],
-            sigma=sigma,
-            obs=mass_obs
+        # Create Voigtian PDF (RBW ⊗ Gaussian)
+        signal_pdf = ROOT.RooVoigtian(
+            f"pdf_signal_{state}",
+            f"Signal PDF for {state}",
+            mass_var,
+            self.masses[state_lower],
+            self.widths[state_lower],
+            self.resolution
         )
         
         return signal_pdf
     
-    def build_background_model(self, mass_obs: zfit.Space) -> zfit.pdf.BasePDF:
+    def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooExponential, ROOT.RooRealVar]:
         """
-        Build combinatorial background model
+        Create exponential background PDF
         
-        Simplified for draft: Single exponential
-        BGR(m) = exp(-α × m)
+        Simple exponential: exp(-α × M)
+        α parameter is PER YEAR (different backgrounds per year)
         
-        Full analysis would include:
-        BGR(m) = sqrt(m - m_thresh) × exp(-α×m) × (1 + A×m)
+        Args:
+            mass_var: Observable mass variable
+            year: Year string ("2016", "2017", "2018")
+            
+        Returns:
+            (background_pdf, alpha_parameter)
         """
-        alpha = zfit.Parameter("alpha_bkg", -0.001, -0.01, 0.0)
+        alpha = ROOT.RooRealVar(
+            f"alpha_bkg_{year}",
+            f"#alpha_{{bkg}} {year}",
+            -0.001,  # Initial guess
+            -0.01,   # Minimum (steeper slope)
+            0.0      # Maximum (flat)
+        )
         
-        # Simple exponential
-        bkg_pdf = zfit.pdf.Exponential(alpha, obs=mass_obs)
+        bkg_pdf = ROOT.RooExponential(
+            f"pdf_bkg_{year}",
+            f"Background PDF {year}",
+            mass_var,
+            alpha
+        )
         
-        return bkg_pdf
+        return bkg_pdf, alpha
+
     
-    def build_full_model(self, 
-                        year: str,
-                        mass_obs: zfit.Space) -> Tuple[zfit.pdf.BasePDF, Dict]:
+    def build_model_for_year(self, year: str, mass_var: ROOT.RooRealVar) -> Tuple[ROOT.RooAddPdf, Dict[str, ROOT.RooRealVar]]:
         """
-        Build full PDF for one year
+        Build full extended likelihood model for one year
         
         PDF = Σ[N_state × Signal_state] + N_bkg × Background
         
         States: J/ψ, ηc, χc0, χc1
         
+        Args:
+            year: Year string
+            mass_var: Observable mass variable
+            
         Returns:
-            (full_pdf, yield_parameters_dict)
+            (total_pdf, yields_dict)
         """
-        # Yield parameters (separate per year)
+        pdf_list = ROOT.RooArgList()
+        coef_list = ROOT.RooArgList()
         yields = {}
-        pdfs = []
         
+        # Signal components (4 charmonium states)
         for state in ["jpsi", "etac", "chic0", "chic1"]:
-            # Signal PDF (shared model, but separate yields per year)
-            sig_pdf = self.build_signal_model(state, mass_obs)
+            # Create signal PDF (shares mass/width/resolution across years)
+            sig_pdf = self.create_signal_pdf(state, mass_var)
             
-            # Yield parameter
-            yield_param = zfit.Parameter(
+            # Create yield parameter (separate per year)
+            yield_var = ROOT.RooRealVar(
                 f"N_{state}_{year}",
+                f"Yield {state} {year}",
                 1000,  # Initial guess
-                0,
-                1e6
+                0,     # Minimum (non-negative)
+                1e6    # Maximum
             )
-            yields[state] = yield_param
+            yields[state] = yield_var
             
-            # Extended PDF
-            ext_pdf = sig_pdf.create_extended(yield_param)
-            pdfs.append(ext_pdf)
+            # Add to lists
+            pdf_list.add(sig_pdf)
+            coef_list.add(yield_var)
         
-        # Background
-        bkg_pdf = self.build_background_model(mass_obs)
-        bkg_yield = zfit.Parameter(f"N_bkg_{year}", 10000, 0, 1e7)
+        # Background component
+        bkg_pdf, alpha_bkg = self.create_background_pdf(mass_var, year)
+        bkg_yield = ROOT.RooRealVar(
+            f"N_bkg_{year}",
+            f"Background yield {year}",
+            10000,  # Initial guess
+            0,      # Minimum
+            1e7     # Maximum
+        )
         yields["background"] = bkg_yield
         
-        ext_bkg = bkg_pdf.create_extended(bkg_yield)
-        pdfs.append(ext_bkg)
+        pdf_list.add(bkg_pdf)
+        coef_list.add(bkg_yield)
         
-        # Sum all components
-        full_pdf = zfit.pdf.SumPDF(pdfs)
+        # Build extended sum PDF
+        total_pdf = ROOT.RooAddPdf(
+            f"model_{year}",
+            f"Total PDF {year}",
+            pdf_list,
+            coef_list
+        )
         
-        return full_pdf, yields
+        return total_pdf, yields
     
-    def perform_fit(self, 
-                   data_by_year: Dict[str, ak.Array]) -> Dict[str, Dict]:
+    def perform_fit(self, data_by_year: Dict[str, ak.Array]) -> Dict[str, Any]:
         """
-        Perform binned χ² fit to M(Λ̄pK⁻) distribution
+        Perform mass fits to all years
         
         Strategy:
         1. Fit each year separately
-        2. Mass/width parameters shared across years
-        3. Yields separate per year
-        4. Use binned data (5 MeV bins)
+        2. Share physical parameters (masses, widths, resolution) across years
+        3. Extract separate yields per year
         
         Args:
-            data_by_year: {"2016": events, "2017": events, "2018": events}
+            data_by_year: {year: awkward_array} with M_LpKm_h2 branch
             
         Returns:
             {
                 "yields": {year: {state: (value, error)}},
                 "masses": {state: (value, error)},
                 "widths": {state: (value, error)},
-                "fit_results": {year: FitResult object}
+                "resolution": (value, error),
+                "fit_results": {year: RooFitResult}
             }
         """
-        # Define observable
-        mass_obs = zfit.Space("M_LpKm", self.fit_range)
+        mass_var = self.setup_observable()
         
         all_yields = {}
-        all_fits = {}
+        all_fit_results = {}
         
         print("\n" + "="*80)
-        print("MASS FITTING")
+        print("MASS FITTING WITH ROOFIT")
+        print("="*80)
+        print(f"Fit range: {self.fit_range[0]} - {self.fit_range[1]} MeV")
+        print(f"Using M_LpKm_h2 branch (h2 = K-, correct for charmonium)")
         print("="*80)
         
         for year in sorted(data_by_year.keys()):
             print(f"\n[Year {year}]")
             
-            data_array = data_by_year[year]["M_LpKm"]
+            # Get mass data (use M_LpKm_h2 - correct branch for charmonium)
+            mass_array = data_by_year[year]["M_LpKm_h2"]
             
-            # Create binned data (5 MeV bins following reference analysis)
-            n_bins = int((self.fit_range[1] - self.fit_range[0]) / 5.0)
+            # Apply fit range filter
+            mask = (mass_array >= self.fit_range[0]) & (mass_array <= self.fit_range[1])
+            mass_filtered = mass_array[mask]
             
-            hist_data, bin_edges = np.histogram(
-                ak.to_numpy(data_array),
-                bins=n_bins,
-                range=self.fit_range
+            print(f"  Events in fit range: {len(mass_filtered)}")
+            
+            # Convert to numpy for RooDataSet
+            mass_np = ak.to_numpy(mass_filtered)
+            
+            # Create RooDataSet using TTree-based approach
+            temp_filename = f"temp_fit_{year}.root"
+            temp_file = ROOT.TFile(temp_filename, "RECREATE")
+            temp_tree = ROOT.TTree("tree", "Mass data")
+            
+            # Create branch
+            mass_value = np.zeros(1, dtype=float)
+            temp_tree.Branch("M_LpKm", mass_value, "M_LpKm/D")
+            
+            # Fill tree
+            for m in mass_np:
+                mass_value[0] = m
+                temp_tree.Fill()
+            
+            temp_tree.Write()
+            temp_file.Close()
+            
+            # Load back and create RooDataSet
+            temp_file = ROOT.TFile(temp_filename, "READ")
+            temp_tree = temp_file.Get("tree")
+            
+            dataset = ROOT.RooDataSet(
+                f"data_{year}",
+                f"Data {year}",
+                temp_tree,
+                ROOT.RooArgSet(mass_var)
             )
             
-            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
-            bin_widths = bin_edges[1:] - bin_edges[:-1]
-            
-            # Create zfit data
-            data_zfit = zfit.Data.from_numpy(
-                obs=mass_obs,
-                array=bin_centers,
-                weights=hist_data
-            )
+            print(f"  RooDataSet entries: {dataset.numEntries()}")
             
             # Build model for this year
-            pdf, yields = self.build_full_model(year, mass_obs)
+            model, yields = self.build_model_for_year(year, mass_var)
             
-            # Create loss (chi-squared for binned data)
-            # For draft, use unbinned NLL (easier with zfit)
-            # Full analysis: proper binned chi-squared
-            loss = zfit.loss.ExtendedUnbinnedNLL(pdf, data_zfit)
+            # Perform fit
+            print(f"  Fitting...")
+            fit_result = model.fitTo(
+                dataset,
+                ROOT.RooFit.Save(),
+                ROOT.RooFit.Extended(True),
+                ROOT.RooFit.PrintLevel(-1),
+                ROOT.RooFit.NumCPU(4),
+                ROOT.RooFit.Strategy(2)  # More robust
+            )
             
-            # Minimize
-            minimizer = zfit.minimize.Minuit()
-            result = minimizer.minimize(loss)
+            # Check convergence
+            status = fit_result.status()
+            cov_qual = fit_result.covQual()
+            edm = fit_result.edm()
             
-            print(f"  Fit converged: {result.converged}")
-            print(f"  FCN minimum: {result.fmin:.2f}")
+            print(f"  Fit status: {status} (0 = success)")
+            print(f"  Covariance quality: {cov_qual} (3 = full accurate)")
+            print(f"  EDM: {edm:.2e}")
+            
+            if status != 0:
+                print(f"  WARNING: Fit did not converge properly!")
             
             # Extract yields with errors
             year_yields = {}
-            for state, param in yields.items():
-                value = param.value().numpy()
-                error = result.hesse()[param]["error"]
+            print(f"\n  Yields for {year}:")
+            for state, yield_var in yields.items():
+                value = yield_var.getVal()
+                error = yield_var.getError()
                 year_yields[state] = (value, error)
                 
-                print(f"    N_{state} = {value:.0f} ± {error:.0f}")
+                print(f"    N_{state:<12} = {value:8.0f} ± {error:6.0f}")
             
             all_yields[year] = year_yields
-            all_fits[year] = result
+            all_fit_results[year] = fit_result
             
-            # Plot fit result
-            self._plot_fit_result(year, data_array, pdf, yields, bin_centers, hist_data)
-        
-        # Extract masses and widths (shared across years)
-        masses_result = {}
-        widths_result = {}
-        
-        # Use last fit result for parameter extraction
-        last_result = all_fits[list(all_fits.keys())[-1]]
-        
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
-            mass_param = self.masses[state]
-            width_param = self.widths[state]
+            # Generate fit plot
+            self.plot_fit_result(year, mass_var, dataset, model, yields)
             
-            masses_result[state] = (
-                mass_param.value().numpy(),
-                last_result.hesse()[mass_param]["error"]
-            )
-            
-            widths_result[state] = (
-                width_param.value().numpy(),
-                last_result.hesse()[width_param]["error"]
-            )
+            # Cleanup
+            temp_file.Close()
+            os.remove(temp_filename)
         
+        # Extract shared parameters (from last fit)
         print("\n" + "="*80)
         print("FITTED PARAMETERS (shared across years)")
         print("="*80)
         
+        masses_result = {}
+        widths_result = {}
+        
         for state in ["jpsi", "etac", "chic0", "chic1"]:
-            m_val, m_err = masses_result[state]
-            g_val, g_err = widths_result[state]
-            print(f"{state:>10}: M = {m_val:.2f} ± {m_err:.2f} MeV")
-            print(f"{'':>10}  Γ = {g_val:.2f} ± {g_err:.2f} MeV")
+            mass_val = self.masses[state].getVal()
+            mass_err = self.masses[state].getError()
+            masses_result[state] = (mass_val, mass_err)
+            
+            width_val = self.widths[state].getVal()
+            width_err = self.widths[state].getError()
+            widths_result[state] = (width_val, width_err)
+            
+            print(f"{state:>8}: M = {mass_val:7.2f} ± {mass_err:5.2f} MeV,  "
+                  f"Γ = {width_val:6.2f} ± {width_err:5.2f} MeV")
+        
+        res_val = self.resolution.getVal()
+        res_err = self.resolution.getError()
+        print(f"\nResolution: σ = {res_val:.2f} ± {res_err:.2f} MeV")
         
         return {
             "yields": all_yields,
             "masses": masses_result,
             "widths": widths_result,
-            "fit_results": all_fits
+            "resolution": (res_val, res_err),
+            "fit_results": all_fit_results
         }
     
-    def _plot_fit_result(self,
-                        year: str,
-                        data_array: ak.Array,
-                        pdf: zfit.pdf.BasePDF,
-                        yields: Dict,
-                        bin_centers: np.ndarray,
-                        hist_data: np.ndarray):
+    def plot_fit_result(self, year: str, mass_var: ROOT.RooRealVar, 
+                       dataset: ROOT.RooDataSet, model: ROOT.RooAddPdf,
+                       yields: Dict[str, ROOT.RooRealVar]):
         """
-        Plot fit result similar to Figure 8 in reference analysis
+        Plot fit result with data, total fit, and components
         
-        Shows:
-        - Data points with error bars
-        - Total fit
+        Creates LHCb-style plot with:
+        - Data points with Poisson errors
+        - Total fit curve
         - Individual signal components
         - Background component
+        - Pull distribution
+        
+        Args:
+            year: Year string
+            mass_var: Observable mass variable
+            dataset: RooDataSet with data
+            model: Total PDF
+            yields: Dictionary of yield parameters
         """
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), 
-                                        gridspec_kw={'height_ratios': [3, 1]},
-                                        sharex=True)
+        # Create RooPlot
+        frame = mass_var.frame(ROOT.RooFit.Title(f"Mass Fit - Year {year}"))
         
-        # Top: Data + fit
-        x_plot = np.linspace(self.fit_range[0], self.fit_range[1], 500)
+        # Plot data
+        dataset.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.MarkerSize(0.5))
         
-        # Data
-        ax1.errorbar(bin_centers, hist_data, yerr=np.sqrt(hist_data),
-                     fmt='ko', label='Data', markersize=3)
+        # Plot total PDF
+        model.plotOn(frame, ROOT.RooFit.Name("total"), 
+                    ROOT.RooFit.LineColor(ROOT.kBlue), ROOT.RooFit.LineWidth(2))
         
-        # Total PDF (scale to data)
-        total_yield = sum(y.value().numpy() for y in yields.values())
-        bin_width = bin_centers[1] - bin_centers[0]
+        # Plot individual components
+        colors = {
+            "jpsi": ROOT.kRed,
+            "etac": ROOT.kGreen + 2,
+            "chic0": ROOT.kMagenta,
+            "chic1": ROOT.kOrange + 7,
+            "background": ROOT.kGray + 1
+        }
         
-        pdf_vals = pdf.pdf(x_plot).numpy() * total_yield * bin_width
-        ax1.plot(x_plot, pdf_vals, 'b-', linewidth=2, label='Total fit')
+        for state in ["jpsi", "etac", "chic0", "chic1", "background"]:
+            component_name = f"pdf_signal_{state}" if state != "background" else f"pdf_bkg_{year}"
+            model.plotOn(frame, ROOT.RooFit.Components(component_name),
+                        ROOT.RooFit.LineColor(colors[state]),
+                        ROOT.RooFit.LineStyle(ROOT.kDashed),
+                        ROOT.RooFit.LineWidth(2))
         
-        # Individual components (if accessible - zfit makes this tricky)
-        # For draft, just show total + background
+        # Calculate chi2
+        chi2 = frame.chiSquare()
         
-        ax1.set_ylabel('Events / 5 MeV', fontsize=12)
-        ax1.legend(fontsize=10)
-        ax1.set_title(f'M(Λ̄pK⁻) fit - Year {year}', fontsize=14)
-        ax1.grid(True, alpha=0.3)
+        # Create canvas
+        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 600)
+        canvas.Divide(1, 2)
         
-        # Bottom: Pulls
-        # Pull = (data - fit) / error
-        pdf_at_bins = pdf.pdf(bin_centers).numpy() * total_yield * bin_width
-        pulls = (hist_data - pdf_at_bins) / np.sqrt(hist_data + 1e-10)
+        # Top pad: data + fit
+        pad1 = canvas.cd(1)
+        pad1.SetPad(0, 0.3, 1, 1)
+        pad1.SetBottomMargin(0.02)
         
-        ax2.axhline(0, color='b', linestyle='--', linewidth=1)
-        ax2.axhline(3, color='r', linestyle=':', linewidth=1, alpha=0.5)
-        ax2.axhline(-3, color='r', linestyle=':', linewidth=1, alpha=0.5)
-        ax2.plot(bin_centers, pulls, 'ko', markersize=3)
+        frame.GetYaxis().SetTitle("Events / 5 MeV")
+        frame.GetYaxis().SetTitleSize(0.05)
+        frame.GetYaxis().SetLabelSize(0.04)
+        frame.Draw()
         
-        ax2.set_xlabel('M(Λ̄pK⁻) [MeV/c²]', fontsize=12)
-        ax2.set_ylabel('Pull [σ]', fontsize=12)
-        ax2.set_ylim(-5, 5)
-        ax2.grid(True, alpha=0.3)
+        # Add legend
+        legend = ROOT.TLegend(0.65, 0.5, 0.88, 0.88)
+        legend.SetBorderSize(0)
+        legend.SetFillStyle(0)
+        legend.AddEntry("data", "Data", "lep")
+        legend.AddEntry("total", "Total fit", "l")
+        legend.AddEntry(0, f"#chi^{{2}}/ndf = {chi2:.2f}", "")
+        legend.AddEntry(0, "", "")
         
-        plt.tight_layout()
+        # Add yields to legend
+        for state in ["jpsi", "etac", "chic0", "chic1"]:
+            n_val = yields[state].getVal()
+            n_err = yields[state].getError()
+            label = f"N_{state} = {n_val:.0f} #pm {n_err:.0f}"
+            legend.AddEntry(0, label, "")
         
-        # Save
+        legend.Draw()
+        
+        # Bottom pad: pulls
+        pad2 = canvas.cd(2)
+        pad2.SetPad(0, 0, 1, 0.3)
+        pad2.SetTopMargin(0.02)
+        pad2.SetBottomMargin(0.3)
+        
+        # Create pull distribution
+        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))
+        pull_hist = frame.pullHist("data", "total")
+        pull_frame.addPlotable(pull_hist, "P")
+        
+        pull_frame.GetYaxis().SetTitle("Pull [#sigma]")
+        pull_frame.GetYaxis().SetTitleSize(0.12)
+        pull_frame.GetYaxis().SetLabelSize(0.10)
+        pull_frame.GetYaxis().SetNdivisions(505)
+        pull_frame.GetYaxis().SetTitleOffset(0.4)
+        pull_frame.GetXaxis().SetTitle("M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]")
+        pull_frame.GetXaxis().SetTitleSize(0.12)
+        pull_frame.GetXaxis().SetLabelSize(0.10)
+        pull_frame.SetMinimum(-5)
+        pull_frame.SetMaximum(5)
+        
+        pull_frame.Draw()
+        
+        # Add zero line
+        line = ROOT.TLine(self.fit_range[0], 0, self.fit_range[1], 0)
+        line.SetLineColor(ROOT.kBlue)
+        line.SetLineStyle(2)
+        line.Draw()
+        
+        # Save plot
         plot_dir = Path(self.config.paths["output"]["plots_dir"]) / "fits"
         plot_dir.mkdir(exist_ok=True, parents=True)
         
-        plt.savefig(plot_dir / f"mass_fit_{year}.png", dpi=150, bbox_inches='tight')
-        plt.close()
+        output_file = plot_dir / f"mass_fit_{year}.pdf"
+        canvas.SaveAs(str(output_file))
         
-        print(f"  ✓ Saved fit plot: {plot_dir / f'mass_fit_{year}.png'}")
+        print(f"  ✓ Saved fit plot: {output_file}")

@@ -1,3 +1,9 @@
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import Dict, Tuple, Any
+import matplotlib.pyplot as plt
+
 class BranchingFractionCalculator:
     """
     Calculate branching fraction ratios relative to J/ψ
@@ -10,17 +16,25 @@ class BranchingFractionCalculator:
     
     These ratios are physics-meaningful and don't require
     knowing individual branching fractions!
+    
+    Phase 7 Implementation:
+    - Uses yields from Phase 5 (mass fitting)
+    - Uses efficiency ratios from Phase 6
+    - Combines all years with proper error propagation
+    - Statistical uncertainties only (draft analysis)
     """
     
     def __init__(self, 
                  yields: Dict[str, Dict[str, Tuple[float, float]]],
-                 efficiencies: Dict[str, Dict[str, float]],
-                 config: TOMLConfig):
+                 efficiencies: Dict[str, Dict[str, Dict[str, float]]],
+                 config: Any):
         """
         Args:
             yields: {year: {state: (value, error)}}
-            efficiencies: {state: {year: ε_total}}
-            config: Configuration object
+                   e.g., {"2016": {"jpsi": (1000.0, 50.0), "etac": (200.0, 20.0)}}
+            efficiencies: {state: {year: {"eff": value, "err": error}}}
+                   e.g., {"jpsi": {"2016": {"eff": 0.85, "err": 0.03}}}
+            config: Configuration object with paths
         """
         self.yields = yields
         self.efficiencies = efficiencies
@@ -31,7 +45,10 @@ class BranchingFractionCalculator:
         """
         Calculate Σ(N^year / ε^year) for a given state
         
-        Sum over all years, propagating uncertainties
+        Sum over all years, propagating uncertainties properly.
+        
+        Error propagation for Y = N/ε:
+        σ_Y = Y × sqrt((σ_N/N)² + (σ_ε/ε)²)
         
         Returns:
             (corrected_yield, error)
@@ -41,12 +58,16 @@ class BranchingFractionCalculator:
         
         for year in sorted(self.yields.keys()):
             n_year, n_err = self.yields[year][state]
-            eps_year = self.efficiencies[state][year]
+            eps_year = self.efficiencies[state][year]["eff"]
+            eps_err = self.efficiencies[state][year]["err"]
             
             if eps_year > 0:
                 corrected = n_year / eps_year
-                # Propagate uncertainty (assuming ε uncertainty negligible for draft)
-                error = n_err / eps_year
+                
+                # Full error propagation including efficiency uncertainty
+                rel_err_n = n_err / n_year if n_year > 0 else 0.0
+                rel_err_eps = eps_err / eps_year
+                error = corrected * np.sqrt(rel_err_n**2 + rel_err_eps**2)
                 
                 corrected_yields.append(corrected)
                 errors_sq.append(error**2)
@@ -163,12 +184,17 @@ class BranchingFractionCalculator:
         for state in ["jpsi", "etac", "chic0", "chic1"]:
             for year in sorted(self.yields.keys()):
                 n_year, n_err = self.yields[year][state]
-                eps_year = self.efficiencies[state][year]
+                eps_year = self.efficiencies[state][year]["eff"]
+                eps_err = self.efficiencies[state][year]["err"]
                 lumi = self.config.luminosity["integrated_luminosity"][year]
                 
                 if eps_year > 0 and lumi > 0:
                     normalized_yield = n_year / (lumi * eps_year)
-                    error = n_err / (lumi * eps_year)
+                    
+                    # Error propagation for N/(L×ε)
+                    rel_err_n = n_err / n_year if n_year > 0 else 0.0
+                    rel_err_eps = eps_err / eps_year
+                    error = normalized_yield * np.sqrt(rel_err_n**2 + rel_err_eps**2)
                     
                     results.append({
                         "state": state,

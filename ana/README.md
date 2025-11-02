@@ -1,195 +1,418 @@
-# B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis
+# Pipeline Integration Guide
 
-Draft analysis for measuring branching fraction ratios of charmonium states (J/ψ, ηc(1S), χc0, χc1) in B⁺ → Λ̄pK⁻K⁺ decays.
+## Overview
 
-## 🎯 Current Status
+The B⁺ → Λ̄pK⁻K⁺ charmonium analysis pipeline consists of 7 phases, each building on the previous one. This guide explains how to run the complete pipeline on real data and MC.
 
-### ✅ Phase 0: COMPLETED
-Data/MC loading infrastructure updated to use proven `BranchConfig` system from `analysis/` folder.
+### Quick Start
 
-**Key improvements:**
-- Automatic handling of data vs MC branch name differences
-- Support for both LL and DD Lambda reconstruction categories
-- Branch name normalization (your code uses common names)
-- Proper ROOT file structure handling
-- Derived branch calculations (Bu_MM_corrected, delta_z, M_LpKm, etc.)
-
-### 🔄 Next: Phase 2 (Data Loading Execution)
-Ready to load all data and MC files.
-
-## Quick Start
-
-### 1. Test the Implementation
+### Using Makefile (Recommended)
 ```bash
-cd ana
-python test_phase0.py
+# Show all available commands
+make help
+
+# Check/activate virtual environment
+make venv
+
+# Quick test with subset of data (~5 min)
+make quick-test
+
+# Run full pipeline (all years, skip optimization)
+make pipeline
+
+# Show results
+make show-results
+make list-outputs
 ```
 
-This will verify:
-- ✓ Imports work
-- ✓ Configuration loads
-- ✓ BranchConfig functions correctly
-- ✓ File structure is accessible
-- ✓ Derived branch logic is sound
+### Direct Python Commands
+```bash
+# Run everything with default settings (uses cache when available)
+python run_pipeline.py
 
-### 2. Test Data Loading (Small Sample)
-```python
-from modules.data_handler import TOMLConfig, DataManager
+# Run without caching (force reprocessing)
+python run_pipeline.py --no-cache
 
-config = TOMLConfig("./config")
-dm = DataManager(config)
+# Skip optimization phase (use default cuts)
+python run_pipeline.py --skip-optimization
 
-# Load one file
-events = dm.load_tree("data", 2016, "MD", "LL")
-print(f"Loaded {len(events)} events")
-print(f"Fields: {list(events.fields)[:10]}")
-
-# Check derived branches
-print(f"Bu_MM_corrected: {events['Bu_MM_corrected'][:5]}")
-print(f"M_LpKm_h1: {events['M_LpKm_h1'][:5]}")
+# Process only 2016 data
+python run_pipeline.py --years 2016 --track-types LL
 ```
 
-### 3. Load All Data (Full Pipeline)
-```python
-# Load all years, combining magnets and track types
-data_by_year = dm.load_all_data_combined_magnets("data")
+### Run Individual Phases
+```bash
+# Phase 2: Load data/MC with Lambda cuts
+python run_phase.py 2 --years 2016,2017,2018
 
-# Load MC for all states
-mc_jpsi = dm.load_all_data_combined_magnets("Jpsi")
-mc_etac = dm.load_all_data_combined_magnets("etac")
-mc_chic0 = dm.load_all_data_combined_magnets("chic0")
-mc_chic1 = dm.load_all_data_combined_magnets("chic1")
-mc_kpkm = dm.load_all_data_combined_magnets("KpKm")  # Phase space
+# Phase 5: Mass fitting (requires Phase 2 cache)
+python run_phase.py 5 --use-cached
+
+# Phase 6: Efficiency calculation (requires Phase 2 cache)
+python run_phase.py 6 --use-cached
+
+# Phase 7: Branching ratios (requires Phase 5 and 6 cache)
+python run_phase.py 7
 ```
 
-## Project Structure
+## Pipeline Phases
 
+### Phase 0: Branch Discovery (Manual)
+**Status:** Already completed
+- Branch names identified and documented
+- Configuration files updated
+
+### Phase 1: Configuration Validation
+**Status:** Automatic
+- Loads all TOML configuration files
+- Validates paths and parameters
+- Creates output directories
+
+### Phase 2: Data/MC Loading + Lambda Pre-Selection
+**Purpose:** Load raw data and apply fixed Lambda cuts
+**Time:** 5-15 minutes (depending on data size)
+**Caching:** Yes - saves intermediate results to `cache/`
+
+**What it does:**
+- Loads data for all years and track types (LL/DD)
+- Loads MC for all 4 states (J/ψ, ηc, χc0, χc1)
+- Applies fixed Lambda selection cuts:
+  - Mass window: |M_Λ - 1115.683| < 5 MeV
+  - Flight distance χ²: FD_CHI2 > 100
+  - Impact parameter: IPCHI2_OWNPV > 9
+  - PID: ProbNNp > 0.2
+- Saves filtered events to cache
+
+**Typical efficiencies:**
+- Data: ~27% (harsh cuts due to background)
+- MC: ~52% (cleaner signal events)
+
+**Output:**
+- `cache/phase2_data_after_lambda.pkl` - Cached data
+- `cache/phase2_mc_after_lambda.pkl` - Cached MC
+
+### Phase 3: Selection Optimization (Optional)
+**Purpose:** Find optimal Bu-level cuts using 2D FOM scans
+**Time:** 30-60 minutes
+**Caching:** Yes
+**Can Skip:** Yes - use default cuts
+
+**What it does:**
+- Scans Bu_PT, IPCHI2_OWNPV, and other variables
+- Computes Figure of Merit (FOM) for each cut value
+- Identifies optimal cuts per state
+- Creates optimization plots
+
+**Output:**
+- `tables/optimized_cuts.csv` - Optimal cuts
+- `plots/optimization/*.png` - FOM scan plots
+
+**Note:** For draft analysis, you can skip this and use simple cuts (e.g., Bu_PT > 2000 MeV)
+
+### Phase 4: Apply Optimized Cuts
+**Purpose:** Apply Bu-level cuts to data and MC
+**Time:** < 1 minute
+**Status:** Currently simplified (Lambda cuts only)
+
+**What it does:**
+- Takes cuts from Phase 3
+- Applies to both data and MC
+- Creates final datasets for fitting and efficiency
+
+**Note:** Currently just passes through Lambda-cut data. Bu-level cut application can be added later.
+
+### Phase 5: Mass Fitting
+**Purpose:** Fit charmonium mass spectrum to extract yields
+**Time:** 5-10 minutes
+**Caching:** Yes
+
+**What it does:**
+- Sets up RooFit mass observable M(Λ̄pK⁻) ∈ [2800, 4000] MeV
+- Creates signal PDFs: RooVoigtian for each state
+  - J/ψ: M=3096.92 MeV, Γ=0.093 MeV (fixed)
+  - ηc: M=2983.90 MeV, Γ=32.0 MeV (floating)
+  - χc0: M=3414.75 MeV, Γ=10.5 MeV (floating)
+  - χc1: M=3510.66 MeV, Γ=0.84 MeV (fixed)
+- Creates background PDF: Exponential per year
+- Performs extended likelihood fit
+- Extracts yields with uncertainties
+- Creates fit plots with pulls
+
+**Output:**
+- `tables/phase5_yields.csv` - Yields per state/year
+- `plots/fit_*.png` - Fit plots
+- `cache/phase5_fit_results.pkl` - Complete fit results
+
+**Example yields (expected):**
 ```
-ana/
-├── config/                      # TOML configuration files
-│   ├── paths.toml              # File paths, years, magnets
-│   ├── particles.toml          # PDG values, mass windows
-│   ├── selection.toml          # Lambda cuts, optimization ranges
-│   └── ...                     # Other config files
-├── modules/
-│   ├── data_handler.py         # ✓ Data/MC loading with BranchConfig
-│   ├── lambda_selector.py      # ✓ Lambda selection cuts
-│   ├── selection_optimizer.py  # ✓ FOM optimization
-│   ├── mass_fitter.py          # TODO: RooFit mass fitting
-│   ├── efficiency_calculator.py # TODO: Efficiency calculation
-│   └── branching_fraction_calculator.py  # TODO: BR ratios
-├── test_phase0.py              # ✓ Test script for Phase 0
-├── MIGRATION_NOTES.md          # ✓ Documentation of Phase 0 changes
-├── plan.md                     # ✓ Complete analysis plan
-└── main_analysis.py            # Master execution script
-
-# Reused from analysis/:
-../analysis/
-├── branches_config.toml        # Complete branch configuration
-├── branch_config.py            # Branch configuration manager
-├── data_loader.py              # Reference implementation
-└── mc_loader.py                # Reference implementation
-```
-
-## Branch Name Examples
-
-After loading, your analysis code uses these **common names** (BranchConfig handles the rest):
-
-| Common Name | Description | Value Type |
-|-------------|-------------|------------|
-| `Bu_M` | B+ invariant mass | Float |
-| `Bu_MM` | B+ mass (alternative) | Float |
-| `Bu_PT` | B+ transverse momentum | Float |
-| `L0_MM` | Lambda mass | Float |
-| `L0_FDCHI2_OWNPV` | Lambda FD χ² | Float |
-| `Lp_ProbNNp` | Lambda proton PID | Float |
-| `p_ProbNNp` | Bachelor proton PID | Float |
-| `h1_ProbNNk` | K± PID (normalized) | Float |
-| `h2_ProbNNk` | K± PID (normalized) | Float |
-| `Bu_MM_corrected` | Lambda-corrected B+ mass | Float (derived) |
-| `delta_z` | Z vertex separation significance | Float (derived) |
-| `M_LpKm_h1` | M(Λ̄p h1) invariant mass | Float (derived) |
-| `M_LpKm_h2` | M(Λ̄p h2) invariant mass | Float (derived) |
-| `M_KK` | M(K+K-) invariant mass | Float (derived) |
-
-**Data/MC differences handled automatically**:
-- Data uses `h1_MC15TuneV1_ProbNNk` → normalized to `h1_ProbNNk`
-- MC uses `h1_MC12TuneV4_ProbNNk` → normalized to `h1_ProbNNk`
-- Your code just uses `h1_ProbNNk` everywhere!
-
-## Analysis Phases
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 0 | ✅ DONE | Branch configuration & data loading infrastructure |
-| 1 | ✅ DONE | Configuration setup (TOML files exist) |
-| 2 | ⏳ NEXT | Data loading execution |
-| 3 | 📋 TODO | Lambda pre-selection (fixed cuts) |
-| 4 | 📋 TODO | Selection optimization (2D FOM scan) |
-| 5 | 📋 TODO | Mass fitting (RooFit) |
-| 6 | 📋 TODO | Efficiency calculation |
-| 7 | 📋 TODO | Branching fraction ratios |
-
-## Key Features
-
-### ✅ What's Working
-1. **Unified branch handling** - Reuses proven BranchConfig system
-2. **Data/MC compatibility** - Automatic alias resolution
-3. **LL/DD support** - Combines both Lambda categories
-4. **Derived branches** - Bu_MM_corrected, delta_z, M_LpKm, etc.
-5. **Trigger selection** - (L0_TIS) AND (HLT1_TOS) AND (HLT2_TOS)
-6. **Modular design** - Each phase is independent module
-
-### 🔄 What's Next
-1. **Test with real data** - Load a small sample
-2. **Apply Lambda cuts** - Phase 3 selection
-3. **Optimize cuts** - Phase 4 FOM maximization
-4. **Fit masses** - Phase 5 RooFit
-5. **Calculate efficiencies** - Phase 6
-6. **Extract ratios** - Phase 7 final results
-
-## Important Notes
-
-### ⚠️ Draft Analysis Scope
-This is a **draft analysis** focusing on:
-- ✅ Statistical precision
-- ✅ Analysis framework
-- ✅ Branching fraction **ratios** (not absolute)
-
-**Not yet included** (for full analysis):
-- Systematic uncertainties
-- Full efficiency breakdown (only selection efficiency)
-- Multiple candidate handling
-- Background composition studies
-
-### 🎯 Physics Goal
-Measure **ratios** of branching fractions:
-
-```
-Br(B⁺ → ηc X) × Br(ηc → Λ̄pK⁻)
-────────────────────────────────── = ?
-Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)
-
-Br(B⁺ → χc0 X) × Br(χc0 → Λ̄pK⁻)
-────────────────────────────────── = ?
-Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)
-
-Br(B⁺ → χc1 X) × Br(χc1 → Λ̄pK⁻)
-────────────────────────────────── = ?
-Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)
+2016:
+  jpsi    : 5000.0 ± 100.0
+  etac    :  750.0 ±  40.0
+  chic0   : 1000.0 ±  50.0
+  chic1   :  500.0 ±  35.0
 ```
 
-**Key advantage**: Ratios don't require absolute branching fractions!
+### Phase 6: Efficiency Calculation
+**Purpose:** Calculate selection efficiencies from MC
+**Time:** 2-5 minutes
+**Caching:** Yes
 
-## Documentation
+**What it does:**
+- Takes MC after Lambda cuts (from Phase 2)
+- Applies optimized cuts (from Phase 3)
+- Calculates selection efficiency: ε_sel = N_after / N_before
+- Computes binomial errors: σ_eff = sqrt(ε × (1-ε) / N)
+- Calculates efficiency ratios: ε_J/ψ / ε_state
+- Propagates errors through ratios
 
-- `plan.md` - Complete analysis plan with pseudocode
-- `MIGRATION_NOTES.md` - Phase 0 implementation details
-- `test_phase0.py` - Validation tests
-- `../analysis/branches_config.toml` - Branch configuration reference
+**Output:**
+- `tables/efficiencies.csv` - Efficiencies per state/year
+- `tables/efficiency_ratios.csv` - Ratios ε_J/ψ / ε_state
+- `tables/efficiencies.md` - Human-readable table
+- `cache/phase6_efficiencies.pkl` - Cached results
 
-## Questions?
+**Expected efficiencies:**
+```
+All states: ~85-90% (very similar)
+Ratios: ~0.96-1.11 (close to 1.0)
+```
 
-Check the migration notes: `MIGRATION_NOTES.md`
+### Phase 7: Branching Fraction Ratios
+**Purpose:** Calculate final physics results
+**Time:** < 1 minute
+**Caching:** No (fast calculation)
 
-Or review the proven implementation: `../analysis/studies/selection/`
+**What it does:**
+- Combines yields from Phase 5
+- Combines efficiencies from Phase 6
+- Calculates efficiency-corrected yields: Σ(N/ε) per state
+- Computes BR ratios: R = Σ(N_state/ε_state) / Σ(N_J/ψ/ε_J/ψ)
+- Full error propagation including efficiency uncertainties
+- Yield consistency check: N/(L×ε) vs year
+- Generates final summary
+
+**Output:**
+- `tables/branching_fraction_ratios.csv` - Final BR ratios
+- `tables/yield_consistency.csv` - Consistency check
+- `plots/yield_consistency_check.png` - Consistency plot
+- `results/final_results.md` - Complete summary
+
+**Example results:**
+```
+ηc/J/ψ ratio:    0.151 ± 0.005  (ηc ~15% of J/ψ)
+χc0/J/ψ ratio:   0.200 ± 0.006  (χc0 ~20% of J/ψ)
+χc1/J/ψ ratio:   0.101 ± 0.004  (χc1 ~10% of J/ψ)
+χc1/χc0 ratio:   0.504 ± 0.025  (not NRQCD predicted ~3)
+```
+
+## Caching System
+
+The pipeline uses intelligent caching to avoid reprocessing:
+
+### Cache Location
+All cached results stored in `cache/` directory:
+```
+cache/
+├── phase2_data_after_lambda.pkl    # Data after Lambda cuts
+├── phase2_mc_after_lambda.pkl      # MC after Lambda cuts
+├── phase3_optimized_cuts.pkl       # Optimized cuts
+├── phase5_fit_results.pkl          # Fit results
+└── phase6_efficiencies.pkl         # Efficiencies
+```
+
+### Cache Usage
+```bash
+# Use cache when available (default)
+python run_pipeline.py --use-cached
+
+# Force reprocessing (ignore cache)
+python run_pipeline.py --no-cache
+
+# Clear cache manually
+rm cache/*.pkl
+```
+
+### When to Clear Cache
+- After updating configuration files
+- After modifying selection cuts
+- After discovering data issues
+- When you want fresh results
+
+## Error Handling
+
+### Common Issues
+
+**Issue:** "No cached data found"
+```
+Solution: Run Phase 2 first: python run_phase.py 2
+```
+
+**Issue:** "Data root directory not found"
+```
+Solution: Check config/paths.toml and update data paths
+```
+
+**Issue:** "Memory error during loading"
+```
+Solution: Process one year at a time: --years 2016
+```
+
+**Issue:** "RooFit segmentation fault"
+```
+Solution: This is a known ROOT issue. Try:
+  1. Reduce data size (single year)
+  2. Run infrastructure tests instead
+  3. Update ROOT version
+```
+
+## Data Requirements
+
+### Expected File Structure
+```
+├── data
+│   │   ├── dataBu2L0barPHH_16MD.root
+│   │   ├── dataBu2L0barPHH_16MU.root
+│   │   ├── dataBu2L0barPHH_17MD.root
+│   │   ├── dataBu2L0barPHH_17MU.root
+│   │   ├── dataBu2L0barPHH_18MD.root
+│   │   └── dataBu2L0barPHH_18MU.root
+└── mc
+        ├── chic0
+    │       │   ├── chic0_16_MD.root
+    │       │   ├── chic0_16_MU.root
+    │       │   ├── chic0_17_MD.root
+    │       │   ├── chic0_18_MD.root
+    │       │   └── chic0_18_MU.root
+        ├── chic1
+    │       │   ├── chic1_16_MD.root
+    │       │   ├── chic1_16_MU.root
+    │       │   ├── chic1_17_MD.root
+    │       │   ├── chic1_17_MU.root
+    │       │   ├── chic1_18_MD.root
+    │       │   └── chic1_18_MU.root
+        ├── chic2
+    │       │   ├── chic2_16_MD.root
+    │       │   ├── chic2_16_MU.root
+    │       │   ├── chic2_17_MD.root
+    │       │   ├── chic2_17_MU.root
+    │       │   ├── chic2_18_MD.root
+    │       │   └── chic2_18_MU.root
+        ├── etac
+    │       │   ├── etac_16_MD.root
+    │       │   ├── etac_16_MU.root
+    │       │   ├── etac_17_MD.root
+    │       │   ├── etac_17_MU.root
+    │       │   ├── etac_18_MD.root
+    │       │   └── etac_18_MU.root
+        ├── Jpsi
+    │       │   ├── Jpsi_16_MD.root
+    │       │   ├── Jpsi_16_MU.root
+    │       │   ├── Jpsi_17_MD.root
+    │       │   ├── Jpsi_17_MU.root
+    │       │   ├── Jpsi_18_MD.root
+    │       │   └── Jpsi_18_MU.root
+        └── KpKm
+                ├── KpKm_16_MD.root
+                ├── KpKm_16_MU.root
+                ├── KpKm_17_MD.root
+                ├── KpKm_17_MU.root
+                ├── KpKm_18_MD.root
+                ├── KpKm_18_MU.root
+```
+
+### File Contents
+Each ROOT file should contain:
+- TTree: `B2L0barPKpKm_LL/DecayTree` (or `_DD`)
+- Branches: Lambda 4-momentum, bachelor tracks, Bu variables
+- See `config/branch_config.toml` for complete list
+
+## Output Files
+
+### Tables (CSV format)
+- `phase5_yields.csv` - Fitted yields
+- `efficiencies.csv` - Selection efficiencies
+- `efficiency_ratios.csv` - ε_J/ψ / ε_state
+- `branching_fraction_ratios.csv` - Final BR ratios
+- `yield_consistency.csv` - N/(L×ε) per year
+- `optimized_cuts.csv` - Optimal cuts (if optimization run)
+
+### Plots (PNG format)
+- `fit_*.png` - Mass fit results
+- `yield_consistency_check.png` - Consistency across years
+- `optimization/*.png` - FOM scans (if optimization run)
+
+### Results (Markdown)
+- `final_results.md` - Complete analysis summary with:
+  - BR ratio results
+  - Comparison with theory
+  - Statistical uncertainties
+  - Next steps for full analysis
+
+## Workflow Examples
+
+### First Time Running
+```bash
+# 1. Validate everything works with small dataset
+python run_phase.py 2 --years 2016 --track-types LL
+
+# 2. If successful, run full Phase 2
+python run_phase.py 2
+
+# 3. Skip optimization, use default cuts
+# 4. Run fitting on data
+python run_phase.py 5 --use-cached
+
+# 5. Calculate efficiencies from MC
+python run_phase.py 6 --use-cached
+
+# 6. Compute final BR ratios
+python run_phase.py 7
+```
+
+### Re-running After Updates
+```bash
+# Clear cache and reprocess
+rm cache/*.pkl
+python run_pipeline.py --no-cache
+```
+
+### Quick Test on Subset
+```bash
+# Test with 2016 LL only (fast)
+python run_phase.py 2 --years 2016 --track-types LL
+python run_phase.py 5 --use-cached
+python run_phase.py 6 --use-cached
+python run_phase.py 7
+```
+
+### Production Run
+```bash
+# Full analysis with all data
+python run_pipeline.py --skip-optimization
+```
+
+## Performance Tips
+
+1. **Use caching:** Default behavior, saves hours of reprocessing
+2. **Start small:** Test with one year first
+3. **Skip optimization:** Use default cuts for draft analysis
+4. **Monitor memory:** Large datasets may need subset processing
+5. **Parallel processing:** Not yet implemented, but possible for Phase 3
+
+## Next Steps
+
+After completing the pipeline:
+
+1. **Review results:** Check `results/final_results.md`
+2. **Validate fits:** Inspect fit plots in `plots/`
+3. **Check consistency:** Review yield consistency across years
+4. **Add systematics:** Implement systematic uncertainty studies
+5. **Full analysis:** Add reconstruction, PID, trigger efficiencies
+
+## Support
+
+For issues or questions:
+1. Check this README
+2. Review `plan.md` for detailed phase specifications
+3. Run individual phase tests in `tests/test_phase*.py`
+4. Check intermediate cache files for debugging

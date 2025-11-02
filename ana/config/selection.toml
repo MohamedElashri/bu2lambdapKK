@@ -17,6 +17,11 @@ These are pre-selection cuts ensuring good Lambda reconstruction.
 Applied before FOM optimization.
 """
 
+[bu_fixed_selection]
+# FIXED cuts (not optimized)
+mass_corrected_min = 5255.0  # MeV/c² (B+ mass ± 25 MeV)
+mass_corrected_max = 5305.0  # MeV/c²
+
 [bu_fixed_selection.notes]
 comment = """
 B+ mass cut using Lambda-corrected mass.

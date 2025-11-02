@@ -1,13 +1,9 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
 import awkward as ak
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Tuple, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from data_handler import TOMLConfig
+from typing import Dict, List, Tuple, Any
 
 class SelectionOptimizer:
     """
@@ -21,7 +17,7 @@ class SelectionOptimizer:
                  signal_mc: Dict[str, Dict[str, ak.Array]],
                  phase_space_mc: Dict[str, ak.Array],
                  data: Dict[str, ak.Array],
-                 config: TOMLConfig):
+                 config: Any):
         """
         signal_mc: {state: {year: events_after_lambda_cuts}}
         phase_space_mc: {year: events_after_lambda_cuts} (KpKm non-resonant)
@@ -68,8 +64,15 @@ class SelectionOptimizer:
     def count_events_in_region(self, 
                                events: ak.Array,
                                region: Tuple[float, float]) -> int:
-        """Count events in M_LpKm mass window"""
-        mask = (events["M_LpKm"] > region[0]) & (events["M_LpKm"] < region[1])
+        """
+        Count events in M_LpKm mass window
+        
+        Note: Uses M_LpKm_h2 (h2 is K- in charmonium candidate Λ̄pK⁻)
+              h1 is K+, h2 is K- (confirmed from PDG ID analysis)
+        """
+        # Use M_LpKm_h2 (h2 = K- from charmonium, h1 = K+)
+        mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in events.fields else "M_LpKm"
+        mask = (events[mass_branch] > region[0]) & (events[mass_branch] < region[1])
         return ak.sum(mask)
     
     def estimate_background_in_signal_region(self,
@@ -160,6 +163,44 @@ class SelectionOptimizer:
         
         return pd.DataFrame(results)
     
+    def _get_branch_name_for_variable(self, category: str, var_name: str) -> str:
+        """
+        Map (category, variable) to actual branch name in normalized data
+        
+        This mapping is based on branch naming conventions after normalization.
+        """
+        # Mapping for each category
+        # NOTE: h1 is K+, h2 is K- (confirmed from PDG ID analysis)
+        branch_map = {
+            "bu": {
+                "pt": "Bu_PT",
+                "dtf_chi2": "Bu_DTF_chi2",
+                "ipchi2": "Bu_IPCHI2_OWNPV",
+                "fdchi2": "Bu_FDCHI2_OWNPV",
+            },
+            "bachelor_p": {
+                "probnnp": "p_ProbNNp",
+                "track_chi2ndof": "p_TRACK_CHI2NDOF",
+                "ipchi2": "p_IPCHI2_OWNPV",
+            },
+            "kplus": {
+                "probnnk": "h1_ProbNNk",  # h1 is K+ (confirmed)
+                "track_chi2ndof": "h1_TRACK_CHI2NDOF",
+                "ipchi2": "h1_IPCHI2_OWNPV",
+            },
+            "kminus": {
+                "probnnk": "h2_ProbNNk",  # h2 is K- (confirmed - used for charmonium)
+                "track_chi2ndof": "h2_TRACK_CHI2NDOF",
+                "ipchi2": "h2_IPCHI2_OWNPV",
+            },
+        }
+        
+        if category in branch_map and var_name in branch_map[category]:
+            return branch_map[category][var_name]
+        else:
+            # Fallback: construct from category_var_name
+            return f"{category}_{var_name}"
+    
     def optimize_2d_all_variables(self) -> pd.DataFrame:
         """
         Perform 2D optimization: variables × states
@@ -177,15 +218,20 @@ class SelectionOptimizer:
         all_results = []
         
         for category in categories:
-            opt_config = self.config.get_optimizable_cuts(category)
+            # Get config with proper key name
+            config_key = f"{category}_optimizable_selection"
+            opt_config = self.config.selection.get(config_key, {})
+            
+            if not opt_config:
+                print(f"⚠️  No optimizable config found for {category}")
+                continue
             
             for var_name, var_config in opt_config.items():
                 if var_name == "notes":  # Skip notes section
                     continue
                 
-                # Get actual branch name - this needs to be determined from the config
-                # For now, use the variable name directly as it should match normalized names
-                branch_name = var_config.get("branch", f"{category}_{var_name}")
+                # Get actual branch name from mapping
+                branch_name = self._get_branch_name_for_variable(category, var_name)
                 
                 print(f"\n{'='*60}")
                 print(f"Optimizing: {category}.{var_name}")
@@ -288,7 +334,7 @@ class SelectionOptimizer:
         plot_dir = Path(self.config.paths["output"]["plots_dir"]) / "optimization"
         plot_dir.mkdir(exist_ok=True, parents=True)
         
-        filename = f"fom_scan_{category}_{var_name}_{state}.png"
+        filename = f"fom_scan_{category}_{var_name}_{state}.pdf"
         plt.savefig(plot_dir / filename, dpi=150, bbox_inches='tight')
         plt.close()
     

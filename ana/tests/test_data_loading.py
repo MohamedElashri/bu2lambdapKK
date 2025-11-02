@@ -10,12 +10,12 @@ import sys
 from pathlib import Path
 
 # Add modules to path
-sys.path.append(str(Path(__file__).parent / "modules"))
+sys.path.append(str(Path(__file__).parent.parent / "modules"))
 
 def test_single_file_loading():
     """Test loading a single ROOT file"""
     print("="*80)
-    print("TEST: Loading Single ROOT File")
+    print("TEST: Loading Single ROOT File + Derived Branches")
     print("="*80)
     
     from data_handler import TOMLConfig, DataManager
@@ -29,6 +29,10 @@ def test_single_file_loading():
         events = dm.load_tree("data", 2016, "MD", "LL")
         
         print(f"✓ Successfully loaded {len(events)} events")
+        
+        # Compute derived branches manually (normally done by load_all_data_combined_magnets)
+        print("\nComputing derived branches...")
+        events = dm.compute_derived_branches(events)
         
         # Check available fields
         print(f"\nAvailable fields ({len(events.fields)} total):")
@@ -47,7 +51,7 @@ def test_single_file_loading():
                 vals = events[branch][:3]
                 print(f"    Sample values: {vals}")
             else:
-                print(f"  ✗ {branch} missing")
+                print(f"  ✗ {branch} missing (may require additional branches)")
         
         # Check some physics quantities
         print("\nPhysics sanity checks:")

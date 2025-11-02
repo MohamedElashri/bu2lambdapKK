@@ -11,7 +11,7 @@ class LambdaSelector:
     These are NOT optimized per charmonium state
     """
     
-    def __init__(self, config: TOMLConfig):
+    def __init__(self, config: "TOMLConfig"):
         self.config = config
         self.cuts = config.get_lambda_cuts()
         
@@ -60,6 +60,31 @@ class LambdaSelector:
         n_before = len(events)
         n_after = ak.sum(mask)
         print(f"  Lambda selection: {n_before} → {n_after} ({100*n_after/n_before:.1f}%)")
+        
+        return events[mask]
+    
+    def apply_bu_fixed_cuts(self, events: ak.Array) -> ak.Array:
+        """
+        Apply fixed B+ mass cut (using Lambda-corrected mass)
+        
+        Fixed cut: 5255 < Bu_MM_corrected < 5305 MeV
+        This is a ±25 MeV window around the B+ mass (5279 MeV)
+        
+        Returns: Filtered awkward array
+        """
+        bu_fixed_cuts = self.config.get_bu_fixed_cuts()
+        
+        # Check if Bu_MM_corrected exists (should be computed in derived branches)
+        if "Bu_MM_corrected" not in events.fields:
+            print("  ⚠️  Bu_MM_corrected not found, cannot apply B+ mass cut")
+            return events
+        
+        mask = (events["Bu_MM_corrected"] > bu_fixed_cuts["mass_corrected_min"]) & \
+               (events["Bu_MM_corrected"] < bu_fixed_cuts["mass_corrected_max"])
+        
+        n_before = len(events)
+        n_after = ak.sum(mask)
+        print(f"  B+ mass cut: {n_before} → {n_after} ({100*n_after/n_before:.1f}%)")
         
         return events[mask]
     

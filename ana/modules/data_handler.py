@@ -67,7 +67,7 @@ class TOMLConfig:
         Returns: {variable: {begin, end, step, cut_type}}
         """
         key = f"{category}_optimizable_selection"
-        return self.selection[key]
+        return self.selection.get(key, {})
 
 class FourMomentumCalculator:
     """
@@ -249,9 +249,10 @@ class DataManager:
             events = ak.with_field(events, Delta_Z, "Delta_Z_mm")
         
         # 3. Charmonium invariant mass M(Λ̄pK⁻)
-        # Need to identify which hadron is K- (h1 or h2)
-        # For now, assume we need to calculate M(L0 + p + h1) and M(L0 + p + h2)
-        # and pick the right combination based on charge or mass
+        # IMPORTANT: h1 is K+, h2 is K- (confirmed from PDG ID analysis)
+        # Therefore: M_LpKm_h2 = M(Λ̄pK⁻) is the charmonium candidate mass
+        #            M_LpKm_h1 = M(Λ̄pK⁺) is NOT used for charmonium
+        # We calculate both for completeness
         
         if all(b in events.fields for b in [
             "L0_PX", "L0_PY", "L0_PZ", "L0_PE",

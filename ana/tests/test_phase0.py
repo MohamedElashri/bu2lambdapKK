@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 # Add modules to path
-sys.path.append(str(Path(__file__).parent / "modules"))
+sys.path.append(str(Path(__file__).parent.parent / "modules"))
 
 def test_imports():
     """Test that all imports work"""
