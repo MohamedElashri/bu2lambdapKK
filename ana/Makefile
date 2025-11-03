@@ -44,24 +44,30 @@ venv: ## Activate virtual environment (checks .venv in current or parent dir)
 
 ##@ Pipeline Execution
 
-pipeline: ## Run full analysis pipeline (all years, skip optimization)
+pipeline: ## Run full analysis pipeline (all years: 2016, 2017, 2018)
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mComplete Analysis Pipeline (Phases 2 → 5 → 6 → 7)\033[0m\n"
+	@printf "\033[0;34mComplete Analysis Pipeline - All Years (2016, 2017, 2018)\033[0m\n"
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[1;33m📊 Processing all years (2016, 2017, 2018) and track types (LL, DD)\033[0m\n\n"
-	@$(PYTHON) run_pipeline.py --skip-optimization
+	@printf "\033[1;33m📊 Phases: 2 → 3 → 4 → 5 → 6 → 7\033[0m\n"
+	@printf "\033[1;33m📊 Includes: Per-year + Combined fits\033[0m\n\n"
+	@$(PYTHON) run_pipeline.py --years 2016,2017,2018
 
-pipeline-full: ## Run full pipeline including optimization
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mComplete Pipeline with Optimization (Phases 2 → 3 → 5 → 6 → 7)\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[1;33m📊 Includes FOM optimization scan (Phase 3)\033[0m\n\n"
-	@$(PYTHON) run_pipeline.py
+pipeline-2016: ## Run pipeline with 2016 data only
+	@printf "\033[0;34m═══ Pipeline: 2016 Only ═══\033[0m\n"
+	@$(PYTHON) run_pipeline.py --years 2016
+
+pipeline-2017: ## Run pipeline with 2017 data only
+	@printf "\033[0;34m═══ Pipeline: 2017 Only ═══\033[0m\n"
+	@$(PYTHON) run_pipeline.py --years 2017
+
+pipeline-2018: ## Run pipeline with 2018 data only
+	@printf "\033[0;34m═══ Pipeline: 2018 Only ═══\033[0m\n"
+	@$(PYTHON) run_pipeline.py --years 2018
 
 pipeline-no-cache: ## Run pipeline forcing reprocessing (no cache)
 	@printf "\033[0;34m═══ Pipeline (No Cache) ═══\033[0m\n"
 	@printf "\033[0;31m⚠️  Forcing full reprocessing\033[0m\n"
-	@$(PYTHON) run_pipeline.py --skip-optimization --no-cache
+	@$(PYTHON) run_pipeline.py --years 2016,2017,2018 --no-cache
 
 quick-test: ## Quick pipeline test (2016 LL only)
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"

@@ -456,14 +456,16 @@ class MassFitter:
                        dataset: ROOT.RooDataSet, model: ROOT.RooAddPdf,
                        yields: Dict[str, ROOT.RooRealVar]):
         """
-        Plot fit result with data, total fit, and components
+        Plot fit result with LHCb publication quality
         
-        Creates LHCb-style plot with:
+        Creates official LHCb-style plot with:
         - Data points with Poisson errors
         - Total fit curve
-        - Individual signal components
+        - Individual signal components with labels
         - Background component
         - Pull distribution
+        - Proper LaTeX labels
+        - No title, no parameter text on plot
         
         Args:
             year: Year string
@@ -472,11 +474,12 @@ class MassFitter:
             model: Total PDF
             yields: Dictionary of yield parameters
         """
-        # Create RooPlot
-        frame = mass_var.frame(ROOT.RooFit.Title(f"Mass Fit - Year {year}"))
+        # Create RooPlot with year as title
+        title = "2016-2018" if year == "combined" else str(year)
+        frame = mass_var.frame(ROOT.RooFit.Title(title))
         
         # Plot data
-        dataset.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.MarkerSize(0.5))
+        dataset.plotOn(frame, ROOT.RooFit.Name("data"), ROOT.RooFit.MarkerSize(0.8))
         
         # Plot total PDF
         model.plotOn(frame, ROOT.RooFit.Name("total"), 
@@ -494,64 +497,80 @@ class MassFitter:
         for state in ["jpsi", "etac", "chic0", "chic1", "background"]:
             component_name = f"pdf_signal_{state}" if state != "background" else f"pdf_bkg_{year}"
             model.plotOn(frame, ROOT.RooFit.Components(component_name),
+                        ROOT.RooFit.Name(state),
                         ROOT.RooFit.LineColor(colors[state]),
                         ROOT.RooFit.LineStyle(ROOT.kDashed),
                         ROOT.RooFit.LineWidth(2))
         
-        # Calculate chi2
-        chi2 = frame.chiSquare()
-        
-        # Create canvas
-        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 600)
+        # Create canvas with better spacing
+        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 700)
         canvas.Divide(1, 2)
         
-        # Top pad: data + fit
+        # Top pad: data + fit (larger, better spacing)
         pad1 = canvas.cd(1)
-        pad1.SetPad(0, 0.3, 1, 1)
+        pad1.SetPad(0, 0.35, 1, 1)  # Increased bottom position for better separation
         pad1.SetBottomMargin(0.02)
+        pad1.SetTopMargin(0.08)
+        pad1.SetLeftMargin(0.12)
+        pad1.SetRightMargin(0.05)
         
-        frame.GetYaxis().SetTitle("Events / 5 MeV")
-        frame.GetYaxis().SetTitleSize(0.05)
-        frame.GetYaxis().SetLabelSize(0.04)
+        # Adjust axis labels
+        frame.GetYaxis().SetTitle("Candidates / (5 MeV/#it{c}^{2})")
+        frame.GetYaxis().SetTitleSize(0.055)
+        frame.GetYaxis().SetLabelSize(0.045)
+        frame.GetYaxis().SetTitleOffset(1.1)
+        frame.GetXaxis().SetLabelSize(0)  # Hide x-axis labels on top plot
         frame.Draw()
         
-        # Add legend
-        legend = ROOT.TLegend(0.65, 0.5, 0.88, 0.88)
+        # Add legend with state labels on the right side
+        legend = ROOT.TLegend(0.60, 0.50, 0.88, 0.88)
         legend.SetBorderSize(0)
         legend.SetFillStyle(0)
-        legend.AddEntry("data", "Data", "lep")
-        legend.AddEntry("total", "Total fit", "l")
-        legend.AddEntry(0, f"#chi^{{2}}/ndf = {chi2:.2f}", "")
-        legend.AddEntry(0, "", "")
+        legend.SetTextSize(0.045)
         
-        # Add yields to legend
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
-            n_val = yields[state].getVal()
-            n_err = yields[state].getError()
-            label = f"N_{state} = {n_val:.0f} #pm {n_err:.0f}"
-            legend.AddEntry(0, label, "")
+        # Decay mode label
+        legend.AddEntry("data", "B^{+} #rightarrow #bar{#Lambda}pK^{#minus}K^{+}", "lep")
+        legend.AddEntry("total", "Total fit", "l")
+        legend.AddEntry(0, "", "")  # Spacer
+        
+        # Add component labels with proper LaTeX
+        state_labels = {
+            "jpsi": "J/#psi",
+            "etac": "#eta_{c}",
+            "chic0": "#chi_{c0}",
+            "chic1": "#chi_{c1}",
+            "background": "Background"
+        }
+        
+        for state in ["jpsi", "etac", "chic0", "chic1", "background"]:
+            legend.AddEntry(state, state_labels[state], "l")
         
         legend.Draw()
         
-        # Bottom pad: pulls
+        # Bottom pad: pulls (with better spacing)
         pad2 = canvas.cd(2)
-        pad2.SetPad(0, 0, 1, 0.3)
+        pad2.SetPad(0, 0, 1, 0.35)  # Adjusted for better separation
         pad2.SetTopMargin(0.02)
-        pad2.SetBottomMargin(0.3)
+        pad2.SetBottomMargin(0.25)
+        pad2.SetLeftMargin(0.12)
+        pad2.SetRightMargin(0.05)
         
-        # Create pull distribution
-        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))
+        # Create pull distribution without title
+        pull_frame = mass_var.frame()
+        pull_frame.SetTitle("")  # Remove title from pull plot
         pull_hist = frame.pullHist("data", "total")
         pull_frame.addPlotable(pull_hist, "P")
         
-        pull_frame.GetYaxis().SetTitle("Pull [#sigma]")
-        pull_frame.GetYaxis().SetTitleSize(0.12)
-        pull_frame.GetYaxis().SetLabelSize(0.10)
+        # Better pull plot formatting - remove y-axis title
+        pull_frame.GetYaxis().SetTitle("")  # No y-axis label
+        pull_frame.GetYaxis().SetTitleSize(0.10)
+        pull_frame.GetYaxis().SetLabelSize(0.09)
         pull_frame.GetYaxis().SetNdivisions(505)
-        pull_frame.GetYaxis().SetTitleOffset(0.4)
-        pull_frame.GetXaxis().SetTitle("M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]")
-        pull_frame.GetXaxis().SetTitleSize(0.12)
-        pull_frame.GetXaxis().SetLabelSize(0.10)
+        pull_frame.GetYaxis().SetTitleOffset(0.5)
+        pull_frame.GetXaxis().SetTitle("m(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
+        pull_frame.GetXaxis().SetTitleSize(0.10)
+        pull_frame.GetXaxis().SetLabelSize(0.09)
+        pull_frame.GetXaxis().SetTitleOffset(1.0)
         pull_frame.SetMinimum(-5)
         pull_frame.SetMaximum(5)
         
@@ -562,6 +581,16 @@ class MassFitter:
         line.SetLineColor(ROOT.kBlue)
         line.SetLineStyle(2)
         line.Draw()
+        
+        # Add ±3σ lines
+        line_3sigma_up = ROOT.TLine(self.fit_range[0], 3, self.fit_range[1], 3)
+        line_3sigma_up.SetLineColor(ROOT.kRed)
+        line_3sigma_up.SetLineStyle(3)
+        line_3sigma_down = ROOT.TLine(self.fit_range[0], -3, self.fit_range[1], -3)
+        line_3sigma_down.SetLineColor(ROOT.kRed)
+        line_3sigma_down.SetLineStyle(3)
+        line_3sigma_up.Draw()
+        line_3sigma_down.Draw()
         
         # Save plot
         plot_dir = Path(self.config.paths["output"]["plots_dir"]) / "fits"

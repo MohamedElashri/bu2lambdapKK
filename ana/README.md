@@ -1,44 +1,62 @@
-# Pipeline Integration Guide
+# B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis Pipeline
 
 ## Overview
 
-The B⁺ → Λ̄pK⁻K⁺ charmonium analysis pipeline consists of 7 phases, each building on the previous one. This guide explains how to run the complete pipeline on real data and MC.
+Complete analysis pipeline for measuring branching fraction ratios of charmonium states (J/ψ, ηc, χc0, χc1) in B⁺ → Λ̄pK⁻K⁺ decays. The pipeline processes data from 2016-2018, performs mass fitting with ROOT/RooFit, calculates efficiencies, and extracts branching fraction ratios.
 
-### Quick Start
+**Key Feature:** Self-normalizing to J/ψ - we measure RATIOS, no absolute branching fractions needed!
 
-### Using Makefile (Recommended)
+---
+
+## Quick Start
+
+### Essential Commands
+
+```bash
+# 1. Activate virtual environment
+source ../.venv/bin/activate
+
+# 2. Run complete pipeline (all years: 2016, 2017, 2018)
+make pipeline
+
+# 3. View results
+make show-results
+make show-yields
+```
+
+### More Options
+
 ```bash
 # Show all available commands
 make help
 
-# Check/activate virtual environment
-make venv
+# Test with single year
+make pipeline-2016
 
-# Quick test with subset of data (~5 min)
-make quick-test
-
-# Run full pipeline (all years, skip optimization)
+# Clean cache and rerun
+make clean-cache
 make pipeline
 
-# Show results
-make show-results
+# View outputs
+make show-efficiencies
 make list-outputs
 ```
 
 ### Direct Python Commands
+
 ```bash
-# Run everything with default settings (uses cache when available)
-python run_pipeline.py
+# Full pipeline with all years (per-year + combined fits)
+python run_pipeline.py --years 2016,2017,2018
 
-# Run without caching (force reprocessing)
-python run_pipeline.py --no-cache
+# Single year for testing
+python run_pipeline.py --years 2016
 
-# Skip optimization phase (use default cuts)
-python run_pipeline.py --skip-optimization
-
-# Process only 2016 data
-python run_pipeline.py --years 2016 --track-types LL
+# Force reprocessing (no cache)
+python run_pipeline.py --years 2016,2017,2018 --no-cache
 ```
+
+---
+
 
 ### Run Individual Phases (with Automatic Dependencies)
 ```bash
@@ -173,6 +191,7 @@ make phase7  # Runs 2 → 5 → 6 → 7
 **Caching:** Yes
 
 **What it does:**
+- Applies B+ mass cut: [5255, 5305] MeV using Bu_MM_corrected
 - Sets up RooFit mass observable M(Λ̄pK⁻) ∈ [2800, 4000] MeV
 - Creates signal PDFs: RooVoigtian for each state
   - J/ψ: M=3096.92 MeV, Γ=0.093 MeV (fixed)
@@ -180,22 +199,27 @@ make phase7  # Runs 2 → 5 → 6 → 7
   - χc0: M=3414.75 MeV, Γ=10.5 MeV (floating)
   - χc1: M=3510.66 MeV, Γ=0.84 MeV (fixed)
 - Creates background PDF: Exponential per year
-- Performs extended likelihood fit
+- Performs extended likelihood fit per year
+- **NEW:** Also fits combined dataset (all years)
+- Shares physics parameters across years
 - Extracts yields with uncertainties
-- Creates fit plots with pulls
+- Creates publication-quality fit plots
 
 **Output:**
-- `tables/phase5_yields.csv` - Yields per state/year
-- `plots/fit_*.png` - Fit plots
+- `tables/phase5_yields.csv` - Yields per state/year + combined
+- `plots/fits/mass_fit_2016.pdf` - Individual year fits
+- `plots/fits/mass_fit_2017.pdf`
+- `plots/fits/mass_fit_2018.pdf`
+- `plots/fits/mass_fit_combined.pdf` - **Combined 2016-2018 fit**
 - `cache/phase5_fit_results.pkl` - Complete fit results
 
-**Example yields (expected):**
+**Typical yields (2016-2018 combined):**
 ```
-2016:
-  jpsi    : 5000.0 ± 100.0
-  etac    :  750.0 ±  40.0
-  chic0   : 1000.0 ±  50.0
-  chic1   :  500.0 ±  35.0
+combined:
+  J/ψ     :  232 ±   2
+  ηc      :  532 ±   3
+  χc0     :   47 ±   1
+  χc1     :   44 ±   1
 ```
 
 ### Phase 6: Efficiency Calculation
@@ -229,7 +253,7 @@ Ratios: ~0.96-1.11 (close to 1.0)
 **Caching:** No (fast calculation)
 
 **What it does:**
-- Combines yields from Phase 5
+- Combines yields from Phase 5 (per-year only, skips "combined")
 - Combines efficiencies from Phase 6
 - Calculates efficiency-corrected yields: Σ(N/ε) per state
 - Computes BR ratios: R = Σ(N_state/ε_state) / Σ(N_J/ψ/ε_J/ψ)
@@ -243,13 +267,15 @@ Ratios: ~0.96-1.11 (close to 1.0)
 - `plots/yield_consistency_check.png` - Consistency plot
 - `results/final_results.md` - Complete summary
 
-**Example results:**
+**Actual results (2016-2018):**
 ```
-ηc/J/ψ ratio:    0.151 ± 0.005  (ηc ~15% of J/ψ)
-χc0/J/ψ ratio:   0.200 ± 0.006  (χc0 ~20% of J/ψ)
-χc1/J/ψ ratio:   0.101 ± 0.004  (χc1 ~10% of J/ψ)
-χc1/χc0 ratio:   0.504 ± 0.025  (not NRQCD predicted ~3)
+ηc/J/ψ ratio:    2.299 ± 0.238  (ηc ~2.3× J/ψ)
+χc0/J/ψ ratio:   0.279 ± 0.107  (χc0 ~28% of J/ψ)
+χc1/J/ψ ratio:   0.201 ± 0.058  (χc1 ~20% of J/ψ)
+χc1/χc0 ratio:   0.721 ± 0.346  (not NRQCD predicted ~3)
 ```
+
+**Note:** These are statistical uncertainties only. Systematics to be added.
 
 ## Caching System
 
@@ -382,10 +408,9 @@ Each ROOT file should contain:
 - `yield_consistency.csv` - N/(L×ε) per year
 - `optimized_cuts.csv` - Optimal cuts (if optimization run)
 
-### Plots (PNG format)
-- `fit_*.png` - Mass fit results
+### Plots (pdf format)
+- `fit_*.pdf` - Mass fit results
 - `yield_consistency_check.png` - Consistency across years
-- `optimization/*.png` - FOM scans (if optimization run)
 
 ### Results (Markdown)
 - `final_results.md` - Complete analysis summary with:
