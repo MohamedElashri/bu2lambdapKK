@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import sys
 
-# Import BranchConfig from local modules (since files are now copied to ana/)
-from branch_config import BranchConfig
+# Import BranchConfig from local modules
+from .branch_config import BranchConfig
 
 import vector
 
@@ -151,15 +151,23 @@ class DataManager:
         is_mc = particle_type != "data"
         
         # Build file path
+        # Ensure year is an integer for arithmetic
+        year_int = int(year) if isinstance(year, str) else year
+        
         if particle_type == "data":
-            filename = f"dataBu2L0barPHH_{year-2000}{magnet}.root"
+            filename = f"dataBu2L0barPHH_{year_int-2000}{magnet}.root"
             filepath = self.data_path / filename
         else:
-            filename = f"{particle_type}_{year-2000}_{magnet}.root"
+            filename = f"{particle_type}_{year_int-2000}_{magnet}.root"
             filepath = self.mc_path / particle_type / filename
             
         if not filepath.exists():
-            raise FileNotFoundError(f"File not found: {filepath}")
+            # For MC files, return None to allow graceful handling of missing polarities
+            if is_mc:
+                print(f"⚠️  MC file not found (will skip): {filepath}")
+                return None
+            # For data files, this is critical - raise error
+            raise FileNotFoundError(f"Data file not found: {filepath}")
         
         # Build tree path: channel_LL/DecayTree or channel_DD/DecayTree
         channel_path = f"{channel_name}_{track_type}"

@@ -17,6 +17,75 @@ These are pre-selection cuts ensuring good Lambda reconstruction.
 Applied before FOM optimization.
 """
 
+# ═══════════════════════════════════════════════════════════════
+# N-D GRID SCAN VARIABLES (7 variables only)
+# ═══════════════════════════════════════════════════════════════
+# Lambda cuts are FIXED and applied in Phase 2 before optimization
+# Only these 7 variables are scanned in N-dimensional grid:
+#   3×3×3×2×4×6×3 = 3,888 combinations per state
+
+[nd_optimizable_selection]
+
+[nd_optimizable_selection.bu_pt]
+begin = 3000.0
+end = 3500.0
+step = 500.0
+cut_type = "greater"
+branch_name = "Bu_PT"
+description = "B+ transverse momentum (MeV/c)"
+
+[nd_optimizable_selection.bu_fdchi2]
+begin = 100.0
+end = 250.0
+step = 50.0
+cut_type = "greater"
+branch_name = "Bu_FDCHI2_OWNPV"
+description = "B+ flight distance chi2"
+
+[nd_optimizable_selection.bu_ipchi2]
+begin = 0.0
+end = 10.0
+step = 2.0
+cut_type = "less"
+branch_name = "Bu_IPCHI2_OWNPV"
+description = "B+ impact parameter chi2"
+
+[nd_optimizable_selection.bu_dtf_chi2]
+begin = 10.0
+end = 30.0
+step = 10.0
+cut_type = "less"
+branch_name = "Bu_DTF_chi2"
+description = "B+ decay tree fit chi2"
+
+[nd_optimizable_selection.h1_probnnk]
+begin = 0.1
+end = 0.3
+step = 0.1
+cut_type = "greater"
+branch_name = "h1_ProbNNk"
+description = "K+ PID probability"
+
+[nd_optimizable_selection.h2_probnnk]
+begin = 0.1
+end = 0.3
+step = 0.1
+cut_type = "greater"
+branch_name = "h2_ProbNNk"
+description = "K- PID probability"
+
+[nd_optimizable_selection.p_probnnp]
+begin = 0.1
+end = 0.3
+step = 0.1
+cut_type = "greater"
+branch_name = "p_ProbNNp"
+description = "Bachelor proton PID probability"
+
+# ═══════════════════════════════════════════════════════════════
+# OLD 1D SCAN VARIABLES (not used when method="nd_grid_scan")
+# ═══════════════════════════════════════════════════════════════
+
 [bu_fixed_selection]
 # FIXED cuts (not optimized)
 mass_corrected_min = 5255.0  # MeV/c² (B+ mass ± 25 MeV)
@@ -134,22 +203,25 @@ cut_type = "greater"
 description = "K- IP χ² to PV"
 
 [optimization_strategy]
-method = "2d_scan"
+method = "nd_grid_scan"
 comment = """
-Perform 2D optimization:
-- Rows: Different variables to optimize
-- Columns: Different charmonium states
+N-D grid scan: Exhaustive search over all combinations of cut values
 
-For each (variable, state) pair:
-1. Apply all other cuts (fixed + previously optimized)
-2. Scan variable from begin to end with step
-3. Compute FOM at each point
-4. Select optimal value (maximum FOM)
+Only these 7 variables are optimized (Lambda cuts already fixed in Phase 2):
+- h1_ProbNNk (K+): > [0.1, 0.3, 0.1] → 3 points
+- h2_ProbNNk (K-): > [0.1, 0.3, 0.1] → 3 points
+- p_ProbNNp (bachelor proton): > [0.1, 0.3, 0.1] → 3 points
+- Bu_PT: > [3000, 3500, 500] → 2 points
+- Bu_FDCHI2: > [100, 250, 50] → 4 points
+- Bu_IPCHI2: < [0, 10, 2] → 6 points
+- Bu_DTF_chi2: < [10, 30, 10] → 3 points
 
-Order of optimization:
-1. B+ variables (highest impact)
-2. Bachelor p̄ variables
-3. K+/K- variables (optimize together if similar)
+Total: 3×3×3×2×4×6×3 = 3,888 combinations per state (very fast!)
+
+For each state (J/ψ, ηc, χc0, χc1):
+- Test ALL combinations in 7D grid
+- Find combination that maximizes FOM
+- Output optimal cuts for each state
 """
 
 [optimization_strategy.notes]

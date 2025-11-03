@@ -25,6 +25,7 @@ from pathlib import Path
 import pickle
 import pandas as pd
 import numpy as np
+import awkward as ak
 from typing import Dict, Any
 import json
 
@@ -78,7 +79,7 @@ class PipelineManager:
                 raise ValueError(f"Missing required config: {req}")
         
         # Check that data paths exist
-        data_root = Path(self.config.paths["data"]["root_dir"])
+        data_root = Path(self.config.paths["data"]["base_path"])
         if not data_root.exists():
             print(f"⚠️  Warning: Data root directory not found: {data_root}")
             print("   Make sure data files are available before running")
@@ -138,9 +139,10 @@ class PipelineManager:
         if use_cached:
             data_dict = self._load_cache("2", "data_after_lambda")
             mc_dict = self._load_cache("2", "mc_after_lambda")
-            if data_dict is not None and mc_dict is not None:
-                print("✓ Loaded cached data and MC (after Lambda cuts)")
-                return data_dict, mc_dict
+            phase_space_dict = self._load_cache("2", "phase_space_after_lambda")
+            if data_dict is not None and mc_dict is not None and phase_space_dict is not None:
+                print("✓ Loaded cached data, signal MC, and phase-space MC (after Lambda cuts)")
+                return data_dict, mc_dict, phase_space_dict
         
         # Initialize data manager and Lambda selector
         data_manager = DataManager(self.config)
@@ -154,13 +156,25 @@ class PipelineManager:
             for track_type in track_types:
                 print(f"  {year} {track_type}...", end="", flush=True)
                 
-                # Load raw data
-                events = data_manager.load_single_file(
-                    year=year, 
-                    magnet="MD",  # Load MD, will combine later if needed
-                    track_type=track_type,
-                    data_type="data"
-                )
+                # Load data from both magnets and combine
+                events_md = data_manager.load_tree("data", year, "MD", track_type)
+                events_mu = data_manager.load_tree("data", year, "MU", track_type)
+                
+                # Handle missing files gracefully (for data this should be critical, but we check)
+                available_events = []
+                if events_md is not None:
+                    available_events.append(events_md)
+                if events_mu is not None:
+                    available_events.append(events_mu)
+                
+                if not available_events:
+                    print(f" ❌ Both polarities missing! Skipping data {year} {track_type}")
+                    continue
+                
+                events = ak.concatenate(available_events)
+                
+                # Compute derived branches (M_LpKm_h2, etc.)
+                events = data_manager.compute_derived_branches(events)
                 
                 # Apply Lambda cuts
                 events_after = lambda_selector.apply_lambda_cuts(events)
@@ -173,7 +187,46 @@ class PipelineManager:
                 
                 print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
         
-        # Load and process MC (all 4 states)
+        # Load and process PHASE-SPACE MC (KpKm - for background estimation)
+        print("\n[Loading Phase-Space MC - KpKm for Background]")
+        phase_space_dict = {}
+        for year in years:
+            phase_space_dict[year] = {}
+            for track_type in track_types:
+                print(f"  {year} {track_type}...", end="", flush=True)
+                
+                # Load KpKm MC from both magnets and combine
+                events_md = data_manager.load_tree("KpKm", year, "MD", track_type)
+                events_mu = data_manager.load_tree("KpKm", year, "MU", track_type)
+                
+                # Handle missing files gracefully
+                available_events = []
+                if events_md is not None:
+                    available_events.append(events_md)
+                if events_mu is not None:
+                    available_events.append(events_mu)
+                
+                if not available_events:
+                    print(f" ❌ Both polarities missing! Skipping KpKm {year} {track_type}")
+                    continue
+                
+                events = ak.concatenate(available_events)
+                
+                # Compute derived branches
+                events = data_manager.compute_derived_branches(events)
+                
+                # Apply Lambda cuts
+                events_after = lambda_selector.apply_lambda_cuts(events)
+                
+                n_before = len(events)
+                n_after = len(events_after)
+                eff = 100 * n_after / n_before if n_before > 0 else 0
+                
+                phase_space_dict[year][track_type] = events_after
+                
+                print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
+        
+        # Load and process MC (all 4 signal states)
         print("\n[Loading MC - Signal States]")
         states = ["jpsi", "etac", "chic0", "chic1"]
         mc_dict = {}
@@ -187,13 +240,27 @@ class PipelineManager:
                 for track_type in track_types:
                     print(f"    {year} {track_type}...", end="", flush=True)
                     
-                    # Load raw MC
-                    events = data_manager.load_single_file(
-                        year=year,
-                        magnet="MD",
-                        track_type=track_type,
-                        data_type=state
-                    )
+                    # Load MC from both magnets and combine
+                    # Map state names: jpsi -> Jpsi, others stay lowercase
+                    state_name = "Jpsi" if state == "jpsi" else state
+                    events_md = data_manager.load_tree(state_name, year, "MD", track_type)
+                    events_mu = data_manager.load_tree(state_name, year, "MU", track_type)
+                    
+                    # Handle missing files gracefully (collect available events)
+                    available_events = []
+                    if events_md is not None:
+                        available_events.append(events_md)
+                    if events_mu is not None:
+                        available_events.append(events_mu)
+                    
+                    if not available_events:
+                        print(f" ❌ Both polarities missing! Skipping {state} {year} {track_type}")
+                        continue
+                    
+                    events = ak.concatenate(available_events)
+                    
+                    # Compute derived branches (M_LpKm_h2, etc.)
+                    events = data_manager.compute_derived_branches(events)
                     
                     # Apply Lambda cuts
                     events_after = lambda_selector.apply_lambda_cuts(events)
@@ -209,20 +276,31 @@ class PipelineManager:
         # Cache results
         self._save_cache("2", "data_after_lambda", data_dict)
         self._save_cache("2", "mc_after_lambda", mc_dict)
+        self._save_cache("2", "phase_space_after_lambda", phase_space_dict)
         
-        print("\n✓ Phase 2 complete: Data and MC loaded with Lambda cuts applied")
+        print("\n✓ Phase 2 complete: Data, signal MC, and phase-space MC loaded")
+        print("  → Data: will be used ONLY for final fitting (not optimization)")
+        print("  → Signal MC: used for signal efficiency in optimization")
+        print("  → Phase-space MC (KpKm): used for background estimate in optimization")
         
-        return data_dict, mc_dict
+        return data_dict, mc_dict, phase_space_dict
     
-    def phase3_selection_optimization(self, data_dict: Dict, mc_dict: Dict,
+    def phase3_selection_optimization(self, data_dict: Dict, mc_dict: Dict, 
+                                     phase_space_dict: Dict,
                                      use_cached: bool = False,
                                      force_rerun: bool = False):
         """
-        Phase 3: Optimize selection cuts using 2D FOM scans
+        Phase 3: Optimize selection cuts using N-D grid scan with MC ONLY
+        
+        IMPORTANT: Real data is NOT used for optimization!
+        - Signal: signal MC (J/ψ, ηc, χc)
+        - Background: phase-space MC (KpKm non-resonant)
+        - Real data is ONLY used in Phase 5 (mass fitting)
         
         Args:
-            data_dict: Data after Lambda cuts
-            mc_dict: MC after Lambda cuts
+            data_dict: Data after Lambda cuts (NOT USED for optimization!)
+            mc_dict: Signal MC after Lambda cuts (for signal efficiency)
+            phase_space_dict: Phase-space MC after Lambda cuts (for background estimate)
             use_cached: Use cached optimization results
             force_rerun: Force re-optimization even if cache exists
         
@@ -249,19 +327,65 @@ class PipelineManager:
         print("\n⚠️  Running full 2D optimization (this may take 30-60 minutes)")
         print("    You can skip this and use default cuts if needed\n")
         
-        # Initialize optimizer (needs phase space MC - placeholder for now)
-        # TODO: Load phase space MC properly
-        phase_space_mc = {}  # Placeholder
+        # Combine track types (LL + DD) for optimizer
+        # Optimizer expects: {state: {year: awkward_array}} and {year: awkward_array}
+        print("Combining LL and DD track types for optimization...")
+        
+        mc_combined = {}
+        for state in mc_dict:
+            mc_combined[state] = {}
+            for year in mc_dict[state]:
+                # Concatenate LL and DD along axis 0 (event axis)
+                arrays_to_combine = []
+                for track_type in mc_dict[state][year]:
+                    arr = mc_dict[state][year][track_type]
+                    # Ensure it's a flat record array
+                    if hasattr(arr, 'layout'):
+                        arrays_to_combine.append(arr)
+                if arrays_to_combine:
+                    mc_combined[state][year] = ak.concatenate(arrays_to_combine, axis=0)
+                    print(f"  {state}/{year}: {len(mc_combined[state][year])} events")
+        
+        # Combine phase-space MC track types for optimization
+        phase_space_combined = {}
+        for year in phase_space_dict:
+            arrays_to_combine = []
+            for track_type in phase_space_dict[year]:
+                arr = phase_space_dict[year][track_type]
+                if hasattr(arr, 'layout'):
+                    arrays_to_combine.append(arr)
+            if arrays_to_combine:
+                phase_space_combined[year] = ak.concatenate(arrays_to_combine, axis=0)
+                print(f"  phase_space/{year}: {len(phase_space_combined[year])} events")
+        
+        # Initialize optimizer
+        # NOTE: Real data is NOT passed to optimizer - only MC is used!
+        print("\n⚠️  IMPORTANT: Optimization uses MC ONLY (no real data blinding)")
+        print("    Signal: signal MC (J/ψ, ηc, χc)")
+        print("    Background: phase-space MC (KpKm non-resonant)")
         
         optimizer = SelectionOptimizer(
-            signal_mc=mc_dict,
-            phase_space_mc=phase_space_mc,
-            data=data_dict,
+            signal_mc=mc_combined,
+            phase_space_mc=phase_space_combined,
+            data={},  # Empty - optimizer should NOT use real data!
             config=self.config
         )
         
-        # Run optimization
-        optimized_cuts_df = optimizer.optimize_2d_all_variables()
+        # Run optimization based on config method
+        opt_method = self.config.selection.get("optimization_strategy", {}).get("method", "1d_scan")
+        
+        if opt_method == "nd_grid_scan":
+            print("\n⚠️  Running N-D GRID SCAN: exhaustive search over 7 variables")
+            print("    Testing all combinations in 7D space (3,888 points per state)")
+            print("    Lambda cuts are FIXED (already applied in Phase 2)")
+            optimized_cuts_df = optimizer.optimize_nd_grid_scan()
+        elif opt_method == "2d_pairs":
+            print("\n⚠️  Running 2D pair optimization: scanning variable pairs")
+            optimized_cuts_df = optimizer.optimize_2d_pairs()
+        else:  # Default to 1d_scan
+            print("\n⚠️  Running 1D optimization: scanning each variable independently")
+            print("    Results organized as 2D table: variables × states")
+            optimized_cuts_df = optimizer.optimize_2d_all_variables()
         
         # Cache and save
         self._save_cache("3", "optimized_cuts", optimized_cuts_df)
@@ -340,9 +464,17 @@ class PipelineManager:
         # Initialize fitter
         fitter = MassFitter(self.config)
         
+        # Combine LL and DD track types for each year
+        data_combined = {}
+        for year in data_final:
+            events_list = []
+            for track_type in data_final[year]:
+                events_list.append(data_final[year][track_type])
+            data_combined[year] = ak.concatenate(events_list)
+        
         # Perform fits
         print("\nFitting charmonium mass spectrum...")
-        fit_results = fitter.perform_fit(data_final)
+        fit_results = fitter.perform_fit(data_combined)
         
         # Cache results
         self._save_cache("5", "fit_results", fit_results)
@@ -419,20 +551,14 @@ class PipelineManager:
                     mc_combined = mc_final[state][year][track_type]
                 
                 # Calculate efficiency
-                eff, err = eff_calculator.calculate_selection_efficiency(mc_combined, state)
+                eff_result = eff_calculator.calculate_selection_efficiency(mc_combined, state)
                 
-                efficiencies[state][year] = {"eff": eff, "err": err}
+                efficiencies[state][year] = eff_result
                 
-                print(f"    {year}: ε = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%)")
+                print(f"    {year}: ε = {eff_result['eff']:.4f} ± {eff_result['err']:.4f} ({100*eff_result['eff']:.2f}%)")
         
-        # Calculate efficiency ratios
-        print("\n  Efficiency ratios (ε_J/ψ / ε_state):")
-        ratios = eff_calculator.calculate_efficiency_ratios(efficiencies)
-        
-        for state in ["etac", "chic0", "chic1"]:
-            ratio = ratios[state]["ratio"]
-            err = ratios[state]["error"]
-            print(f"    ε_J/ψ / ε_{state} = {ratio:.4f} ± {err:.4f}")
+        # Calculate efficiency ratios (returns DataFrame)
+        ratios_df = eff_calculator.calculate_efficiency_ratios(efficiencies)
         
         # Cache results
         self._save_cache("6", "efficiencies", efficiencies)
@@ -482,14 +608,14 @@ class PipelineManager:
         return ratios_df
     
     def run_full_pipeline(self, years: list = None, track_types: list = None,
-                         skip_optimization: bool = False, use_cached: bool = True):
+                         force_reoptimize: bool = False, use_cached: bool = True):
         """
         Execute complete analysis pipeline
         
         Args:
             years: Years to process (default: all)
             track_types: Track types to process (default: all)
-            skip_optimization: Skip selection optimization phase
+            force_reoptimize: Force re-running cut optimization (ignore saved/cached results)
             use_cached: Use cached intermediate results when available
         """
         print("\n" + "="*80)
@@ -497,30 +623,41 @@ class PipelineManager:
         print("="*80)
         print("\nDraft Analysis - Statistical Uncertainties Only")
         print("Phases: 2→3→4→5→6→7")
+        print("\nPHASE OVERVIEW:")
+        print("  Phase 2: Load data/MC + apply Lambda pre-selection (FIXED cuts)")
+        print("  Phase 3: Optimize B+/bachelor/kaon cuts (PER-STATE optimization)")
+        print("           → Produces separate optimal cuts for J/ψ, ηc, χc0, χc1")
+        print("  Phase 4: Apply optimized cuts to data/MC")
+        print("  Phase 5: Mass fitting → extract yields per state")
+        print("  Phase 6: Efficiency calculation per state")
+        print("  Phase 7: Branching fraction ratios")
         print("="*80)
         
         # Phase 2: Load data and apply Lambda cuts
-        data_dict, mc_dict = self.phase2_load_data_and_lambda_cuts(
+        data_dict, mc_dict, phase_space_dict = self.phase2_load_data_and_lambda_cuts(
             years=years,
             track_types=track_types,
             use_cached=use_cached
         )
         
-        # Phase 3: Selection optimization (optional)
-        if not skip_optimization:
-            optimized_cuts_df = self.phase3_selection_optimization(
-                data_dict, mc_dict, use_cached=use_cached
-            )
-        else:
-            print("\n⚠️  Skipping optimization - using default cuts")
-            # Create dummy cuts dataframe
-            states = ["jpsi", "etac", "chic0", "chic1"]
-            optimized_cuts_df = pd.DataFrame({
-                "state": states,
-                "variable": ["Bu_PT"] * len(states),
-                "optimal_value": [2000.0] * len(states),
-                "cut_type": [">"] * len(states)
-            })
+        # Phase 3: Selection optimization (ALWAYS RUN - critical for per-state analysis!)
+        print("\n" + "="*80)
+        print("PHASE 3: SELECTION OPTIMIZATION (Per-State)")
+        print("="*80)
+        print("This phase optimizes cuts independently for each charmonium state:")
+        print("  - J/ψ (highest stats) → can use tighter cuts")
+        print("  - ηc (lowest mass) → may need softer cuts")  
+        print("  - χc0, χc1 (intermediate) → state-specific optimization")
+        print("")
+        print("Each variable (Bu_PT, IPCHI2, etc.) is optimized per-state using FOM.")
+        print("="*80)
+        
+        # Run optimization (will use cache unless force_reoptimize is set)
+        optimized_cuts_df = self.phase3_selection_optimization(
+            data_dict, mc_dict, phase_space_dict,
+            use_cached=use_cached,
+            force_rerun=force_reoptimize
+        )
         
         # Phase 4: Apply optimized cuts
         data_final, mc_final = self.phase4_apply_optimized_cuts(
@@ -591,26 +728,20 @@ def main():
         description="B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis Pipeline"
     )
     parser.add_argument(
-        "--skip-optimization", 
+        "--force-reoptimize",
         action="store_true",
-        help="Skip selection optimization (use default cuts)"
-    )
-    parser.add_argument(
-        "--use-cached",
-        action="store_true",
-        default=True,
-        help="Use cached intermediate results (default: True)"
+        help="Force re-running of cut optimization (ignore cached/saved results)"
     )
     parser.add_argument(
         "--no-cache",
         action="store_true",
-        help="Force reprocessing (ignore cache)"
+        help="Force reprocessing (ignore all cached results)"
     )
     parser.add_argument(
         "--years",
         type=str,
-        default="2016,2017,2018",
-        help="Comma-separated list of years (default: 2016,2017,2018)"
+        default="2016",  # Default to 2016 only for faster testing
+        help="Comma-separated list of years (default: 2016; use 2016,2017,2018 for full)"
     )
     parser.add_argument(
         "--track-types",
@@ -633,7 +764,7 @@ def main():
     results = pipeline.run_full_pipeline(
         years=years,
         track_types=track_types,
-        skip_optimization=args.skip_optimization,
+        force_reoptimize=args.force_reoptimize,
         use_cached=use_cached
     )
     

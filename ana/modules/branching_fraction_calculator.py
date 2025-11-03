@@ -57,6 +57,10 @@ class BranchingFractionCalculator:
         errors_sq = []
         
         for year in sorted(self.yields.keys()):
+            # Skip "combined" - we use per-year efficiencies
+            if year == "combined":
+                continue
+                
             n_year, n_err = self.yields[year][state]
             eps_year = self.efficiencies[state][year]["eff"]
             eps_err = self.efficiencies[state][year]["err"]
@@ -183,6 +187,10 @@ class BranchingFractionCalculator:
         
         for state in ["jpsi", "etac", "chic0", "chic1"]:
             for year in sorted(self.yields.keys()):
+                # Skip "combined" - we check per-year consistency
+                if year == "combined":
+                    continue
+                    
                 n_year, n_err = self.yields[year][state]
                 eps_year = self.efficiencies[state][year]["eff"]
                 eps_err = self.efficiencies[state][year]["err"]

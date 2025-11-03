@@ -49,6 +49,10 @@ class MassFitter:
         self.config = config
         self.fit_range = config.particles["mass_windows"]["charmonium_fit_range"]
         
+        # B+ mass window for pre-selection (applied BEFORE fitting)
+        self.bu_mass_min = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_min", 5255.0)
+        self.bu_mass_max = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_max", 5305.0)
+        
         # Shared parameters across years (will be created on first use)
         self.masses = {}      # M_J/ψ, M_ηc, M_χc0, M_χc1
         self.widths = {}      # Γ states (some fixed, some floating)
@@ -56,6 +60,13 @@ class MassFitter:
         
         # Observable (shared across all fits)
         self.mass_var = None
+        
+        # Store all PDFs and variables to prevent garbage collection
+        self.signal_pdfs = {}  # {state: pdf}
+        self.bkg_pdfs = {}     # {year: pdf}
+        self.alpha_bkgs = {}   # {year: alpha}
+        self.models = {}       # {year: model}
+        self.yields = {}       # {year: {state: yield_var}}
         
     def setup_observable(self) -> ROOT.RooRealVar:
         """
@@ -87,6 +98,10 @@ class MassFitter:
             RooVoigtian PDF for this state
         """
         state_lower = state.lower()
+        
+        # Return cached PDF if it exists
+        if state_lower in self.signal_pdfs:
+            return self.signal_pdfs[state_lower]
         
         # Map state names to config keys
         config_key_map = {
@@ -151,6 +166,9 @@ class MassFitter:
             self.resolution
         )
         
+        # Cache the PDF
+        self.signal_pdfs[state_lower] = signal_pdf
+        
         return signal_pdf
     
     def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooExponential, ROOT.RooRealVar]:
@@ -167,6 +185,10 @@ class MassFitter:
         Returns:
             (background_pdf, alpha_parameter)
         """
+        # Return cached PDF if it exists
+        if year in self.bkg_pdfs:
+            return self.bkg_pdfs[year], self.alpha_bkgs[year]
+        
         alpha = ROOT.RooRealVar(
             f"alpha_bkg_{year}",
             f"#alpha_{{bkg}} {year}",
@@ -181,6 +203,10 @@ class MassFitter:
             mass_var,
             alpha
         )
+        
+        # Cache
+        self.bkg_pdfs[year] = bkg_pdf
+        self.alpha_bkgs[year] = alpha
         
         return bkg_pdf, alpha
 
@@ -202,7 +228,7 @@ class MassFitter:
         """
         pdf_list = ROOT.RooArgList()
         coef_list = ROOT.RooArgList()
-        yields = {}
+        year_yields = {}
         
         # Signal components (4 charmonium states)
         for state in ["jpsi", "etac", "chic0", "chic1"]:
@@ -217,7 +243,7 @@ class MassFitter:
                 0,     # Minimum (non-negative)
                 1e6    # Maximum
             )
-            yields[state] = yield_var
+            year_yields[state] = yield_var
             
             # Add to lists
             pdf_list.add(sig_pdf)
@@ -225,6 +251,7 @@ class MassFitter:
         
         # Background component
         bkg_pdf, alpha_bkg = self.create_background_pdf(mass_var, year)
+        
         bkg_yield = ROOT.RooRealVar(
             f"N_bkg_{year}",
             f"Background yield {year}",
@@ -232,7 +259,7 @@ class MassFitter:
             0,      # Minimum
             1e7     # Maximum
         )
-        yields["background"] = bkg_yield
+        year_yields["background"] = bkg_yield
         
         pdf_list.add(bkg_pdf)
         coef_list.add(bkg_yield)
@@ -245,27 +272,33 @@ class MassFitter:
             coef_list
         )
         
-        return total_pdf, yields
+        # Store model and yields to prevent garbage collection
+        self.models[year] = total_pdf
+        self.yields[year] = year_yields
+        
+        return total_pdf, year_yields
     
-    def perform_fit(self, data_by_year: Dict[str, ak.Array]) -> Dict[str, Any]:
+    def perform_fit(self, data_by_year: Dict[str, ak.Array], fit_combined: bool = True) -> Dict[str, Any]:
         """
-        Perform mass fits to all years
+        Perform mass fits to all years (per-year AND combined)
         
         Strategy:
-        1. Fit each year separately
-        2. Share physical parameters (masses, widths, resolution) across years
-        3. Extract separate yields per year
+        1. Apply B+ mass window cut [5255, 5305] MeV
+        2. Fit each year separately with shared physics parameters
+        3. Fit combined dataset (all years together)
+        4. Model all 4 charmonium states simultaneously: J/ψ, ηc, χc0, χc1
         
         Args:
-            data_by_year: {year: awkward_array} with M_LpKm_h2 branch
+            data_by_year: {year: awkward_array} with M_LpKm_h2 and Bu_M_DTF_PV branches
+            fit_combined: If True, also fit combined dataset
             
         Returns:
             {
-                "yields": {year: {state: (value, error)}},
+                "yields": {year: {state: (value, error)}},  # includes "combined"
                 "masses": {state: (value, error)},
                 "widths": {state: (value, error)},
                 "resolution": (value, error),
-                "fit_results": {year: RooFitResult}
+                "fit_results": {year: RooFitResult}  # includes "combined"
             }
         """
         mass_var = self.setup_observable()
@@ -274,59 +307,75 @@ class MassFitter:
         all_fit_results = {}
         
         print("\n" + "="*80)
-        print("MASS FITTING WITH ROOFIT")
+        print("MASS FITTING WITH ROOFIT - ALL 4 CHARMONIUM STATES")
         print("="*80)
-        print(f"Fit range: {self.fit_range[0]} - {self.fit_range[1]} MeV")
-        print(f"Using M_LpKm_h2 branch (h2 = K-, correct for charmonium)")
+        print(f"Charmonium fit range: {self.fit_range[0]} - {self.fit_range[1]} MeV")
+        print(f"B+ mass window: {self.bu_mass_min} - {self.bu_mass_max} MeV")
+        print(f"Using M_LpKm_h2 (M(Λ̄pK⁻), h2=K⁻ correct for charmonium)")
+        print(f"Modeling: J/ψ, ηc, χc0, χc1 simultaneously")
         print("="*80)
+        
+        # Prepare all datasets (per-year + combined)
+        datasets_to_fit = {}
         
         for year in sorted(data_by_year.keys()):
             print(f"\n[Year {year}]")
             
-            # Get mass data (use M_LpKm_h2 - correct branch for charmonium)
-            mass_array = data_by_year[year]["M_LpKm_h2"]
+            events = data_by_year[year]
             
-            # Apply fit range filter
+            # Apply B+ mass window cut
+            bu_mass = events["Bu_MM_corrected"]  # Lambda-corrected B+ mass
+            bu_mask = (bu_mass >= self.bu_mass_min) & (bu_mass <= self.bu_mass_max)
+            events_bu_cut = events[bu_mask]
+            
+            print(f"  Events after B+ mass cut [{self.bu_mass_min}, {self.bu_mass_max}]: {len(events_bu_cut)}")
+            
+            # Get charmonium mass data (M(Λ̄pK⁻), use h2=K⁻)
+            mass_array = events_bu_cut["M_LpKm_h2"]
+            
+            # Apply charmonium fit range filter
             mask = (mass_array >= self.fit_range[0]) & (mass_array <= self.fit_range[1])
             mass_filtered = mass_array[mask]
             
-            print(f"  Events in fit range: {len(mass_filtered)}")
+            print(f"  Events in charmonium fit range [{self.fit_range[0]}, {self.fit_range[1]}]: {len(mass_filtered)}")
+            
+            datasets_to_fit[year] = mass_filtered
+        
+        # Create combined dataset
+        if fit_combined and len(datasets_to_fit) > 1:
+            combined_mass = ak.concatenate([datasets_to_fit[y] for y in sorted(datasets_to_fit.keys())])
+            datasets_to_fit["combined"] = combined_mass
+            print(f"\n[Combined All Years]")
+            print(f"  Total events: {len(combined_mass)}")
+        
+        # Fit each dataset
+        for dataset_name in sorted(datasets_to_fit.keys()):
+            print(f"\n{'='*60}")
+            print(f"Fitting: {dataset_name}")
+            print(f"{'='*60}")
+            
+            mass_filtered = datasets_to_fit[dataset_name]
+            print(f"  Events to fit: {len(mass_filtered)}")
             
             # Convert to numpy for RooDataSet
             mass_np = ak.to_numpy(mass_filtered)
             
-            # Create RooDataSet using TTree-based approach
-            temp_filename = f"temp_fit_{year}.root"
-            temp_file = ROOT.TFile(temp_filename, "RECREATE")
-            temp_tree = ROOT.TTree("tree", "Mass data")
-            
-            # Create branch
-            mass_value = np.zeros(1, dtype=float)
-            temp_tree.Branch("M_LpKm", mass_value, "M_LpKm/D")
-            
-            # Fill tree
-            for m in mass_np:
-                mass_value[0] = m
-                temp_tree.Fill()
-            
-            temp_tree.Write()
-            temp_file.Close()
-            
-            # Load back and create RooDataSet
-            temp_file = ROOT.TFile(temp_filename, "READ")
-            temp_tree = temp_file.Get("tree")
-            
+            # Create RooDataSet directly from numpy array
             dataset = ROOT.RooDataSet(
-                f"data_{year}",
-                f"Data {year}",
-                temp_tree,
+                f"data_{dataset_name}",
+                f"Data {dataset_name}",
                 ROOT.RooArgSet(mass_var)
             )
             
+            # Fill dataset with events
+            for m in mass_np:
+                mass_var.setVal(m)
+                dataset.add(ROOT.RooArgSet(mass_var))
+            
             print(f"  RooDataSet entries: {dataset.numEntries()}")
             
-            # Build model for this year
-            model, yields = self.build_model_for_year(year, mass_var)
+            # Build model for this dataset
+            model, yields = self.build_model_for_year(dataset_name, mass_var)
             
             # Perform fit
             print(f"  Fitting...")
@@ -352,24 +401,24 @@ class MassFitter:
                 print(f"  WARNING: Fit did not converge properly!")
             
             # Extract yields with errors
-            year_yields = {}
-            print(f"\n  Yields for {year}:")
+            dataset_yields = {}
+            print(f"\n  Yields for {dataset_name}:")
             for state, yield_var in yields.items():
                 value = yield_var.getVal()
                 error = yield_var.getError()
-                year_yields[state] = (value, error)
+                dataset_yields[state] = (value, error)
                 
                 print(f"    N_{state:<12} = {value:8.0f} ± {error:6.0f}")
             
-            all_yields[year] = year_yields
-            all_fit_results[year] = fit_result
+            all_yields[dataset_name] = dataset_yields
+            all_fit_results[dataset_name] = fit_result
+            
+            # Plot fit result
+            plot_path = self.plot_fit_result(dataset_name, mass_var, dataset, model, yields)
+            print(f"  ✓ Saved fit plot: {plot_path}")
             
             # Generate fit plot
             self.plot_fit_result(year, mass_var, dataset, model, yields)
-            
-            # Cleanup
-            temp_file.Close()
-            os.remove(temp_filename)
         
         # Extract shared parameters (from last fit)
         print("\n" + "="*80)

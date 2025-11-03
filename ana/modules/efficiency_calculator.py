@@ -77,9 +77,16 @@ class EfficiencyCalculator:
         
         state_cuts = self.get_cuts_for_state(state)
         
-        # Start with all events passing (use first branch in cuts to get shape)
-        first_branch = state_cuts.iloc[0]["branch_name"]
-        mask = ak.ones_like(mc_events[first_branch], dtype=bool)
+        # Get first branch to initialize mask
+        first_row = state_cuts.iloc[0]
+        first_branch_data = mc_events[first_row["branch_name"]]
+        
+        # Flatten if jagged
+        if 'var' in str(ak.type(first_branch_data)):
+            first_branch_data = ak.firsts(first_branch_data)
+        
+        # Start with all events passing
+        mask = ak.ones_like(first_branch_data, dtype=bool)
         
         # Apply each optimized cut
         for _, row in state_cuts.iterrows():
@@ -87,10 +94,16 @@ class EfficiencyCalculator:
             cut_val = row["optimal_cut"]
             cut_type = row["cut_type"]
             
+            branch_data = mc_events[branch]
+            
+            # Flatten jagged arrays if needed
+            if 'var' in str(ak.type(branch_data)):
+                branch_data = ak.firsts(branch_data)
+            
             if cut_type == "greater":
-                mask = mask & (mc_events[branch] > cut_val)
+                mask = mask & (branch_data > cut_val)
             elif cut_type == "less":
-                mask = mask & (mc_events[branch] < cut_val)
+                mask = mask & (branch_data < cut_val)
             else:
                 raise ValueError(f"Unknown cut type: {cut_type}")
         
@@ -131,7 +144,12 @@ class EfficiencyCalculator:
         else:
             error = 0.0
         
-        return eff, error
+        return {
+            "eff": eff,
+            "err": error,
+            "n_before": n_before,
+            "n_after": n_after
+        }
     
     def calculate_all_efficiencies(self, mc_by_state):
         """
