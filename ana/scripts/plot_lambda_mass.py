@@ -4,6 +4,7 @@ Standalone script to plot Lambda mass distributions
 Plots MC (left) and Real Data (right) for each year and combined
 
 Usage:
+    cd ana/scripts
     python plot_lambda_mass.py
     python plot_lambda_mass.py --years 2016,2017,2018
 """
@@ -12,8 +13,9 @@ import sys
 from pathlib import Path
 import argparse
 
-# Add modules to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add parent directory (ana) to path to access modules
+ana_dir = Path(__file__).parent.parent
+sys.path.insert(0, str(ana_dir))
 
 import awkward as ak
 import numpy as np
@@ -137,16 +139,17 @@ def main():
     print("=" * 80)
     print()
     
-    # Initialize configuration and data manager
-    config = TOMLConfig(config_dir="./config")
+    # Initialize configuration and data manager (paths relative to ana directory)
+    ana_dir = Path(__file__).parent.parent
+    config = TOMLConfig(config_dir=str(ana_dir / "config"))
     data_manager = DataManager(config)
     lambda_selector = LambdaSelector(config)
     
     # Get Lambda cuts for reference
     lambda_cuts = config.get_lambda_cuts()
     
-    # Output directory
-    output_dir = Path("./plots/lambda_mass")
+    # Output directory (relative to ana directory)
+    output_dir = ana_dir / "plots" / "lambda_mass"
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Track types
@@ -261,5 +264,7 @@ def main():
     print(f"\n{'=' * 80}")
     print(f"✓ All plots saved to: {output_dir}")
     print(f"{'=' * 80}\n")
+
+
 if __name__ == "__main__":
     main()

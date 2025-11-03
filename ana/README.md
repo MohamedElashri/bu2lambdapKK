@@ -482,21 +482,26 @@ After completing the pipeline:
 
 ## Standalone Plotting Scripts
 
+Scripts for visualization are located in the `scripts/` directory.
+
 ### Lambda Mass Distribution Plotter
 
-**Purpose:** Visualize Lambda mass distributions after applying fixed cuts
+**Purpose:** Visualize Lambda mass distributions (full range, not just cut region)
 
-**Script:** `plot_lambda_mass.py`
+**Script:** `scripts/plot_lambda_mass.py`
 
 **What it does:**
 - Loads MC and data for specified years
-- Applies fixed Lambda selection cuts from `config/selection.toml`
+- Shows full Lambda mass distribution (no mass cut applied)
 - Creates side-by-side plots (MC left, data right)
-- Shows cut windows and signal regions
+- Indicates cut windows and signal regions with vertical lines
 - Generates separate PDFs per year + combined
 
 **Usage:**
 ```bash
+# From ana/scripts directory
+cd scripts
+
 # Plot all years (default: 2016, 2017, 2018)
 python plot_lambda_mass.py
 
@@ -517,15 +522,15 @@ plots/lambda_mass/
 ```
 
 **Plot features:**
-- MC (left): Shows signal shape after cuts
+- MC (left): Shows signal shape across full mass range
 - Data (right): $B^+ \to \bar{\Lambda} p K^+ K^-$ decay
 - Red dashed lines: Cut boundaries [1111, 1121] MeV
-- Green shaded region: Signal window
-- Event counts in legend
+- Green shaded region: Signal window used in analysis
+- Full distribution shown to visualize background outside cuts
 
 **Typical results:**
-- MC: Clean Lambda peak with ~52% passing cuts
-- Data: Lambda peak with background, ~27% passing cuts
+- MC: ~243k events total (clean Lambda peak)
+- Data: ~1.28M events total (Lambda peak with background)
 
 ---
 
