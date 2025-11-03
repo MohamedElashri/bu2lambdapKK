@@ -87,7 +87,7 @@ OPTIMIZATION_VARIABLES = {
 def plot_variable_comparison(mc_events, data_events, year_label, variable_name, 
                              var_props, optimal_cuts_dict):
     """
-    Create side-by-side plots for MC and Data for one variable
+    Create vertical plots for MC (top) and Data (bottom) for one variable
     
     Args:
         mc_events: Awkward array of MC events
@@ -97,7 +97,7 @@ def plot_variable_comparison(mc_events, data_events, year_label, variable_name,
         var_props: Dictionary with plotting properties
         optimal_cuts_dict: Dict with {state: (cut_value, cut_type)} for all 4 states
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
     
     # Use separate ranges for MC and data
     var_range_mc = var_props['range_mc']

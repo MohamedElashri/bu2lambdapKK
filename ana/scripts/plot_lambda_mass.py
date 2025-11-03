@@ -28,7 +28,7 @@ from modules.lambda_selector import LambdaSelector
 
 def plot_lambda_mass_comparison(mc_events, data_events, year_label, lambda_cuts):
     """
-    Create side-by-side plots for MC and Data Lambda mass
+    Create vertical plots for MC (top) and Data (bottom) Lambda mass
     
     Args:
         mc_events: Awkward array of MC events
@@ -36,7 +36,7 @@ def plot_lambda_mass_comparison(mc_events, data_events, year_label, lambda_cuts)
         year_label: String like "2016" or "Combined"
         lambda_cuts: Dict with lambda selection cuts
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
     
     # Define Lambda mass range
     mass_min = lambda_cuts["mass_min"]
