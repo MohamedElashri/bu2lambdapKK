@@ -534,6 +534,89 @@ plots/lambda_mass/
 
 ---
 
+### Optimization Variables Distribution Plotter
+
+**Purpose:** Visualize distributions of the 7 optimization cut variables with optimal cut values
+
+**Script:** `scripts/plot_optimization_variables.py`
+
+**What it does:**
+- Loads MC and data for specified years
+- Plots distributions of all 7 optimization variables:
+  - `Bu_PT`: B+ transverse momentum
+  - `Bu_FDCHI2_OWNPV`: B+ flight distance χ²
+  - `Bu_IPCHI2_OWNPV`: B+ impact parameter χ²
+  - `Bu_DTF_chi2`: B+ decay tree fit χ²
+  - `h1_ProbNNk`: K+ PID probability
+  - `h2_ProbNNk`: K- PID probability
+  - `p_ProbNNp`: Bachelor proton PID probability
+- Shows optimal cut values from ALL 4 states (J/ψ, ηc, χc0, χc1) as vertical lines
+- Shades accepted regions (green transparent)
+- Creates side-by-side plots (MC left, data right)
+- Generates **one PDF per variable** (7 PDFs per year/combined)
+- Organized in year-specific folders
+
+**Usage:**
+```bash
+# From ana/scripts directory
+cd scripts
+
+# Plot all years with optimal cuts from all states (default)
+python plot_optimization_variables.py
+
+# Plot specific years
+python plot_optimization_variables.py --years 2016,2017
+
+# Use different MC state for distributions
+python plot_optimization_variables.py --mc-state etac
+```
+
+**Output:**
+```
+plots/optimization_variables/
+├── 2016/
+│   ├── Bu_PT_2016.pdf
+│   ├── Bu_FDCHI2_OWNPV_2016.pdf
+│   ├── Bu_IPCHI2_OWNPV_2016.pdf
+│   ├── Bu_DTF_chi2_2016.pdf
+│   ├── h1_ProbNNk_2016.pdf
+│   ├── h2_ProbNNk_2016.pdf
+│   └── p_ProbNNp_2016.pdf
+├── 2017/
+│   └── [7 PDFs]
+├── 2018/
+│   └── [7 PDFs]
+└── combined/
+    ├── Bu_PT_combined.pdf
+    ├── Bu_FDCHI2_OWNPV_combined.pdf
+    ├── Bu_IPCHI2_OWNPV_combined.pdf
+    ├── Bu_DTF_chi2_combined.pdf
+    ├── h1_ProbNNk_combined.pdf
+    ├── h2_ProbNNk_combined.pdf
+    └── p_ProbNNp_combined.pdf
+```
+
+**Plot features:**
+- MC (left): Shows variable distribution for signal
+  - Plot range optimized per variable (e.g., Bu_PT starts at 0, Bu_FDCHI2 at 0)
+- Data (right): $B^+ \to \bar{\Lambda} p K^+ K^-$ decay  
+  - Plot range adjusted per variable (e.g., Bu_PT starts at 2900, Bu_FDCHI2 at 100)
+- Colored vertical lines: Optimal cut values for each state
+  - All 4 states have **identical optimal cuts** (lines overlap)
+  - Red (J/ψ), Orange (ηc), Purple (χc0), Brown (χc1)
+- Green shaded region: Accepted events after cut
+- Normalized distributions for shape comparison
+- Combined plots labeled as "2016-2018" instead of "Combined"
+
+**Important notes:**
+- All 4 charmonium states found the **same optimal cuts** during optimization
+- Optimal cuts loaded from `tables/optimized_cuts_nd_{state}.csv`
+- MC: No trigger selection applied (~243k events total)
+- Data: Trigger selection applied (~1.28M events total)
+- Separate plot ranges for MC vs data to focus on relevant regions
+
+---
+
 ## Support
 
 For issues or questions:
