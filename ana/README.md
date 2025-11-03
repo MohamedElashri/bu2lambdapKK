@@ -480,6 +480,55 @@ After completing the pipeline:
 4. **Add systematics:** Implement systematic uncertainty studies
 5. **Full analysis:** Add reconstruction, PID, trigger efficiencies
 
+## Standalone Plotting Scripts
+
+### Lambda Mass Distribution Plotter
+
+**Purpose:** Visualize Lambda mass distributions after applying fixed cuts
+
+**Script:** `plot_lambda_mass.py`
+
+**What it does:**
+- Loads MC and data for specified years
+- Applies fixed Lambda selection cuts from `config/selection.toml`
+- Creates side-by-side plots (MC left, data right)
+- Shows cut windows and signal regions
+- Generates separate PDFs per year + combined
+
+**Usage:**
+```bash
+# Plot all years (default: 2016, 2017, 2018)
+python plot_lambda_mass.py
+
+# Plot specific years
+python plot_lambda_mass.py --years 2016,2017
+
+# Use different MC state for comparison
+python plot_lambda_mass.py --mc-state etac
+```
+
+**Output:**
+```
+plots/lambda_mass/
+├── lambda_mass_2016_Jpsi.pdf
+├── lambda_mass_2017_Jpsi.pdf
+├── lambda_mass_2018_Jpsi.pdf
+└── lambda_mass_combined_Jpsi.pdf
+```
+
+**Plot features:**
+- MC (left): Shows signal shape after cuts
+- Data (right): $B^+ \to \bar{\Lambda} p K^+ K^-$ decay
+- Red dashed lines: Cut boundaries [1111, 1121] MeV
+- Green shaded region: Signal window
+- Event counts in legend
+
+**Typical results:**
+- MC: Clean Lambda peak with ~52% passing cuts
+- Data: Lambda peak with background, ~27% passing cuts
+
+---
+
 ## Support
 
 For issues or questions:
@@ -487,3 +536,5 @@ For issues or questions:
 2. Review `plan.md` for detailed phase specifications
 3. Run individual phase tests in `tests/test_phase*.py`
 4. Check intermediate cache files for debugging
+
+````
