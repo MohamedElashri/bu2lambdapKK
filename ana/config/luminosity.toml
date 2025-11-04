@@ -1,11 +1,11 @@
 [integrated_luminosity]
 # Integrated luminosity in fb⁻¹
-"2016" = 1.63
-"2017" = 1.47
-"2018" = 2.02
+"2016" = 1.67
+"2017" = 1.74
+"2018" = 2.13
 
 [notes]
 comment = """
 Combine MagDown + MagUp for each year.
-Total: 5.12 fb⁻¹
+Total: 5.54 fb⁻¹
 """

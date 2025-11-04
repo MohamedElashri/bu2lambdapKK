@@ -230,10 +230,12 @@ class PipelineManager:
         print("\n[Loading MC - Signal States]")
         states = ["jpsi", "etac", "chic0", "chic1"]
         mc_dict = {}
+        mc_generated_counts = {}  # Track generator-level counts for signal scaling
         
         for state in states:
             print(f"\n  {state}:")
             mc_dict[state] = {}
+            mc_generated_counts[state] = {}
             
             for year in years:
                 mc_dict[state][year] = {}
@@ -271,36 +273,46 @@ class PipelineManager:
                     
                     mc_dict[state][year][track_type] = events_after
                     
+                    # Store generator-level count for signal scaling
+                    if year not in mc_generated_counts[state]:
+                        mc_generated_counts[state][year] = {}
+                    mc_generated_counts[state][year][track_type] = n_before
+                    
                     print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
         
         # Cache results
         self._save_cache("2", "data_after_lambda", data_dict)
         self._save_cache("2", "mc_after_lambda", mc_dict)
         self._save_cache("2", "phase_space_after_lambda", phase_space_dict)
+        self._save_cache("2", "mc_generated_counts", mc_generated_counts)
         
         print("\n✓ Phase 2 complete: Data, signal MC, and phase-space MC loaded")
-        print("  → Data: will be used ONLY for final fitting (not optimization)")
-        print("  → Signal MC: used for signal efficiency in optimization")
-        print("  → Phase-space MC (KpKm): used for background estimate in optimization")
+        print("  → Data: used for background estimation in optimization AND final fitting")
+        print("  → Signal MC: used for signal efficiency in optimization (scaled to expected events)")
+        print("  → Phase-space MC (KpKm): kept for reference (not used for optimization)")
+        print("  → MC generated counts: tracked for proper signal scaling")
         
-        return data_dict, mc_dict, phase_space_dict
+        return data_dict, mc_dict, phase_space_dict, mc_generated_counts
     
     def phase3_selection_optimization(self, data_dict: Dict, mc_dict: Dict, 
                                      phase_space_dict: Dict,
+                                     mc_generated_counts: Dict,
                                      use_cached: bool = False,
                                      force_rerun: bool = False):
         """
-        Phase 3: Optimize selection cuts using N-D grid scan with MC ONLY
+        Phase 3: Optimize selection cuts using signal MC and real data
         
-        IMPORTANT: Real data is NOT used for optimization!
-        - Signal: signal MC (J/ψ, ηc, χc)
-        - Background: phase-space MC (KpKm non-resonant)
-        - Real data is ONLY used in Phase 5 (mass fitting)
+        CORRECT APPROACH:
+        - Signal: signal MC (J/ψ, ηc, χc) - scaled to expected observed events
+        - Background: real data sidebands - interpolated to signal region
+        - Formula: n_sig = ε × L × σ_eff × 10³
+          where ε = n_mc_after_cuts / n_mc_generated (total selection efficiency)
         
         Args:
-            data_dict: Data after Lambda cuts (NOT USED for optimization!)
+            data_dict: Data after Lambda cuts (USED for background estimation!)
             mc_dict: Signal MC after Lambda cuts (for signal efficiency)
-            phase_space_dict: Phase-space MC after Lambda cuts (for background estimate)
+            phase_space_dict: Phase-space MC after Lambda cuts (kept for reference only)
+            mc_generated_counts: Generator-level MC counts (before Lambda cuts)
             use_cached: Use cached optimization results
             force_rerun: Force re-optimization even if cache exists
         
@@ -346,7 +358,7 @@ class PipelineManager:
                     mc_combined[state][year] = ak.concatenate(arrays_to_combine, axis=0)
                     print(f"  {state}/{year}: {len(mc_combined[state][year])} events")
         
-        # Combine phase-space MC track types for optimization
+        # Combine phase-space MC track types (for reference, not used for background)
         phase_space_combined = {}
         for year in phase_space_dict:
             arrays_to_combine = []
@@ -358,16 +370,40 @@ class PipelineManager:
                 phase_space_combined[year] = ak.concatenate(arrays_to_combine, axis=0)
                 print(f"  phase_space/{year}: {len(phase_space_combined[year])} events")
         
+        # Combine real data track types for background estimation
+        data_combined = {}
+        for year in data_dict:
+            arrays_to_combine = []
+            for track_type in data_dict[year]:
+                arr = data_dict[year][track_type]
+                if hasattr(arr, 'layout'):
+                    arrays_to_combine.append(arr)
+            if arrays_to_combine:
+                data_combined[year] = ak.concatenate(arrays_to_combine, axis=0)
+                print(f"  data/{year}: {len(data_combined[year])} events")
+        
+        # Sum MC generated counts across track types (LL + DD)
+        mc_generated_combined = {}
+        for state in mc_generated_counts:
+            mc_generated_combined[state] = {}
+            for year in mc_generated_counts[state]:
+                total_generated = sum(mc_generated_counts[state][year].values())
+                mc_generated_combined[state][year] = total_generated
+                print(f"  {state}/{year} generated: {total_generated:,} events")
+        
         # Initialize optimizer
-        # NOTE: Real data is NOT passed to optimizer - only MC is used!
-        print("\n⚠️  IMPORTANT: Optimization uses MC ONLY (no real data blinding)")
-        print("    Signal: signal MC (J/ψ, ηc, χc)")
-        print("    Background: phase-space MC (KpKm non-resonant)")
+        print("\n✓ IMPORTANT: Correct optimization approach:")
+        print("    Signal: signal MC (J/ψ, ηc, χc) - scaled to expected events")
+        print("    Background: real data sidebands - interpolated to signal region")
+        print("    Formula: n_sig = ε × L × σ_eff × 10³")
+        print("    Where ε = n_mc_after_cuts / n_mc_generated (full selection efficiency)")
+        print("    This properly estimates signal efficiency and background level!")
         
         optimizer = SelectionOptimizer(
             signal_mc=mc_combined,
-            phase_space_mc=phase_space_combined,
-            data={},  # Empty - optimizer should NOT use real data!
+            phase_space_mc=phase_space_combined,  # Kept for reference, not used
+            data=data_combined,  # Real data for background estimation!
+            mc_generated_counts=mc_generated_combined,  # Generator-level counts
             config=self.config
         )
         
@@ -634,7 +670,7 @@ class PipelineManager:
         print("="*80)
         
         # Phase 2: Load data and apply Lambda cuts
-        data_dict, mc_dict, phase_space_dict = self.phase2_load_data_and_lambda_cuts(
+        data_dict, mc_dict, phase_space_dict, mc_generated_counts = self.phase2_load_data_and_lambda_cuts(
             years=years,
             track_types=track_types,
             use_cached=use_cached
@@ -654,7 +690,7 @@ class PipelineManager:
         
         # Run optimization (will use cache unless force_reoptimize is set)
         optimized_cuts_df = self.phase3_selection_optimization(
-            data_dict, mc_dict, phase_space_dict,
+            data_dict, mc_dict, phase_space_dict, mc_generated_counts,
             use_cached=use_cached,
             force_rerun=force_reoptimize
         )

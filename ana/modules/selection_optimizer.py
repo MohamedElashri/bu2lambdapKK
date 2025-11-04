@@ -17,17 +17,98 @@ class SelectionOptimizer:
                  signal_mc: Dict[str, Dict[str, ak.Array]],
                  phase_space_mc: Dict[str, ak.Array],
                  data: Dict[str, ak.Array],
+                 mc_generated_counts: Dict[str, Dict[str, int]],
                  config: Any):
         """
         signal_mc: {state: {year: events_after_lambda_cuts}}
         phase_space_mc: {year: events_after_lambda_cuts} (KpKm non-resonant)
         data: {year: events_after_lambda_cuts}
+        mc_generated_counts: {state: {year: n_generated}} (generator level, before cuts)
         """
         self.signal_mc = signal_mc
         self.phase_space_mc = phase_space_mc
         self.data = data
+        self.mc_generated_counts = mc_generated_counts
         self.config = config
         
+    def scale_signal_to_expected_events(self,
+                                        n_mc_after_cuts: int,
+                                        state: str,
+                                        year: str) -> float:
+        """
+        Scale MC signal events to expected observed events in data
+        
+        Formula: n_sig = ε × L × σ_eff × 10³
+        
+        Where:
+        - ε = n_mc_after_cuts / n_mc_generated (total selection efficiency from MC)
+          This captures the full chain: generator → reconstruction → Lambda cuts → optimized cuts
+        - L = Integrated luminosity for that year (fb^-1): 1.67, 1.74, 2.13
+        - σ_eff = σ_bb̄ × 2 × fu × B(B+ → Λ̄0pK+K−) × B(Λ0 → pπ−)
+          - σ_bb̄ = 495 μb = 495 × 10³ pb (LHCb measurement)
+          - fu = 0.405 (PDG: fraction of B that are B+)
+          - B(B+ → Λ̄0pK+K−) = 4.10 × 10⁻⁶ (Belle measurement)
+          - B(Λ0 → pπ−) = 64.1% (PDG)
+          - Result: σ_eff ≈ 1.05 pb
+        - 10³ = unit conversion (fb^-1 × pb → events)
+        
+        Note: σ_eff is the SAME for all states. State-specific differences come
+        from MC generation weights and reconstruction efficiency (captured in ε).
+        
+        Args:
+            n_mc_after_cuts: Number of MC events passing cuts and in signal region
+            state: Charmonium state ("jpsi", "etac", "chic0", "chic1")
+            year: Data-taking year ("2016", "2017", "2018")
+        
+        Returns:
+            float: Expected number of signal events in data (absolute scale)
+        """
+        # Integrated luminosity for this year (fb^-1)
+        luminosity_values = {
+            "2016": 1.67,
+            "2017": 1.74,
+            "2018": 2.13
+        }
+        lumi = luminosity_values.get(year, 1.67)
+        
+        # Get n_mc_generated for this state and year (generator level, before Lambda cuts)
+        n_mc_generated = self.mc_generated_counts.get(state, {}).get(year, 1)
+        
+        # Selection efficiency from MC: ratio of events passing cuts to total generated
+        efficiency = n_mc_after_cuts / n_mc_generated if n_mc_generated > 0 else 0
+        
+        # Calculate σ×BR using absolute values (from measurements)
+        # Formula: σ_eff = σ_bb̄ × 2 × fu × B(B+ → Λ̄0pK+K−) × B(Λ0 → pπ−)
+        
+        # Physical constants (central values from PDG/experiments)
+        sigma_bb = 495e3  # σ_bb̄ = 495 μb = 495 × 10^3 pb (1 μb = 10^3 pb)
+        fu = 0.405  # Fraction of B mesons that are B+ (PDG)
+        br_b_to_lambda = 4.10e-6  # B(B+ → Λ̄0pK+K−) from Belle experiment
+        br_lambda_decay = 0.641  # B(Λ0 → pπ−) = 64.1% (PDG)
+        
+        # Effective cross-section for B+ → Λ̄0(→pπ−)pK+K−
+        # Factor of 2: bb̄ produces both B+ and B− (we detect B+)
+        # Units: pb
+        sigma_eff = sigma_bb * 2.0 * fu * br_b_to_lambda * br_lambda_decay
+        
+        # This sigma_eff is the SAME for all charmonium states
+        # The state-specific differences come from:
+        # 1. Different MC generation (each state has its own MC sample)
+        # 2. Different reconstruction efficiency (captured in efficiency = n_mc_after_cuts / n_mc_generated)
+        # The MC samples are already generated with proper relative weights
+        
+        sigma_br = sigma_eff
+        
+        # Expected signal events in data
+        # N = ε × L × σ_eff × 10³
+        # Units: L is in fb^-1, σ is in pb
+        # Unit conversion: 1 fb^-1 = 10^3 pb^-1, so L (fb^-1) × σ (pb) × 10^3 = events
+        conversion_factor = 1e3  # fb^-1 × pb → dimensionless
+        
+        n_sig_expected = efficiency * lumi * sigma_br * conversion_factor
+        
+        return n_sig_expected
+    
     def compute_fom(self, n_sig: float, n_bkg: float) -> float:
         """
         Figure of Merit: FOM = n_sig / sqrt(n_bkg + n_sig)
@@ -76,21 +157,46 @@ class SelectionOptimizer:
         return ak.sum(mask)
     
     def estimate_background_in_signal_region(self,
-                                            phase_space_events: ak.Array,
+                                            data_events: ak.Array,
                                             state: str) -> float:
         """
-        Estimate combinatorial background in signal region from phase-space MC
+        Estimate combinatorial background in signal region from real data sidebands
         
-        Uses non-resonant KpKm phase-space MC to estimate background level.
-        This is more reliable than using real data sidebands for optimization.
+        Uses sideband interpolation to estimate background under the peak.
+        This gives the true background level in data for cut optimization.
         
-        Method: Count phase-space events in signal region directly
-        (Phase-space MC represents non-resonant background)
+        Method:
+        1. Count events in low sideband [center - 4×window, center - window]
+        2. Count events in high sideband [center + window, center + 4×window]
+        3. Average the two sidebands
+        4. Scale by width ratio: background_in_signal = avg_sideband × (signal_width / sideband_width)
+        
+        Args:
+            data_events: Real data events after cuts
+            state: Charmonium state ("jpsi", "etac", "chic0", "chic1")
+        
+        Returns:
+            float: Estimated background in signal region
         """
         signal_region = self.define_signal_region(state)
+        sidebands = self.define_sideband_regions(state)
         
-        # Count phase-space MC events in signal region
-        n_bkg_estimate = self.count_events_in_region(phase_space_events, signal_region)
+        # Count events in each sideband
+        n_low_sb = self.count_events_in_region(data_events, sidebands[0])
+        n_high_sb = self.count_events_in_region(data_events, sidebands[1])
+        
+        # Calculate sideband widths
+        low_sb_width = sidebands[0][1] - sidebands[0][0]
+        high_sb_width = sidebands[1][1] - sidebands[1][0]
+        signal_width = signal_region[1] - signal_region[0]
+        
+        # Average density from both sidebands (events per MeV)
+        density_low = n_low_sb / low_sb_width if low_sb_width > 0 else 0
+        density_high = n_high_sb / high_sb_width if high_sb_width > 0 else 0
+        avg_density = (density_low + density_high) / 2.0
+        
+        # Estimate background in signal region
+        n_bkg_estimate = avg_density * signal_width
         
         return n_bkg_estimate
     
@@ -125,6 +231,15 @@ class SelectionOptimizer:
         data_arrays = [self.data[year] for year in self.data.keys()]
         data_combined = ak.concatenate(data_arrays, axis=0)
         
+        # Compute weighted average scale factor across all years
+        total_mc_events = len(sig_mc_combined)
+        weighted_scale = 0.0
+        for year in self.signal_mc[state].keys():
+            year_mc_events = len(self.signal_mc[state][year])
+            year_weight = year_mc_events / total_mc_events if total_mc_events > 0 else 0
+            year_scale = self.scale_signal_to_expected_events(1, state, year)
+            weighted_scale += year_weight * year_scale
+        
         results = []
         
         # Check if branch is jagged (multiple values per event) and flatten if needed
@@ -156,11 +271,14 @@ class SelectionOptimizer:
             sig_pass = sig_mc_combined[sig_mask]
             data_pass = data_combined[data_mask]
             
-            # Count signal in signal region
+            # Count signal in signal region (raw MC count)
             signal_region = self.define_signal_region(state)
-            n_sig = self.count_events_in_region(sig_pass, signal_region)
+            n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
             
-            # Estimate background
+            # Scale signal to expected observed events
+            n_sig = n_sig_mc * weighted_scale
+            
+            # Estimate background from real data
             n_bkg = self.estimate_background_in_signal_region(data_pass, state)
             
             # Compute FOM
@@ -206,6 +324,15 @@ class SelectionOptimizer:
         
         data_arrays = [self.data[year] for year in self.data.keys()]
         data_combined = ak.concatenate(data_arrays, axis=0)
+        
+        # Compute weighted average scale factor across all years
+        total_mc_events = len(sig_mc_combined)
+        weighted_scale = 0.0
+        for year in self.signal_mc[state].keys():
+            year_mc_events = len(self.signal_mc[state][year])
+            year_weight = year_mc_events / total_mc_events if total_mc_events > 0 else 0
+            year_scale = self.scale_signal_to_expected_events(1, state, year)
+            weighted_scale += year_weight * year_scale
         
         # Handle jagged arrays for both variables
         sig_branch1 = sig_mc_combined[var1["branch_name"]]
@@ -259,11 +386,14 @@ class SelectionOptimizer:
                 sig_pass = sig_mc_combined[sig_mask]
                 data_pass = data_combined[data_mask]
                 
-                # Count signal in signal region
+                # Count signal in signal region (raw MC count)
                 signal_region = self.define_signal_region(state)
-                n_sig = self.count_events_in_region(sig_pass, signal_region)
+                n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
                 
-                # Estimate background
+                # Scale signal to expected observed events
+                n_sig = n_sig_mc * weighted_scale
+                
+                # Estimate background from real data
                 n_bkg = self.estimate_background_in_signal_region(data_pass, state)
                 
                 # Compute FOM
@@ -389,26 +519,35 @@ class SelectionOptimizer:
             sig_mc_arrays = [self.signal_mc[state][year] for year in self.signal_mc[state].keys()]
             sig_mc_combined = ak.concatenate(sig_mc_arrays, axis=0)
             
-            # Prepare phase-space MC for background
-            phase_space_arrays = [self.phase_space_mc[year] for year in self.phase_space_mc.keys()]
-            phase_space_combined = ak.concatenate(phase_space_arrays, axis=0)
+            # Prepare real data for background estimation
+            data_arrays = [self.data[year] for year in self.data.keys()]
+            data_combined = ak.concatenate(data_arrays, axis=0)
+            
+            # Compute weighted average scale factor across all years
+            total_mc_events = len(sig_mc_combined)
+            weighted_scale = 0.0
+            for year in self.signal_mc[state].keys():
+                year_mc_events = len(self.signal_mc[state][year])
+                year_weight = year_mc_events / total_mc_events if total_mc_events > 0 else 0
+                year_scale = self.scale_signal_to_expected_events(1, state, year)
+                weighted_scale += year_weight * year_scale
             
             # Extract branch data (once, before loop)
             sig_branches = []
-            bkg_branches = []  # Phase-space MC for background
+            data_branches = []  # Real data for background
             
             for var in all_variables:
                 sig_branch = sig_mc_combined[var["branch_name"]]
-                bkg_branch = phase_space_combined[var["branch_name"]]
+                data_branch = data_combined[var["branch_name"]]
                 
                 # Flatten jagged arrays
                 if 'var' in str(ak.type(sig_branch)):
                     sig_branch = ak.firsts(sig_branch)
-                if 'var' in str(ak.type(bkg_branch)):
-                    bkg_branch = ak.firsts(bkg_branch)
+                if 'var' in str(ak.type(data_branch)):
+                    data_branch = ak.firsts(data_branch)
                 
                 sig_branches.append(sig_branch)
-                bkg_branches.append(bkg_branch)
+                data_branches.append(data_branch)
             
             # Grid scan: test all combinations
             best_fom = -np.inf
@@ -426,24 +565,25 @@ class SelectionOptimizer:
                 
                 # Apply this combination of cuts
                 sig_mask = ak.ones_like(sig_branches[0], dtype=bool)
-                bkg_mask = ak.ones_like(bkg_branches[0], dtype=bool)
+                data_mask = ak.ones_like(data_branches[0], dtype=bool)
                 
                 for j, (cut_val, var) in enumerate(zip(cut_combination, all_variables)):
                     if var["cut_type"] == "greater":
                         sig_mask = sig_mask & (sig_branches[j] > cut_val)
-                        bkg_mask = bkg_mask & (bkg_branches[j] > cut_val)
+                        data_mask = data_mask & (data_branches[j] > cut_val)
                     else:
                         sig_mask = sig_mask & (sig_branches[j] < cut_val)
-                        bkg_mask = bkg_mask & (bkg_branches[j] < cut_val)
+                        data_mask = data_mask & (data_branches[j] < cut_val)
                 
                 # Filter events
                 sig_pass = sig_mc_combined[sig_mask]
-                bkg_pass = phase_space_combined[bkg_mask]
+                data_pass = data_combined[data_mask]
                 
-                # Calculate FOM using MC only
+                # Calculate FOM using scaled signal and real data background
                 signal_region = self.define_signal_region(state)
-                n_sig = self.count_events_in_region(sig_pass, signal_region)
-                n_bkg = self.estimate_background_in_signal_region(bkg_pass, state)
+                n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
+                n_sig = n_sig_mc * weighted_scale
+                n_bkg = self.estimate_background_in_signal_region(data_pass, state)
                 fom = self.compute_fom(n_sig, n_bkg)
                 
                 # Update best if this is better
