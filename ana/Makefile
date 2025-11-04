@@ -180,8 +180,8 @@ clean-cache: ## Remove cached intermediate results
 
 clean-outputs: ## Remove output files (tables, plots, results)
 	@printf "\033[0;34mRemoving output files...\033[0m\n"
-	@rm -rf tables/*.csv tables/*.md
-	@rm -rf plots/*.png
+	@rm -rf tables/*.csv tables/*.md tables/*.json tables/presentation/*.md tables/presentation/*.csv
+	@rm -rf plots/*.pdf plots/*/*.pdf
 	@rm -rf results/*.md
 	@printf "\033[0;32mOutputs cleaned\033[0m\n"
 
