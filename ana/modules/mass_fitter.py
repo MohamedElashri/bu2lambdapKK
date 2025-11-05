@@ -167,7 +167,16 @@ class MassFitter:
     
     def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooArgusBG, ROOT.RooRealVar]:
         """
-        Create ARGUS background PDF with endpoint beyond fit range
+        Create ARGUS background PDF
+        
+        ARGUS function: f(m) = m * sqrt(1 - (m/m0)^2) * exp(c * (1 - (m/m0)^2))
+        
+        Args:
+            mass_var: Observable mass variable
+            year: Year string ("2016", "2017", "2018")
+            
+        Returns:
+            (background_pdf, c_parameter)
         """
         # Return cached PDF if it exists
         if year in self.bkg_pdfs:
