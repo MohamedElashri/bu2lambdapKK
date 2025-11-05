@@ -140,9 +140,10 @@ class PipelineManager:
             data_dict = self._load_cache("2", "data_after_lambda")
             mc_dict = self._load_cache("2", "mc_after_lambda")
             phase_space_dict = self._load_cache("2", "phase_space_after_lambda")
-            if data_dict is not None and mc_dict is not None and phase_space_dict is not None:
+            mc_generated_counts = self._load_cache("2", "mc_generated_counts")
+            if data_dict is not None and mc_dict is not None and phase_space_dict is not None and mc_generated_counts is not None:
                 print("✓ Loaded cached data, signal MC, and phase-space MC (after Lambda cuts)")
-                return data_dict, mc_dict, phase_space_dict
+                return data_dict, mc_dict, phase_space_dict, mc_generated_counts
         
         # Initialize data manager and Lambda selector
         data_manager = DataManager(self.config)

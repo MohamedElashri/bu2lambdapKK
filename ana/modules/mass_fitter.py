@@ -28,15 +28,17 @@ class MassFitter:
     - Share physical parameters (masses, widths, resolution) across years
     - Extract separate yields per year (needed for efficiency correction)
     - Use RooVoigtian (RBW ⊗ Gaussian) for signal shapes
-    - Exponential background
+    - ARGUS function for background (standard for B meson analyses)
     
-    Signal PDFs per state:
-    - J/ψ: RBW ⊗ Gaussian, Γ_J/ψ fixed to PDG (0.093 MeV)
-    - ηc: RBW ⊗ Gaussian, Γ_ηc floating (broad state)
-    - χc0: RBW ⊗ Gaussian, Γ_χc0 floating (broad state)
-    - χc1: RBW ⊗ Gaussian, Γ_χc1 fixed to PDG (0.84 MeV)
+    Signal PDFs per state (all 6 charmonium states):
+    - ηc(1S): RBW ⊗ Gaussian, M and Γ fixed to PDG
+    - J/ψ: RBW ⊗ Gaussian, M and Γ fixed to PDG
+    - χc0: RBW ⊗ Gaussian, M and Γ fixed to PDG
+    - χc1: RBW ⊗ Gaussian, M and Γ fixed to PDG
+    - ηc(2S): RBW ⊗ Gaussian, M and Γ fixed to PDG (uses χc1 optimization)
+    - ψ(3770): RBW ⊗ Gaussian, M and Γ fixed to PDG (uses χc1 optimization)
     
-    Background: Exponential exp(-α × M)
+    Background: ARGUS function (standard for B meson combinatorial background)
     """
     
     def __init__(self, config: Any):
@@ -64,7 +66,7 @@ class MassFitter:
         # Store all PDFs and variables to prevent garbage collection
         self.signal_pdfs = {}  # {state: pdf}
         self.bkg_pdfs = {}     # {year: pdf}
-        self.alpha_bkgs = {}   # {year: alpha}
+
         self.models = {}       # {year: model}
         self.yields = {}       # {year: {state: yield_var}}
         
@@ -91,7 +93,7 @@ class MassFitter:
         Uses RooVoigtian (Relativistic Breit-Wigner ⊗ Gaussian)
         
         Args:
-            state: State name ("jpsi", "etac", "chic0", "chic1")
+            state: State name ("jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770")
             mass_var: Observable mass variable
             
         Returns:
@@ -108,43 +110,35 @@ class MassFitter:
             "jpsi": "jpsi",
             "etac": "etac_1s",
             "chic0": "chic0",
-            "chic1": "chic1"
+            "chic1": "chic1",
+            "etac_2s": "etac_2s",
+            "psi3770": "psi3770"
         }
         config_key = config_key_map.get(state_lower, state_lower)
         
-        # Mass parameter (shared across years)
+        # Mass parameter (shared across years) - FIXED TO PDG VALUE
         if state_lower not in self.masses:
             pdg_mass = self.config.particles["pdg_masses"][config_key]
             
             self.masses[state_lower] = ROOT.RooRealVar(
                 f"M_{state}",
                 f"M_{state} [MeV/c^{{2}}]",
-                pdg_mass,
-                pdg_mass - 50,  # Allow ±50 MeV variation
-                pdg_mass + 50
+                pdg_mass
             )
+            # Fix mass to PDG value
+            self.masses[state_lower].setConstant(True)
         
-        # Width parameter
+        # Width parameter - FIXED TO PDG VALUE FOR ALL STATES
         if state_lower not in self.widths:
             pdg_width = self.config.particles["pdg_widths"][config_key]
             
-            # Fix narrow states (J/ψ, χc1) to PDG values
-            if state_lower in ["jpsi", "chic1"]:
-                self.widths[state_lower] = ROOT.RooRealVar(
-                    f"Gamma_{state}",
-                    f"#Gamma_{state} [MeV/c^{{2}}]",
-                    pdg_width
-                )
-                self.widths[state_lower].setConstant(True)
-            else:
-                # Float for ηc and χc0 (broader states with larger uncertainties)
-                self.widths[state_lower] = ROOT.RooRealVar(
-                    f"Gamma_{state}",
-                    f"#Gamma_{state} [MeV/c^{{2}}]",
-                    pdg_width,
-                    0.1,    # Minimum 0.1 MeV
-                    100.0   # Maximum 100 MeV
-                )
+            self.widths[state_lower] = ROOT.RooRealVar(
+                f"Gamma_{state}",
+                f"#Gamma_{state} [MeV/c^{{2}}]",
+                pdg_width
+            )
+            # Fix width to PDG value
+            self.widths[state_lower].setConstant(True)
         
         # Resolution (shared Gaussian width - same detector for all states)
         if self.resolution is None:
@@ -171,44 +165,64 @@ class MassFitter:
         
         return signal_pdf
     
-    def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooExponential, ROOT.RooRealVar]:
+    def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooArgusBG, ROOT.RooRealVar]:
         """
-        Create exponential background PDF
+        Create ARGUS background PDF
         
-        Simple exponential: exp(-α × M)
-        α parameter is PER YEAR (different backgrounds per year)
+        ARGUS function: f(m) = m * sqrt(1 - (m/m0)^2) * exp(c * (1 - (m/m0)^2))
+        Standard for combinatorial background in B meson analyses.
         
         Args:
             mass_var: Observable mass variable
             year: Year string ("2016", "2017", "2018")
             
         Returns:
-            (background_pdf, alpha_parameter)
+            (background_pdf, c_parameter)
         """
         # Return cached PDF if it exists
         if year in self.bkg_pdfs:
-            return self.bkg_pdfs[year], self.alpha_bkgs[year]
+            return self.bkg_pdfs[year], self.argus_params[year]["c"]
         
-        alpha = ROOT.RooRealVar(
-            f"alpha_bkg_{year}",
-            f"#alpha_{{bkg}} {year}",
-            -0.001,  # Initial guess
-            -0.01,   # Minimum (steeper slope)
-            0.0      # Maximum (flat)
+        # ARGUS endpoint (upper kinematic limit of fit range)
+        m0 = ROOT.RooRealVar(
+            f"m0_argus_{year}",
+            "ARGUS endpoint [MeV/c^{2}]",
+            self.fit_range[1]  # Fixed to upper fit range
+        )
+        m0.setConstant(True)
+        
+        # ARGUS shape parameter (fitted per year)
+        c = ROOT.RooRealVar(
+            f"c_argus_{year}",
+            f"c_{{ARGUS}} {year}",
+            -20.0,  # Initial guess
+            -100.0, # Minimum
+            -0.1    # Maximum (must be negative)
         )
         
-        bkg_pdf = ROOT.RooExponential(
+        # Power parameter (typically fixed to 0.5)
+        p = ROOT.RooRealVar(
+            f"p_argus_{year}",
+            "ARGUS power",
+            0.5
+        )
+        p.setConstant(True)
+        
+        # Create ARGUS PDF
+        bkg_pdf = ROOT.RooArgusBG(
             f"pdf_bkg_{year}",
             f"Background PDF {year}",
             mass_var,
-            alpha
+            m0,
+            c,
+            p
         )
         
-        # Cache
+        # Cache ALL parameters to prevent garbage collection
         self.bkg_pdfs[year] = bkg_pdf
-        self.alpha_bkgs[year] = alpha
+        self.argus_params[year] = {"m0": m0, "c": c, "p": p}
         
-        return bkg_pdf, alpha
+        return bkg_pdf, c
 
     
     def build_model_for_year(self, year: str, mass_var: ROOT.RooRealVar) -> Tuple[ROOT.RooAddPdf, Dict[str, ROOT.RooRealVar]]:
@@ -217,7 +231,7 @@ class MassFitter:
         
         PDF = Σ[N_state × Signal_state] + N_bkg × Background
         
-        States: J/ψ, ηc, χc0, χc1
+        States: ηc(1S), J/ψ, χc0, χc1, ηc(2S), ψ(3770)
         
         Args:
             year: Year string
@@ -230,8 +244,8 @@ class MassFitter:
         coef_list = ROOT.RooArgList()
         year_yields = {}
         
-        # Signal components (4 charmonium states)
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
+        # Signal components (6 charmonium states)
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770"]:
             # Create signal PDF (shares mass/width/resolution across years)
             sig_pdf = self.create_signal_pdf(state, mass_var)
             
@@ -286,7 +300,7 @@ class MassFitter:
         1. Apply B+ mass window cut [5255, 5305] MeV
         2. Fit each year separately with shared physics parameters
         3. Fit combined dataset (all years together)
-        4. Model all 4 charmonium states simultaneously: J/ψ, ηc, χc0, χc1
+        4. Model all 6 charmonium states simultaneously with ARGUS background
         
         Args:
             data_by_year: {year: awkward_array} with M_LpKm_h2 and Bu_M_DTF_PV branches
@@ -307,12 +321,13 @@ class MassFitter:
         all_fit_results = {}
         
         print("\n" + "="*80)
-        print("MASS FITTING WITH ROOFIT - ALL 4 CHARMONIUM STATES")
+        print("MASS FITTING WITH ROOFIT - ALL 6 CHARMONIUM STATES")
         print("="*80)
         print(f"Charmonium fit range: {self.fit_range[0]} - {self.fit_range[1]} MeV")
         print(f"B+ mass window: {self.bu_mass_min} - {self.bu_mass_max} MeV")
         print(f"Using M_LpKm_h2 (M(Λ̄pK⁻), h2=K⁻ correct for charmonium)")
-        print(f"Modeling: J/ψ, ηc, χc0, χc1 simultaneously")
+        print(f"Modeling: ηc(1S), J/ψ, χc0, χc1, ηc(2S), ψ(3770) simultaneously")
+        print(f"All masses and widths FIXED to PDG values")
         print("="*80)
         
         # Prepare all datasets (per-year + combined)
@@ -424,7 +439,7 @@ class MassFitter:
         masses_result = {}
         widths_result = {}
         
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770"]:
             mass_val = self.masses[state].getVal()
             mass_err = self.masses[state].getError()
             masses_result[state] = (mass_val, mass_err)
@@ -433,7 +448,7 @@ class MassFitter:
             width_err = self.widths[state].getError()
             widths_result[state] = (width_val, width_err)
             
-            print(f"{state:>8}: M = {mass_val:7.2f} ± {mass_err:5.2f} MeV,  "
+            print(f"{state:>10}: M = {mass_val:7.2f} ± {mass_err:5.2f} MeV,  "
                   f"Γ = {width_val:6.2f} ± {width_err:5.2f} MeV")
         
         res_val = self.resolution.getVal()
@@ -491,11 +506,13 @@ class MassFitter:
             "etac": ROOT.kGreen + 2,      # Bright green
             "chic0": ROOT.kMagenta + 1,   # Bright magenta
             "chic1": ROOT.kOrange + 1,    # Bright orange
+            "etac_2s": ROOT.kCyan + 1,    # Bright cyan
+            "psi3770": ROOT.kViolet + 1,  # Bright violet
             "background": ROOT.kGray + 1  # Gray for background
         }
         
         # Plot signal components with DOTTED lines (high contrast)
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770"]:
             component_name = f"pdf_signal_{state}"
             model.plotOn(frame, ROOT.RooFit.Components(component_name),
                         ROOT.RooFit.Name(state),
@@ -529,11 +546,11 @@ class MassFitter:
         frame.GetXaxis().SetTitleOffset(1.1)
         frame.Draw()
         
-        # Add compact legend in top right (inside plot area)
-        legend = ROOT.TLegend(0.60, 0.55, 0.92, 0.89)
+        # Add compact legend in top right (inside plot area) - larger for 6 states
+        legend = ROOT.TLegend(0.58, 0.42, 0.92, 0.89)
         legend.SetBorderSize(0)
         legend.SetFillStyle(0)
-        legend.SetTextSize(0.035)
+        legend.SetTextSize(0.030)  # Smaller text to fit all entries
         legend.SetTextFont(42)
         legend.SetMargin(0.15)  # Reduce space between symbol and text
         
@@ -547,10 +564,12 @@ class MassFitter:
             "etac": "#eta_{c}(1S)",
             "chic0": "#chi_{c0}(1P)",
             "chic1": "#chi_{c1}(1P)",
+            "etac_2s": "#eta_{c}(2S)",
+            "psi3770": "#psi(3770)",
             "background": "Combinatorial bkg."
         }
         
-        for state in ["jpsi", "etac", "chic0", "chic1", "background"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770", "background"]:
             legend.AddEntry(state, state_labels[state], "l")
         
         legend.Draw()
