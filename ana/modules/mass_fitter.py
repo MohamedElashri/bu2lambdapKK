@@ -167,27 +167,18 @@ class MassFitter:
     
     def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooArgusBG, ROOT.RooRealVar]:
         """
-        Create ARGUS background PDF
-        
-        ARGUS function: f(m) = m * sqrt(1 - (m/m0)^2) * exp(c * (1 - (m/m0)^2))
-        Standard for combinatorial background in B meson analyses.
-        
-        Args:
-            mass_var: Observable mass variable
-            year: Year string ("2016", "2017", "2018")
-            
-        Returns:
-            (background_pdf, c_parameter)
+        Create ARGUS background PDF with endpoint beyond fit range
         """
         # Return cached PDF if it exists
         if year in self.bkg_pdfs:
             return self.bkg_pdfs[year], self.argus_params[year]["c"]
         
-        # ARGUS endpoint (upper kinematic limit of fit range)
+        # ARGUS endpoint - set BEYOND the fit range to avoid sharp cutoff
+        # Typical choice: 100-200 MeV above fit range upper limit
         m0 = ROOT.RooRealVar(
             f"m0_argus_{year}",
             "ARGUS endpoint [MeV/c^{2}]",
-            self.fit_range[1]  # Fixed to upper fit range
+            self.fit_range[1] + 200.0  # Extended beyond fit range
         )
         m0.setConstant(True)
         
@@ -218,12 +209,15 @@ class MassFitter:
             p
         )
         
+        # Initialize storage if needed
+        if not hasattr(self, 'argus_params'):
+            self.argus_params = {}
+        
         # Cache ALL parameters to prevent garbage collection
         self.bkg_pdfs[year] = bkg_pdf
         self.argus_params[year] = {"m0": m0, "c": c, "p": p}
         
         return bkg_pdf, c
-
     
     def build_model_for_year(self, year: str, mass_var: ROOT.RooRealVar) -> Tuple[ROOT.RooAddPdf, Dict[str, ROOT.RooRealVar]]:
         """
