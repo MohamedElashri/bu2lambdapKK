@@ -190,6 +190,7 @@ pyrightconfig.json
 ## 
 .vscode/
 plan.md
+agent.md
 
 ## results and summaries
 *_summary.json
