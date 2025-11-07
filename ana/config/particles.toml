@@ -58,3 +58,15 @@ comment = "Medium width state"
 center = 3778.1
 window = 55.0  # ±55 MeV → 2×Γ
 comment = "Broad state"
+
+[fitting]
+# Maximum likelihood fitting configuration
+use_binned_fit = true  # true: binned ML, false: unbinned ML (default: binned)
+bin_width = 5.0  # MeV - bin width for binned fits and plotting
+comment = """
+Binned vs Unbinned Maximum Likelihood:
+- Binned: Faster, suitable for large datasets, creates histogram first
+- Unbinned: More accurate, uses all event information
+- bin_width determines binning for both fitting and plotting (always 5 MeV per bin)
+- Number of bins calculated automatically: nbins = int((max - min) / bin_width)
+"""

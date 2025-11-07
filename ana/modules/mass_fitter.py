@@ -55,6 +55,15 @@ class MassFitter:
         self.bu_mass_min = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_min", 5255.0)
         self.bu_mass_max = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_max", 5305.0)
         
+        # Fitting configuration
+        fitting_config = config.particles.get("fitting", {})
+        self.use_binned_fit = fitting_config.get("use_binned_fit", True)
+        self.bin_width = fitting_config.get("bin_width", 5.0)
+        
+        # Calculate number of bins automatically: always maintain bin_width MeV/bin
+        fit_range_width = self.fit_range[1] - self.fit_range[0]
+        self.nbins = int(fit_range_width / self.bin_width)
+        
         # Shared parameters across years (will be created on first use)
         self.masses = {}      # M_J/ψ, M_ηc, M_χc0, M_χc1
         self.widths = {}      # Γ states (some fixed, some floating)
@@ -84,6 +93,8 @@ class MassFitter:
                 self.fit_range[0],
                 self.fit_range[1]
             )
+            # Set binning for plotting and binned fits
+            self.mass_var.setBins(self.nbins)
         return self.mass_var
     
     def create_signal_pdf(self, state: str, mass_var: ROOT.RooRealVar) -> ROOT.RooVoigtian:
@@ -331,6 +342,8 @@ class MassFitter:
         print(f"Using M_LpKm_h2 (M(Λ̄pK⁻), h2=K⁻ correct for charmonium)")
         print(f"Modeling: ηc(1S), J/ψ, χc0, χc1, ηc(2S), ψ(3770) simultaneously")
         print(f"All masses and widths FIXED to PDG values")
+        print(f"Fit type: {'BINNED' if self.use_binned_fit else 'UNBINNED'} maximum likelihood")
+        print(f"Binning: {self.nbins} bins × {self.bin_width} MeV/bin = {self.fit_range[1] - self.fit_range[0]} MeV range")
         print("="*80)
         
         # Prepare all datasets (per-year + combined)
@@ -375,36 +388,66 @@ class MassFitter:
             mass_filtered = datasets_to_fit[dataset_name]
             print(f"  Events to fit: {len(mass_filtered)}")
             
-            # Convert to numpy for RooDataSet
+            # Convert to numpy for RooDataSet/RooDataHist
             mass_np = ak.to_numpy(mass_filtered)
             
-            # Create RooDataSet directly from numpy array
-            dataset = ROOT.RooDataSet(
-                f"data_{dataset_name}",
-                f"Data {dataset_name}",
-                ROOT.RooArgSet(mass_var)
-            )
-            
-            # Fill dataset with events
-            for m in mass_np:
-                mass_var.setVal(m)
-                dataset.add(ROOT.RooArgSet(mass_var))
-            
-            print(f"  RooDataSet entries: {dataset.numEntries()}")
+            # Create dataset (binned or unbinned based on configuration)
+            if self.use_binned_fit:
+                # Create unbinned dataset first
+                temp_dataset = ROOT.RooDataSet(
+                    f"temp_data_{dataset_name}",
+                    f"Temp Data {dataset_name}",
+                    ROOT.RooArgSet(mass_var)
+                )
+                for m in mass_np:
+                    mass_var.setVal(m)
+                    temp_dataset.add(ROOT.RooArgSet(mass_var))
+                
+                # Convert to binned dataset (RooDataHist)
+                dataset = ROOT.RooDataHist(
+                    f"data_{dataset_name}",
+                    f"Data {dataset_name}",
+                    ROOT.RooArgSet(mass_var),
+                    temp_dataset
+                )
+                print(f"  RooDataHist entries: {dataset.numEntries()} (binned in {self.nbins} bins)")
+            else:
+                # Create unbinned dataset (RooDataSet)
+                dataset = ROOT.RooDataSet(
+                    f"data_{dataset_name}",
+                    f"Data {dataset_name}",
+                    ROOT.RooArgSet(mass_var)
+                )
+                for m in mass_np:
+                    mass_var.setVal(m)
+                    dataset.add(ROOT.RooArgSet(mass_var))
+                print(f"  RooDataSet entries: {dataset.numEntries()} (unbinned)")
             
             # Build model for this dataset
             model, yields = self.build_model_for_year(dataset_name, mass_var)
             
             # Perform fit
             print(f"  Fitting...")
-            fit_result = model.fitTo(
-                dataset,
-                ROOT.RooFit.Save(),
-                ROOT.RooFit.Extended(True),
-                ROOT.RooFit.PrintLevel(-1),
-                ROOT.RooFit.NumCPU(4),
-                ROOT.RooFit.Strategy(2)  # More robust
-            )
+            if self.use_binned_fit:
+                # Binned maximum likelihood fit
+                fit_result = model.fitTo(
+                    dataset,
+                    ROOT.RooFit.Save(),
+                    ROOT.RooFit.Extended(True),
+                    ROOT.RooFit.PrintLevel(-1),
+                    ROOT.RooFit.NumCPU(4),
+                    ROOT.RooFit.Strategy(2)  # More robust
+                )
+            else:
+                # Unbinned maximum likelihood fit
+                fit_result = model.fitTo(
+                    dataset,
+                    ROOT.RooFit.Save(),
+                    ROOT.RooFit.Extended(True),
+                    ROOT.RooFit.PrintLevel(-1),
+                    ROOT.RooFit.NumCPU(4),
+                    ROOT.RooFit.Strategy(2)  # More robust
+                )
             
             # Check convergence
             status = fit_result.status()
@@ -477,13 +520,13 @@ class MassFitter:
         - Total fit curve (solid blue)
         - Signal components (dotted, high contrast colors)
         - Background component (dashed gray)
+        - Pull distribution below fit
         - Proper LaTeX labels
-        - No pull distribution (removed for cleaner presentation)
         
         Args:
             year: Year string (or "combined")
             mass_var: Observable mass variable
-            dataset: RooDataSet with data
+            dataset: RooDataSet or RooDataHist with data
             model: Total PDF
             yields: Dictionary of yield parameters
         """
@@ -531,37 +574,45 @@ class MassFitter:
                     ROOT.RooFit.LineStyle(ROOT.kDashed),  # Dashed for background
                     ROOT.RooFit.LineWidth(3))
         
-        # Create canvas WITHOUT pull distribution
-        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 900, 700)
-        canvas.SetLeftMargin(0.12)
-        canvas.SetRightMargin(0.05)
-        canvas.SetTopMargin(0.08)
-        canvas.SetBottomMargin(0.12)
+        # Create canvas with two pads for fit and pull distribution
+        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 900, 800)
         
-        # Adjust axis labels for single plot
-        frame.GetYaxis().SetTitle("Candidates / (5 MeV/#it{c}^{2})")
-        frame.GetYaxis().SetTitleSize(0.045)
-        frame.GetYaxis().SetLabelSize(0.040)
-        frame.GetYaxis().SetTitleOffset(1.3)
-        frame.GetXaxis().SetTitle("m(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
-        frame.GetXaxis().SetTitleSize(0.045)
-        frame.GetXaxis().SetLabelSize(0.040)
-        frame.GetXaxis().SetTitleOffset(1.1)
+        # Upper pad for fit
+        pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.25, 1.0, 1.0)
+        pad1.SetBottomMargin(0.02)
+        pad1.SetLeftMargin(0.12)
+        pad1.SetRightMargin(0.05)
+        pad1.SetTopMargin(0.08)
+        pad1.Draw()
+        
+        # Lower pad for pulls
+        pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.25)
+        pad2.SetTopMargin(0.02)
+        pad2.SetBottomMargin(0.35)
+        pad2.SetLeftMargin(0.12)
+        pad2.SetRightMargin(0.05)
+        pad2.SetGridy()
+        pad2.Draw()
+        
+        # Draw fit in upper pad
+        pad1.cd()
+        frame.GetYaxis().SetTitle(f"Candidates / ({self.bin_width:.0f} MeV/#it{{c}}^{{2}})")
+        frame.GetYaxis().SetTitleSize(0.055)
+        frame.GetYaxis().SetLabelSize(0.050)
+        frame.GetYaxis().SetTitleOffset(1.0)
+        frame.GetXaxis().SetLabelSize(0.0)
+        frame.GetXaxis().SetTitleSize(0.0)
         frame.Draw()
         
-        # Add compact legend in top right (inside plot area) - larger for 6 states
+        # Add compact legend in top right (inside plot area)
         legend = ROOT.TLegend(0.58, 0.42, 0.92, 0.89)
         legend.SetBorderSize(0)
         legend.SetFillStyle(0)
-        legend.SetTextSize(0.030)  # Smaller text to fit all entries
+        legend.SetTextSize(0.035)
         legend.SetTextFont(42)
-        legend.SetMargin(0.15)  # Reduce space between symbol and text
-        
-        # Add entries with proper formatting
+        legend.SetMargin(0.15)
         legend.AddEntry("data", "Data: B^{+} #rightarrow #bar{#Lambda}pK^{#minus}K^{+}", "lep")
         legend.AddEntry("total", "Total fit", "l")
-        
-        # Add component labels with proper LaTeX (no extra spacer)
         state_labels = {
             "jpsi": "J/#psi",
             "etac": "#eta_{c}(1S)",
@@ -571,19 +622,39 @@ class MassFitter:
             "psi3770": "#psi(3770)",
             "background": "Combinatorial bkg."
         }
-        
         for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770", "background"]:
             legend.AddEntry(state, state_labels[state], "l")
-        
         legend.Draw()
         
+        # Create and draw pull distribution in lower pad
+        pad2.cd()
+        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))
+        pull_hist = frame.pullHist("data", "total")
+        pull_frame.addPlotable(pull_hist, "P")
+        pull_frame.GetYaxis().SetTitle("Pull")
+        pull_frame.GetYaxis().SetTitleSize(0.15)
+        pull_frame.GetYaxis().SetLabelSize(0.12)
+        pull_frame.GetYaxis().SetTitleOffset(0.35)
+        pull_frame.GetYaxis().SetNdivisions(505)
+        pull_frame.GetYaxis().SetRangeUser(-5.0, 5.0)
+        pull_frame.GetXaxis().SetTitle("m(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
+        pull_frame.GetXaxis().SetTitleSize(0.15)
+        pull_frame.GetXaxis().SetLabelSize(0.12)
+        pull_frame.GetXaxis().SetTitleOffset(1.0)
+        pull_frame.Draw()
+        
+        # Add horizontal line at zero
+        line = ROOT.TLine(self.fit_range[0], 0.0, self.fit_range[1], 0.0)
+        line.SetLineColor(ROOT.kRed)
+        line.SetLineStyle(2)
+        line.SetLineWidth(2)
+        line.Draw()
+        
         # Save plot
+        canvas.cd()
         plot_dir = Path(self.config.paths["output"]["plots_dir"]) / "fits"
         plot_dir.mkdir(exist_ok=True, parents=True)
-        
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))
-        
         print(f"  ✓ Saved fit plot: {output_file}")
-        
         return str(output_file)
