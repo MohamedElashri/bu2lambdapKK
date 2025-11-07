@@ -1,6 +1,6 @@
 [data]
 base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
-years = [2016, 2017, 2018]
+years = ["2016", "2017", "2018"]  # Strings for consistency with dict keys
 magnets = ["MD", "MU"]
 
 [mc]

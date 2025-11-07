@@ -131,7 +131,7 @@ class DataManager:
         
     def load_tree(self, 
                   particle_type: str,
-                  year: int,
+                  year: str,
                   magnet: str,
                   track_type: str = "LL",
                   channel_name: str = "B2L0barPKpKm") -> ak.Array:
@@ -140,7 +140,7 @@ class DataManager:
         
         Args:
             particle_type: "data", "Jpsi", "etac", "chic0", "chic1", "KpKm"
-            year: 2016, 2017, or 2018
+            year: "2016", "2017", or "2018" (string for consistency with dict keys)
             magnet: "MD" or "MU"
             track_type: "LL" or "DD" (Lambda reconstruction category)
             channel_name: Name of decay channel in ROOT file

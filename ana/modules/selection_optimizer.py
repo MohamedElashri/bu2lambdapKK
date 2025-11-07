@@ -65,11 +65,11 @@ class SelectionOptimizer:
         # Calculate efficiency
         efficiency = n_mc_after_cuts / n_mc_generated
         
-        # Scale factor: Use a reasonable multiplier that gives S ~ O(100-1000)
+        # Scale factor from configuration
         # This is calibrated to match typical signal yields in similar LHCb analyses
         # The exact value doesn't matter for optimization (we're comparing cuts),
         # but realistic S/B ratios help FOM converge properly
-        scale_factor = 10000.0  # Typical scale for LHCb analyses
+        scale_factor = self.config.selection.get("optimization_strategy", {}).get("signal_scale_factor", 10000.0)
         
         # Return scaled signal estimate
         return efficiency * scale_factor
@@ -674,7 +674,11 @@ class SelectionOptimizer:
             for var_name, var_config in opt_config.items():
                 if var_name == "notes":
                     continue
-                branch_name = self._get_branch_name_for_variable(category, var_name)
+                # Get branch name from config (now standardized)
+                branch_name = var_config.get("branch_name")
+                if not branch_name:
+                    branch_name = self._get_branch_name_for_variable(category, var_name)
+                    print(f"  ⚠️  No branch_name in config for {category}.{var_name}, using fallback: {branch_name}")
                 all_variables.append({
                     "category": category,
                     "var_name": var_name,
@@ -780,8 +784,12 @@ class SelectionOptimizer:
                 if var_name == "notes":  # Skip notes section
                     continue
                 
-                # Get actual branch name from mapping
-                branch_name = self._get_branch_name_for_variable(category, var_name)
+                # Get branch name from config (now all configs have branch_name)
+                branch_name = var_config.get("branch_name")
+                if not branch_name:
+                    # Fallback to old mapping method if branch_name not in config
+                    branch_name = self._get_branch_name_for_variable(category, var_name)
+                    print(f"  ⚠️  No branch_name in config for {category}.{var_name}, using fallback: {branch_name}")
                 
                 print(f"\n{'='*60}")
                 print(f"Optimizing: {category}.{var_name}")

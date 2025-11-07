@@ -43,19 +43,27 @@ class LambdaSelector:
         elif "L0_M" in events.fields:
             mask = mask & (events["L0_M"] > self.cuts["mass_min"])
             mask = mask & (events["L0_M"] < self.cuts["mass_max"])
+        else:
+            print("  ⚠️  WARNING: Lambda mass branch (L0_MM or L0_M) not found - skipping mass cut")
         
         # Lambda flight distance χ²
         if "L0_FDCHI2_OWNPV" in events.fields:
             mask = mask & (events["L0_FDCHI2_OWNPV"] > self.cuts["fd_chisq_min"])
+        else:
+            print("  ⚠️  WARNING: Lambda FDCHI2 branch (L0_FDCHI2_OWNPV) not found - skipping FDCHI2 cut")
         
         # Delta Z (absolute value in mm, not significance!)
         # NOTE: The cut is on |Delta_Z| > 5 mm
         if "Delta_Z_mm" in events.fields:
             mask = mask & (np.abs(events["Delta_Z_mm"]) > self.cuts["delta_z_min"])
+        else:
+            print("  ⚠️  WARNING: Delta_Z_mm branch not found - skipping Delta Z cut")
         
         # Proton PID from Lambda decay (Lp is the proton from Lambda)
         if "Lp_ProbNNp" in events.fields:
             mask = mask & (events["Lp_ProbNNp"] > self.cuts["proton_probnnp_min"])
+        else:
+            print("  ⚠️  WARNING: Proton PID branch (Lp_ProbNNp) not found - skipping PID cut")
         
         n_before = len(events)
         n_after = ak.sum(mask)

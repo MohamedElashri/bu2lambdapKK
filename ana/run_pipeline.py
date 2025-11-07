@@ -26,7 +26,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import awkward as ak
-from typing import Dict, Any
+from typing import Dict, Any, List
 import json
 
 # Add modules to path
@@ -109,8 +109,9 @@ class PipelineManager:
         with open(cache_file, 'rb') as f:
             return pickle.load(f)
     
-    def phase2_load_data_and_lambda_cuts(self, years: list = None, 
-                                         track_types: list = None,
+    def phase2_load_data_and_lambda_cuts(self, 
+                                         years: List[str] = None, 
+                                         track_types: List[str] = None,
                                          use_cached: bool = False):
         """
         Phase 2: Load data/MC and apply Lambda pre-selection
@@ -118,7 +119,7 @@ class PipelineManager:
         This is the most time-consuming phase. Results are cached.
         
         Args:
-            years: List of years to process (default: ["2016", "2017", "2018"])
+            years: List of year strings (default: ["2016", "2017", "2018"])
             track_types: List of track types (default: ["LL", "DD"])
             use_cached: Use cached results if available
         
@@ -433,59 +434,276 @@ class PipelineManager:
         return optimized_cuts_df
     
     def phase4_apply_optimized_cuts(self, data_dict: Dict, mc_dict: Dict,
-                                   optimized_cuts_df: pd.DataFrame):
+                                   optimized_cuts_df: pd.DataFrame,
+                                   apply_cuts_to_data: bool = None,
+                                   data_cut_state: str = None):
         """
-        Phase 4: Apply optimized cuts to data and MC
+        Phase 4: Apply optimized cuts to MC (and optionally to data)
         
-        This creates the final datasets for fitting and efficiency calculation.
+        IMPORTANT PHYSICS LOGIC FOR FITTING:
+        - For mass fitting: apply_cuts_to_data=False (default in config)
+          * DATA: Contains all states mixed → fit all simultaneously
+          * MC: Apply state-specific cuts for efficiency calculation
+        
+        OPTIONAL: Apply cuts to data for control plots, validation, etc.
+        - Controlled via config/selection.toml [cut_application] section
+        - Can override via function parameters
+        - Useful for: making plots, validating cuts, debugging
         
         Args:
             data_dict: Data after Lambda cuts
             mc_dict: MC after Lambda cuts
             optimized_cuts_df: Optimized cuts from Phase 3
+            apply_cuts_to_data: If specified, override config setting
+            data_cut_state: If specified, override config setting
         
         Returns:
-            data_final: Data after all cuts
-            mc_final: MC after all cuts
+            data_final: Data with or without cuts applied
+            mc_final: MC with state-specific cuts applied
         """
         print("\n" + "="*80)
         print("PHASE 4: APPLYING OPTIMIZED CUTS")
         print("="*80)
         
-        # For now, we'll use Lambda cuts only (simplified)
-        # Full implementation would apply Bu_PT, IPCHI2, etc.
+        # Read from config if not specified in function call
+        cut_config = self.config.selection.get("cut_application", {})
+        if apply_cuts_to_data is None:
+            apply_cuts_to_data = cut_config.get("apply_cuts_to_data", False)
+        if data_cut_state is None:
+            data_cut_state = cut_config.get("data_cut_state", "jpsi")
         
-        print("\n⚠️  Using Lambda cuts only (Bu cuts not yet implemented)")
-        print("    This is OK for draft analysis - can add later")
+        # Show configuration
+        print(f"\nConfiguration:")
+        print(f"  apply_cuts_to_data = {apply_cuts_to_data}")
+        if apply_cuts_to_data:
+            print(f"  data_cut_state = {data_cut_state}")
+            print(f"  ⚠️  WARNING: Cuts will be applied to data!")
+        else:
+            print(f"  → Data will remain unchanged (correct for mass fitting)")
         
-        # Just return the Lambda-cut data for now
-        data_final = data_dict
-        mc_final = mc_dict
+        if optimized_cuts_df is None or len(optimized_cuts_df) == 0:
+            print("\n⚠️  No optimized cuts provided - using Lambda cuts only")
+            return data_dict, mc_dict
+        
+        print(f"\nApplying {len(optimized_cuts_df)} optimized cut values")
+        
+        # Apply cuts to MC (state-specific cuts for each state)
+        mc_final = {}
+        states = ["jpsi", "etac", "chic0", "chic1"]
+        
+        for state in states:
+            print(f"\n[{state}]")
+            mc_final[state] = {}
+            
+            # Get cuts for this state
+            state_cuts = optimized_cuts_df[optimized_cuts_df["state"] == state]
+            
+            if len(state_cuts) == 0:
+                print(f"  ⚠️  No cuts found for {state}, using Lambda cuts only")
+                mc_final[state] = mc_dict[state]
+                continue
+            
+            print(f"  Applying {len(state_cuts)} cuts for {state}")
+            
+            for year in mc_dict[state]:
+                mc_final[state][year] = {}
+                
+                for track_type in mc_dict[state][year]:
+                    events = mc_dict[state][year][track_type]
+                    n_before = len(events)
+                    
+                    # Start with all events passing
+                    mask = ak.ones_like(events["Bu_PT"], dtype=bool)
+                    
+                    # Apply each cut
+                    for _, cut_row in state_cuts.iterrows():
+                        branch = cut_row["branch_name"]
+                        cut_val = cut_row["optimal_cut"]
+                        cut_type = cut_row["cut_type"]
+                        
+                        if branch not in events.fields:
+                            print(f"    ⚠️  Branch {branch} not found, skipping")
+                            continue
+                        
+                        branch_data = events[branch]
+                        
+                        # Flatten jagged arrays if needed
+                        if 'var' in str(ak.type(branch_data)):
+                            branch_data = ak.firsts(branch_data)
+                        
+                        if cut_type == "greater":
+                            mask = mask & (branch_data > cut_val)
+                        elif cut_type == "less":
+                            mask = mask & (branch_data < cut_val)
+                    
+                    events_after = events[mask]
+                    n_after = len(events_after)
+                    eff = 100 * n_after / n_before if n_before > 0 else 0
+                    
+                    mc_final[state][year][track_type] = events_after
+                    print(f"    {year} {track_type}: {n_before:,} → {n_after:,} ({eff:.1f}%)")
+        
+        # Data: Apply cuts only if requested (for control plots, validation, etc.)
+        # For fitting, we DON'T apply cuts (all states fit to same data)
+        if apply_cuts_to_data:
+            print(f"\n⚠️  APPLYING CUTS TO DATA (using {data_cut_state} cuts)")
+            print("    This should ONLY be used for control plots or validation!")
+            print("    For mass fitting, use apply_cuts_to_data=False")
+            
+            data_final = {}
+            data_cuts = optimized_cuts_df[optimized_cuts_df["state"] == data_cut_state]
+            
+            if len(data_cuts) == 0:
+                print(f"  ⚠️  No cuts found for {data_cut_state}, data unchanged")
+                data_final = data_dict
+            else:
+                for year in data_dict:
+                    data_final[year] = {}
+                    for track_type in data_dict[year]:
+                        events = data_dict[year][track_type]
+                        n_before = len(events)
+                        
+                        # Apply cuts
+                        mask = ak.ones_like(events["Bu_PT"], dtype=bool)
+                        for _, cut_row in data_cuts.iterrows():
+                            branch = cut_row["branch_name"]
+                            cut_val = cut_row["optimal_cut"]
+                            cut_type = cut_row["cut_type"]
+                            
+                            if branch not in events.fields:
+                                continue
+                            
+                            branch_data = events[branch]
+                            if 'var' in str(ak.type(branch_data)):
+                                branch_data = ak.firsts(branch_data)
+                            
+                            if cut_type == "greater":
+                                mask = mask & (branch_data > cut_val)
+                            elif cut_type == "less":
+                                mask = mask & (branch_data < cut_val)
+                        
+                        events_after = events[mask]
+                        n_after = len(events_after)
+                        eff = 100 * n_after / n_before if n_before > 0 else 0
+                        
+                        data_final[year][track_type] = events_after
+                        print(f"    Data {year} {track_type}: {n_before:,} → {n_after:,} ({eff:.1f}%)")
+        else:
+            # Default: Do NOT apply cuts to data (for fitting)
+            data_final = data_dict
         
         # Save summary
         summary = {
             "phase": "4_apply_cuts",
-            "cuts_applied": "Lambda selection only",
-            "note": "Bu-level cuts to be added in full analysis"
+            "apply_cuts_to_data": apply_cuts_to_data,
+            "data_cut_state": data_cut_state if apply_cuts_to_data else None,
+            "data_cuts": f"Cuts from {data_cut_state}" if apply_cuts_to_data else "Lambda pre-selection only",
+            "mc_cuts": "State-specific optimized cuts from Phase 3",
+            "n_cuts_per_state": {state: len(optimized_cuts_df[optimized_cuts_df["state"] == state]) 
+                                 for state in states}
         }
         
         with open("tables/phase4_summary.json", "w") as f:
             json.dump(summary, f, indent=2)
         
-        print("✓ Phase 4 complete: Using Lambda-cut data for subsequent phases")
+        print("\n✓ Phase 4 complete:")
+        if apply_cuts_to_data:
+            print(f"  → Data: CUTS APPLIED (using {data_cut_state} cuts)")
+            print("      ⚠️  Use this only for control plots/validation, NOT for fitting!")
+        else:
+            print("  → Data: UNCHANGED (Lambda pre-selection only)")
+            print("      All charmonium states will be fit simultaneously to same data")
+        print("  → MC: State-specific optimized cuts applied")
+        print("      Used to calculate selection efficiencies per state")
         
         return data_final, mc_final
+    
+    def apply_manual_cuts(self, events: ak.Array, cuts: Dict[str, Dict]) -> ak.Array:
+        """
+        Apply manual cuts to any event array (data or MC)
+        
+        Useful for:
+        - Making control plots with specific cuts
+        - Testing different cut values
+        - Creating validation samples
+        
+        Args:
+            events: Awkward array of events
+            cuts: Dictionary of cuts, format:
+                  {"branch_name": {"cut_type": "greater"|"less", "value": float}}
+                  
+        Example:
+            cuts = {
+                "Bu_PT": {"cut_type": "greater", "value": 5000.0},
+                "Bu_IPCHI2_OWNPV": {"cut_type": "less", "value": 9.0},
+                "h1_ProbNNk": {"cut_type": "greater", "value": 0.2}
+            }
+            events_cut = pipeline.apply_manual_cuts(events, cuts)
+        
+        Returns:
+            events_after_cuts: Filtered awkward array
+        """
+        n_before = len(events)
+        
+        # Start with all events passing
+        if "Bu_PT" in events.fields:
+            mask = ak.ones_like(events["Bu_PT"], dtype=bool)
+        elif "Bu_MM" in events.fields:
+            mask = ak.ones_like(events["Bu_MM"], dtype=bool)
+        else:
+            raise ValueError("Cannot create mask - no reference branch found")
+        
+        # Apply each cut
+        for branch_name, cut_spec in cuts.items():
+            if branch_name not in events.fields:
+                print(f"  ⚠️  Branch {branch_name} not found, skipping")
+                continue
+            
+            branch_data = events[branch_name]
+            
+            # Flatten jagged arrays if needed
+            if 'var' in str(ak.type(branch_data)):
+                branch_data = ak.firsts(branch_data)
+            
+            cut_type = cut_spec["cut_type"]
+            cut_val = cut_spec["value"]
+            
+            if cut_type == "greater":
+                mask = mask & (branch_data > cut_val)
+            elif cut_type == "less":
+                mask = mask & (branch_data < cut_val)
+            else:
+                print(f"  ⚠️  Unknown cut_type '{cut_type}', skipping {branch_name}")
+                continue
+            
+            print(f"  Applied: {branch_name} {cut_type} {cut_val}")
+        
+        events_after = events[mask]
+        n_after = len(events_after)
+        eff = 100 * n_after / n_before if n_before > 0 else 0
+        
+        print(f"  Total: {n_before:,} → {n_after:,} ({eff:.1f}%)")
+        
+        return events_after
     
     def phase5_mass_fitting(self, data_final: Dict, use_cached: bool = False):
         """
         Phase 5: Fit charmonium mass spectrum to extract yields
         
+        Fits ALL charmonium states (J/ψ, ηc, χc0, χc1) simultaneously to the
+        SAME data sample. Data has only Lambda pre-selection - no state-specific cuts.
+        
+        This is correct because:
+        - Real data contains all states mixed together
+        - Different states appear at different M(KK) masses
+        - We extract yields by fitting the mass spectrum
+        
         Args:
-            data_final: Data after all cuts
+            data_final: Data with Lambda pre-selection only (NOT state-specific cuts)
             use_cached: Use cached fit results
         
         Returns:
-            fit_results: Dictionary with yields, masses, widths per year
+            fit_results: Dictionary with yields per state
         """
         print("\n" + "="*80)
         print("PHASE 5: MASS FITTING")
