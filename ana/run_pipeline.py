@@ -38,6 +38,7 @@ from modules.selection_optimizer import SelectionOptimizer
 from modules.mass_fitter import MassFitter
 from modules.efficiency_calculator import EfficiencyCalculator
 from modules.branching_fraction_calculator import BranchingFractionCalculator
+from modules.exceptions import ConfigurationError, AnalysisError
 
 
 class PipelineManager:
@@ -73,10 +74,24 @@ class PipelineManager:
         
     def _validate_config(self):
         """Validate that all required configuration is present"""
-        required = ["paths", "particles", "luminosity", "selection"]
+        # New logical structure validation
+        required = ["physics", "detector", "fitting", "selection", "triggers", "data", "efficiencies"]
         for req in required:
             if not hasattr(self.config, req):
-                raise ValueError(f"Missing required config: {req}")
+                raise ConfigurationError(
+                    f"Missing required configuration section: '{req}'\n"
+                    f"Expected file: config/{req}.toml\n"
+                    f"Please ensure all required configuration files are present."
+                )
+        
+        # Also check backward compatibility attributes are created
+        compat_attrs = ["particles", "paths", "luminosity", "branching_fractions", "efficiency_inputs"]
+        for attr in compat_attrs:
+            if not hasattr(self.config, attr):
+                raise ConfigurationError(
+                    f"Backward compatibility layer failed to create attribute: '{attr}'\n"
+                    f"This is an internal error in TOMLConfig._create_compatibility_layer()"
+                )
         
         # Check that data paths exist
         data_root = Path(self.config.paths["data"]["base_path"])
@@ -409,21 +424,11 @@ class PipelineManager:
             config=self.config
         )
         
-        # Run optimization based on config method
-        opt_method = self.config.selection.get("optimization_strategy", {}).get("method", "1d_scan")
-        
-        if opt_method == "nd_grid_scan":
-            print("\n⚠️  Running N-D GRID SCAN: exhaustive search over 7 variables")
-            print("    Testing all combinations in 7D space (3,888 points per state)")
-            print("    Lambda cuts are FIXED (already applied in Phase 2)")
-            optimized_cuts_df = optimizer.optimize_nd_grid_scan()
-        elif opt_method == "2d_pairs":
-            print("\n⚠️  Running 2D pair optimization: scanning variable pairs")
-            optimized_cuts_df = optimizer.optimize_2d_pairs()
-        else:  # Default to 1d_scan
-            print("\n⚠️  Running 1D optimization: scanning each variable independently")
-            print("    Results organized as 2D table: variables × states")
-            optimized_cuts_df = optimizer.optimize_2d_all_variables()
+        # Run N-D grid scan optimization
+        print("\n⚠️  Running N-D GRID SCAN: exhaustive search over 7 variables")
+        print("    Testing all combinations in 7D space ")
+        print("    Lambda cuts are FIXED (already applied in Phase 2)")
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan()
         
         # Cache and save
         self._save_cache("3", "optimized_cuts", optimized_cuts_df)
@@ -651,7 +656,10 @@ class PipelineManager:
         elif "Bu_MM" in events.fields:
             mask = ak.ones_like(events["Bu_MM"], dtype=bool)
         else:
-            raise ValueError("Cannot create mask - no reference branch found")
+            raise AnalysisError(
+                "Cannot create mask for manual cuts - no reference branch found.\n"
+                "Expected Bu_PT or Bu_MM in events. Check data loading."
+            )
         
         # Apply each cut
         for branch_name, cut_spec in cuts.items():
@@ -1011,6 +1019,15 @@ def main():
     years = args.years.split(",")
     track_types = args.track_types.split(",")
     use_cached = not args.no_cache
+    
+    # Validate configuration before running pipeline
+    print("Validating configuration...")
+    from validate_config import ConfigValidator
+    validator = ConfigValidator(config_dir="config", verbose=False)
+    if not validator.validate_all():
+        print("\nConfiguration validation failed. Please fix errors before running pipeline.")
+        sys.exit(1)
+    print()
     
     # Initialize pipeline
     pipeline = PipelineManager(config_dir="config", cache_dir="cache")

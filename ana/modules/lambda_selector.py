@@ -2,6 +2,8 @@ import awkward as ak
 import numpy as np
 from typing import TYPE_CHECKING
 
+from .exceptions import BranchMissingError
+
 if TYPE_CHECKING:
     from data_handler import TOMLConfig
 
@@ -44,7 +46,10 @@ class LambdaSelector:
             mask = mask & (events["L0_M"] > self.cuts["mass_min"])
             mask = mask & (events["L0_M"] < self.cuts["mass_max"])
         else:
-            print("  ⚠️  WARNING: Lambda mass branch (L0_MM or L0_M) not found - skipping mass cut")
+            raise BranchMissingError(
+                "L0_MM",
+                "Lambda mass branch (L0_MM or L0_M) is required for Lambda cuts but not found in data"
+            )
         
         # Lambda flight distance χ²
         if "L0_FDCHI2_OWNPV" in events.fields:

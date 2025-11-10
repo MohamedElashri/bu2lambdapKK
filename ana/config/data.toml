@@ -1,0 +1,65 @@
+# ═══════════════════════════════════════════════════════════════
+# DATA AND FILE MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+# File paths, data organization, output directories
+# ═══════════════════════════════════════════════════════════════
+
+[input_data]
+# Data file locations
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+years = ["2016", "2017", "2018"]  # Strings for consistency with dict keys
+magnets = ["MD", "MU"]  # MagDown, MagUp
+
+[input_data.notes]
+comment = """
+Data Organization:
+- Files per year and magnet polarity
+- Format: dataBu2L0barPHH_{YY}{MD/MU}.root
+- Both LL and DD Lambda categories in same file
+- Tree structure: B2L0barPKpKm_{LL/DD}/DecayTree
+"""
+
+[input_mc]
+# Monte Carlo file locations
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc"
+states = ["Jpsi", "etac", "chic0", "chic1", "KpKm"]
+
+[input_mc.notes]
+comment = """
+MC Organization:
+- Separate directories per charmonium state
+- Files per year and magnet polarity
+- Format: {state}_{YY}_{MD/MU}.root
+- KpKm: Phase space MC for trigger efficiency study
+- Note: Not all states may have both magnet polarities
+"""
+
+[output]
+# Output directories for analysis results
+plots_dir = "./plots"
+tables_dir = "./tables"
+results_dir = "./results"
+docs_dir = "./docs"
+
+[output.subdirs]
+# Automatic subdirectories created by pipeline
+fits = "./plots/fits"  # Mass fit plots
+optimization = "./plots/optimization"  # FOM scan plots
+efficiencies = "./plots/efficiencies"  # Efficiency plots
+branching_fractions = "./plots/branching_fractions"  # Final results plots
+
+[cache]
+# Caching intermediate results for faster re-running
+cache_dir = "./cache"
+enable_caching = true
+
+[cache.notes]
+comment = """
+Caching Strategy:
+- Phase 2: Cached data after Lambda cuts (largest data structure)
+- Phase 3: Optimized cuts (small DataFrame)
+- Phase 5: Fit results (fit parameters and plots)
+- Phase 6: Efficiency calculations
+- Speeds up re-running pipeline with different parameters
+- Cache automatically invalidated if config changes
+"""

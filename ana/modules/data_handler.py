@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import sys
 
-# Import BranchConfig from local modules
+# Import local modules
 from .branch_config import BranchConfig
+from .exceptions import ConfigurationError, DataLoadError, BranchMissingError
 
 import vector
 
@@ -16,17 +17,33 @@ import vector
 vector.register_awkward()
 
 class TOMLConfig:
-    """Load and manage all TOML configuration files"""
+    """
+    Load and manage all TOML configuration files
+    
+    New logical structure (v2):
+    - physics.toml: PDG constants (masses, widths, branching fractions)
+    - detector.toml: Experimental setup (signal regions, mass windows, luminosity)
+    - fitting.toml: Mass fitting configuration
+    - selection.toml: Selection and optimization (unchanged)
+    - triggers.toml: Trigger configuration (unchanged)
+    - data.toml: File paths and I/O
+    - efficiencies.toml: Efficiency inputs
+    """
     
     def __init__(self, config_dir: str = "./config"):
         self.config_dir = Path(config_dir)
-        self.paths = self._load_toml("paths.toml")
-        self.particles = self._load_toml("particles.toml")
-        self.branching_fractions = self._load_toml("branching_fractions.toml")
-        self.luminosity = self._load_toml("luminosity.toml")
-        self.triggers = self._load_toml("triggers.toml")
-        self.efficiency_inputs = self._load_toml("efficiency_inputs.toml")
+        
+        # Load new logical structure
+        self.physics = self._load_toml("physics.toml")
+        self.detector = self._load_toml("detector.toml")
+        self.fitting = self._load_toml("fitting.toml")
         self.selection = self._load_toml("selection.toml")
+        self.triggers = self._load_toml("triggers.toml")
+        self.data = self._load_toml("data.toml")
+        self.efficiencies = self._load_toml("efficiencies.toml")
+        
+        # Backward compatibility: create virtual 'particles' and 'paths' attributes
+        self._create_compatibility_layer()
         
         # Use BranchConfig - look for branches_config.toml in ana/modules/
         modules_dir = Path(__file__).parent
@@ -34,15 +51,71 @@ class TOMLConfig:
         self.branch_config = BranchConfig(str(branches_config_path))
         
     def _load_toml(self, filename: str) -> dict:
-        with open(self.config_dir / filename, 'rb') as f:
-            return tomli.load(f)
+        """
+        Load TOML configuration file with proper error handling
+        
+        Args:
+            filename: Name of the TOML file to load
+            
+        Returns:
+            dict: Parsed TOML configuration
+            
+        Raises:
+            ConfigurationError: If file not found or parsing fails
+        """
+        config_path = self.config_dir / filename
+        try:
+            with open(config_path, 'rb') as f:
+                return tomli.load(f)
+        except FileNotFoundError:
+            raise ConfigurationError(
+                f"Configuration file not found: {config_path}\n"
+                f"Please ensure all config files are present in {self.config_dir}"
+            )
+        except tomli.TOMLDecodeError as e:
+            raise ConfigurationError(
+                f"Error parsing TOML file {config_path}: {e}"
+            )
+    
+    def _create_compatibility_layer(self):
+        """
+        Create backward-compatible attributes for code expecting old structure
+        This allows gradual migration without breaking existing code
+        """
+        # Merge physics + detector into 'particles' for backward compatibility
+        self.particles = {
+            **self.physics,
+            "signal_regions": self.detector["signal_regions"],
+            "mass_windows": self.detector["mass_windows"],
+            "fitting": self.fitting["fit_method"] | self.fitting["background_model"]
+        }
+        
+        # Map data -> paths for backward compatibility
+        self.paths = {
+            "data": self.data["input_data"],
+            "mc": self.data["input_mc"],
+            "output": self.data["output"]
+        }
+        
+        # Map efficiencies -> efficiency_inputs for backward compatibility
+        self.efficiency_inputs = self.efficiencies
+        
+        # Map detector -> luminosity for backward compatibility
+        self.luminosity = {"integrated_luminosity": self.detector["integrated_luminosity"]}
+        
+        # Map physics -> branching_fractions for backward compatibility
+        self.branching_fractions = {
+            "pdg_known": self.physics["pdg_branching_fractions"],
+            "normalization": self.physics["analysis_method"]
+        }
     
     def get_pdg_mass(self, particle: str) -> float:
-        return self.particles["pdg_masses"][particle]
+        """Get PDG mass for particle (MeV/c²)"""
+        return self.physics["pdg_masses"][particle]
     
     def get_signal_region(self, state: str) -> Tuple[float, float]:
         """Returns (center, window) for signal region"""
-        region = self.particles["signal_regions"][state.lower()]
+        region = self.detector["signal_regions"][state.lower()]
         center = region["center"]
         window = region["window"]
         return (center - window, center + window)
@@ -166,49 +239,63 @@ class DataManager:
             if is_mc:
                 print(f"⚠️  MC file not found (will skip): {filepath}")
                 return None
-            # For data files, this is critical - raise error
-            raise FileNotFoundError(f"Data file not found: {filepath}")
+            # For data files, this is critical - raise custom error
+            raise DataLoadError(
+                f"Data file not found: {filepath}\n"
+                f"Expected location: {self.data_path}\n"
+                f"Please check that data files are present and paths in config/paths.toml are correct"
+            )
         
         # Build tree path: channel_LL/DecayTree or channel_DD/DecayTree
         channel_path = f"{channel_name}_{track_type}"
         tree_path = f"{channel_path}/DecayTree"
         
-        with uproot.open(filepath) as file:
-            if channel_path not in file:
-                raise ValueError(f"Channel {channel_path} not found in {filepath}")
-            
-            tree = file[tree_path]
-            
-            # Get branches we need using BranchConfig
-            load_branches = self.config.branch_config.get_branches_from_preset(
-                "standard", exclude_mc=not is_mc
+        try:
+            with uproot.open(filepath) as file:
+                if channel_path not in file:
+                    available = list(file.keys())
+                    raise DataLoadError(
+                        f"Channel '{channel_path}' not found in {filepath}\n"
+                        f"Available channels: {available}"
+                    )
+                
+                tree = file[tree_path]
+                
+                # Get branches we need using BranchConfig
+                load_branches = self.config.branch_config.get_branches_from_preset(
+                    "standard", exclude_mc=not is_mc
+                )
+                
+                # Resolve aliases to actual branch names
+                resolved_branches = self.config.branch_config.resolve_aliases(
+                    load_branches, is_mc=is_mc
+                )
+                
+                # Validate and load
+                available_branches = list(tree.keys())
+                validation = self.config.branch_config.validate_branches(
+                    resolved_branches, available_branches
+                )
+                
+                if validation['missing']:
+                    print(f"⚠️  Missing {len(validation['missing'])} branches in {channel_path}")
+                
+                # Load valid branches
+                events = tree.arrays(validation['valid'], library='ak')
+                
+                # Normalize branch names back to common names
+                rename_map = self.config.branch_config.normalize_branches(
+                    validation['valid'], is_mc=is_mc
+                )
+                if rename_map:
+                    for old_name, new_name in rename_map.items():
+                        events = ak.with_field(events, events[old_name], new_name)
+                        events = ak.without_field(events, old_name)
+        
+        except (OSError, IOError) as e:
+            raise DataLoadError(
+                f"Error reading ROOT file {filepath}: {e}"
             )
-            
-            # Resolve aliases to actual branch names
-            resolved_branches = self.config.branch_config.resolve_aliases(
-                load_branches, is_mc=is_mc
-            )
-            
-            # Validate and load
-            available_branches = list(tree.keys())
-            validation = self.config.branch_config.validate_branches(
-                resolved_branches, available_branches
-            )
-            
-            if validation['missing']:
-                print(f"⚠️  Missing {len(validation['missing'])} branches in {channel_path}")
-            
-            # Load valid branches
-            events = tree.arrays(validation['valid'], library='ak')
-            
-            # Normalize branch names back to common names
-            rename_map = self.config.branch_config.normalize_branches(
-                validation['valid'], is_mc=is_mc
-            )
-            if rename_map:
-                for old_name, new_name in rename_map.items():
-                    events = ak.with_field(events, events[old_name], new_name)
-                    events = ak.without_field(events, old_name)
             
         print(f"✓ Loaded {particle_type} {year}_{magnet}_{track_type}: {len(events)} events")
         return events

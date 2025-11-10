@@ -1,0 +1,96 @@
+# ═══════════════════════════════════════════════════════════════
+# EFFICIENCY INPUTS
+# ═══════════════════════════════════════════════════════════════
+# External efficiency measurements to be provided by user
+# Total efficiency: ε_total = ε_acc × ε_reco × ε_strip × ε_trig × ε_sel
+# ═══════════════════════════════════════════════════════════════
+
+[efficiency_components]
+# Which components are calculated vs provided
+acceptance = "calculated"  # From MC truth (generator level → detector acceptance)
+reconstruction = "placeholder"  # COMBINED with stripping for now
+stripping = "user_provided"  # From data-driven stripping campaign
+trigger = "calculated"  # From phase space MC (KpKm sample)
+selection = "calculated"  # From MC (offline selection on reconstructed)
+
+[efficiency_components.notes]
+comment = """
+Efficiency Calculation Strategy:
+- Acceptance (ε_acc): Calculated from MC truth matching
+- Reconstruction (ε_reco): Placeholder = 0 (combined with stripping)
+- Stripping (ε_strip): User must provide from data-driven campaign
+- Trigger (ε_trig): Calculated from KpKm phase space MC
+- Selection (ε_sel): Calculated from signal MC after optimized cuts
+
+NOTE: Full efficiency study will be done separately later!
+      For now, we focus on RATIOS where many efficiencies cancel.
+"""
+
+[stripping_efficiency]
+# From data-driven stripping campaign
+# TO BE PROVIDED by user
+# Format: {state}.{year} = {value = X, error = Y}
+
+[stripping_efficiency.jpsi]
+"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+
+[stripping_efficiency.etac]
+"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+
+[stripping_efficiency.chic0]
+"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+
+[stripping_efficiency.chic1]
+"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
+
+[trigger_efficiency]
+# From KpKm phase space MC
+# Calculated by pipeline in Phase 6
+# Format: {state}.{year} = {value = X, error = Y}
+
+[trigger_efficiency.jpsi]
+"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+
+[trigger_efficiency.etac]
+"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+
+[trigger_efficiency.chic0]
+"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+
+[trigger_efficiency.chic1]
+"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
+
+[efficiency_ratios]
+# For branching fraction ratios, we need efficiency ratios relative to J/ψ
+method = "ratio_relative_to_jpsi"
+
+[efficiency_ratios.notes]
+comment = """
+Efficiency Ratio Method:
+- Measure: ε(state) / ε(J/ψ) for each year
+- Many systematics cancel in the ratio
+- Reconstruction and PID efficiencies largely cancel
+- Remaining differences: kinematic effects (different masses)
+
+Advantages of ratio method:
+1. Systematics cancellation
+2. No need for absolute normalization
+3. More robust to detector conditions
+4. Standard LHCb approach for relative measurements
+"""

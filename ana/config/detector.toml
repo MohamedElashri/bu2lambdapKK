@@ -1,0 +1,69 @@
+# ═══════════════════════════════════════════════════════════════
+# DETECTOR AND EXPERIMENTAL SETUP
+# ═══════════════════════════════════════════════════════════════
+# Detector resolution, mass windows, luminosity
+# These depend on experimental conditions
+# ═══════════════════════════════════════════════════════════════
+
+[mass_windows]
+# Fixed mass windows for selection (not optimized)
+# These are loose cuts to define the analysis region
+lambda = [1111.0, 1121.0]  # MeV/c² - Lambda mass window
+bu_corrected = [5255.0, 5305.0]  # MeV/c² - B⁺ corrected mass window
+charmonium_fit_range = [2800.0, 4000.0]  # MeV/c² - Full fit range
+
+[signal_regions]
+# Signal region definitions for FOM calculation during optimization
+# Format: center (mass), window (half-width)
+# Windows account for detector resolution and natural width
+
+[signal_regions.jpsi]
+center = 3096.916  # MeV/c²
+window = 15.0  # ±15 MeV → ~3σ detector resolution (very narrow state)
+comment = "Resolution-limited, very narrow natural width (Γ = 0.09 MeV)"
+
+[signal_regions.etac]
+center = 2983.9  # MeV/c²
+window = 64.0  # ±64 MeV → 2×Γ for natural width
+comment = "Broad state, window based on natural width (Γ = 30.5 MeV)"
+
+[signal_regions.chic0]
+center = 3414.71  # MeV/c²
+window = 21.0  # ±21 MeV → 2×Γ
+comment = "Medium width state (Γ = 10.6 MeV)"
+
+[signal_regions.chic1]
+center = 3510.67  # MeV/c²
+window = 20.0  # ±20 MeV → resolution limited
+comment = "Narrow state, resolution-limited like J/ψ (Γ = 0.88 MeV)"
+
+[signal_regions.etac_2s]
+center = 3637.8  # MeV/c²
+window = 23.2  # ±23.2 MeV → 2×Γ
+comment = "Medium width state (Γ = 11.6 MeV)"
+
+[signal_regions.psi3770]
+center = 3778.1  # MeV/c²
+window = 55.0  # ±55 MeV → 2×Γ
+comment = "Broad state (Γ = 27.5 MeV)"
+
+[integrated_luminosity]
+# Integrated luminosity in fb⁻¹
+# Combined MagDown + MagUp for each year
+# Total: 5.54 fb⁻¹
+"2016" = 1.67
+"2017" = 1.74
+"2018" = 2.13
+
+[detector_notes]
+comment = """
+SIGNAL REGION PHILOSOPHY:
+- Narrow states (J/ψ, χc1): Resolution-limited, window = 3σ detector resolution
+- Broad states (ηc, ψ(3770)): Natural width dominates, window = 2×Γ
+- Medium states (χc0, ηc(2S)): Compromise between resolution and width
+
+MASS WINDOWS:
+- Lambda: Standard ±5 MeV around PDG mass
+- B⁺: ±25 MeV around corrected mass (5279 MeV)
+- Charmonium fit range: Wide range to capture all states and background
+"""

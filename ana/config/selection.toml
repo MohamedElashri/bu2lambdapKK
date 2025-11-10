@@ -216,8 +216,45 @@ branch_name = "h2_IPCHI2_OWNPV"
 description = "K- IP χ² to PV"
 
 [optimization_strategy]
-method = "nd_grid_scan"
+# N-D grid scan: Full exhaustive search over all variables simultaneously
 signal_scale_factor = 10000.0
+
+# Sideband definition for background estimation in FOM calculation
+sideband_low_multiplier = 4.0   # Low sideband starts at (center - 4*window)
+sideband_low_end_multiplier = 1.0  # Low sideband ends at (center - 1*window)
+sideband_high_start_multiplier = 1.0  # High sideband starts at (center + 1*window)
+sideband_high_multiplier = 4.0  # High sideband ends at (center + 4*window)
+
+description = """
+OPTIMIZATION METHOD - N-D Grid Scan:
+  - Full N-D grid search over all 7 variables simultaneously
+  - Finds globally optimal cuts considering all correlations
+  - Tests 3,888 combinations per state (3x3x3x2x4x6x3)
+  - Fast enough for this problem size (~10-20 minutes)
+  - Results are reproducible and optimal
+
+SIDEBAND REGIONS for background estimation:
+  - Signal region: center ± window (from particles.toml)
+  - Low sideband: (center - 4*window) to (center - 1*window)
+  - High sideband: (center + 1*window) to (center + 4*window)
+  
+  These multipliers define how many signal windows away the sidebands extend.
+  Wider sidebands give better background statistics but may include other resonances.
+
+SIGNAL SCALE FACTOR:
+  - Used to scale MC signal to data-equivalent for realistic FOM calculation
+  - Normalization factor ensures S/B ratios are realistic during optimization
+  - Exact value doesn't affect which cuts are optimal (comparing relative FOM)
+  - Value calibrated to match typical LHCb yields
+
+STATE-DEPENDENT OPTIMIZATION:
+  ⚠️ Different states may need different cuts!
+  - ηc: Lowest mass, softer particles → may need softer cuts
+  - J/ψ: Highest statistics → can use tighter cuts
+  - χc states: Medium requirements
+  
+  The optimization is STATE-DEPENDENT, producing separate cut values for each state.
+"""
 
 [cut_application]
 # Control whether to apply optimized cuts to data in Phase 4
@@ -288,18 +325,4 @@ For each state (J/ψ, ηc, χc0, χc1):
 - Test ALL combinations in 7D grid
 - Find combination that maximizes FOM
 - Output optimal cuts for each state
-"""
-
-[optimization_strategy.notes]
-important = """
-⚠️ Different states may need different cuts!
-   - ηc: Lowest mass, softer particles → may need softer cuts
-   - J/ψ: Highest statistics → can use tighter cuts
-   - χc states: Medium requirements
-
-The optimization is STATE-DEPENDENT, producing separate
-cut values for each charmonium state.
-
-However, for simplicity in first iteration, we can optimize
-for χc states (limiting precision) and use same for all.
 """

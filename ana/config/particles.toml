@@ -63,10 +63,19 @@ comment = "Broad state"
 # Maximum likelihood fitting configuration
 use_binned_fit = true  # true: binned ML, false: unbinned ML (default: binned)
 bin_width = 5.0  # MeV - bin width for binned fits and plotting
+
+# Background model parameters
+argus_endpoint_offset = 200.0  # MeV - ARGUS endpoint extended beyond fit range
+
 comment = """
 Binned vs Unbinned Maximum Likelihood:
 - Binned: Faster, suitable for large datasets, creates histogram first
 - Unbinned: More accurate, uses all event information
 - bin_width determines binning for both fitting and plotting (always 5 MeV per bin)
 - Number of bins calculated automatically: nbins = int((max - min) / bin_width)
+
+ARGUS Background Model:
+- argus_endpoint_offset: ARGUS function endpoint is set to (fit_range_max + offset)
+- The offset extends the endpoint beyond the fit range to properly model threshold effects
+- Typical value: 200 MeV gives good description of combinatorial background
 """

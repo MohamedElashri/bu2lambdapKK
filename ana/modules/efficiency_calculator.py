@@ -11,6 +11,8 @@ import numpy as np
 import awkward as ak
 from pathlib import Path
 
+from .exceptions import EfficiencyError
+
 
 class EfficiencyCalculator:
     """
@@ -58,7 +60,10 @@ class EfficiencyCalculator:
             DataFrame with cuts for this state only
         """
         if self.optimized_cuts is None:
-            raise ValueError("Optimized cuts not provided to EfficiencyCalculator")
+            raise EfficiencyError(
+                "Optimized cuts not provided to EfficiencyCalculator. "
+                "Please run Phase 3 (selection optimization) before calculating efficiencies."
+            )
         
         return self.optimized_cuts[self.optimized_cuts["state"] == state]
     
@@ -105,7 +110,10 @@ class EfficiencyCalculator:
             elif cut_type == "less":
                 mask = mask & (branch_data < cut_val)
             else:
-                raise ValueError(f"Unknown cut type: {cut_type}")
+                raise EfficiencyError(
+                    f"Unknown cut type '{cut_type}' for branch '{branch}'. "
+                    f"Expected 'greater' or 'less'. Check optimized cuts configuration."
+                )
         
         return mc_events[mask]
     

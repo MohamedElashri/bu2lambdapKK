@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import List, Dict, Set, Optional
 import logging
 
+from .exceptions import ConfigurationError
+
 
 class BranchConfig:
     """Manager for branch configuration"""
@@ -29,7 +31,10 @@ class BranchConfig:
             config_path = Path(config_path)
         
         if not config_path.exists():
-            raise FileNotFoundError(f"Branch config not found: {config_path}")
+            raise ConfigurationError(
+                f"Branch configuration file not found: {config_path}\n"
+                f"Expected location: {Path(__file__).parent / 'branches_config.toml'}"
+            )
         
         # Load configuration
         with open(config_path, 'rb') as f:
@@ -113,12 +118,16 @@ class BranchConfig:
         - List of branch names
         """
         if 'presets' not in self.config:
-            raise ValueError("No presets defined in config")
+            raise ConfigurationError(
+                "No presets defined in branch configuration. "
+                "branches_config.toml must have a [presets] section."
+            )
         
         if preset not in self.config['presets']:
             available = list(self.config['presets'].keys())
-            raise ValueError(
-                f"Preset '{preset}' not found. Available: {available}"
+            raise ConfigurationError(
+                f"Preset '{preset}' not found in branch configuration.\n"
+                f"Available presets: {available}"
             )
         
         sets = self.config['presets'][preset]

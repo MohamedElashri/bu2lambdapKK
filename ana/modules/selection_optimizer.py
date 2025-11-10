@@ -5,6 +5,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
 
+from .exceptions import OptimizationError
+
 class SelectionOptimizer:
     """
     Optimize cuts on B+, bachelor p̄, K+, K- using Figure of Merit
@@ -99,11 +101,18 @@ class SelectionOptimizer:
         center_val = self.config.particles["signal_regions"][state.lower()]["center"]
         window = self.config.particles["signal_regions"][state.lower()]["window"]
         
-        # Low sideband: 4 windows below to 1 window below signal
-        low_sb = (center_val - 4*window, center_val - window)
+        # Get sideband multipliers from config (with defaults for backward compatibility)
+        opt_config = self.config.selection.get("optimization_strategy", {})
+        sb_low_mult = opt_config.get("sideband_low_multiplier", 4.0)
+        sb_low_end_mult = opt_config.get("sideband_low_end_multiplier", 1.0)
+        sb_high_start_mult = opt_config.get("sideband_high_start_multiplier", 1.0)
+        sb_high_mult = opt_config.get("sideband_high_multiplier", 4.0)
         
-        # High sideband: 1 window above to 4 windows above signal
-        high_sb = (center_val + window, center_val + 4*window)
+        # Low sideband: (center - sb_low_mult*window) to (center - sb_low_end_mult*window)
+        low_sb = (center_val - sb_low_mult*window, center_val - sb_low_end_mult*window)
+        
+        # High sideband: (center + sb_high_start_mult*window) to (center + sb_high_mult*window)
+        high_sb = (center_val + sb_high_start_mult*window, center_val + sb_high_mult*window)
         
         return [low_sb, high_sb]
     
@@ -470,7 +479,10 @@ class SelectionOptimizer:
         nd_config = self.config.selection.get("nd_optimizable_selection", {})
         
         if not nd_config:
-            raise ValueError("No 'nd_optimizable_selection' section found in config!")
+            raise OptimizationError(
+                "No 'nd_optimizable_selection' section found in config/selection.toml!\n"
+                "N-D grid scan requires this section to define variables and ranges to optimize."
+            )
         
         # Build variable list and grid points
         all_variables = []
@@ -644,206 +656,6 @@ class SelectionOptimizer:
             print(f"✓ Saved N-D optimized cuts for {state}")
         
         print(f"\n✓ N-D optimization complete!")
-        
-        return results_df
-    
-    def optimize_2d_pairs(self) -> pd.DataFrame:
-        """
-        Perform TRUE 2D optimization: scan pairs of variables simultaneously
-        
-        For each charmonium state, scan all possible pairs of variables in a 2D grid.
-        This accounts for correlations between variables that 1D optimization misses.
-        
-        Returns:
-            DataFrame with optimal cuts for each (var1, var2, state) combination
-        """
-        states = ["jpsi", "etac", "chic0", "chic1"]
-        
-        # Collect all optimizable variables from config
-        categories = ["bu", "bachelor_p", "kplus", "kminus"]
-        
-        # Build list of all variables to optimize
-        all_variables = []
-        for category in categories:
-            config_key = f"{category}_optimizable_selection"
-            opt_config = self.config.selection.get(config_key, {})
-            
-            if not opt_config:
-                continue
-                
-            for var_name, var_config in opt_config.items():
-                if var_name == "notes":
-                    continue
-                # Get branch name from config (now standardized)
-                branch_name = var_config.get("branch_name")
-                if not branch_name:
-                    branch_name = self._get_branch_name_for_variable(category, var_name)
-                    print(f"  ⚠️  No branch_name in config for {category}.{var_name}, using fallback: {branch_name}")
-                all_variables.append({
-                    "category": category,
-                    "var_name": var_name,
-                    "branch_name": branch_name,
-                    "config": var_config
-                })
-        
-        print(f"\n{'='*80}")
-        print(f"TRUE 2D OPTIMIZATION: Scanning all variable pairs")
-        print(f"{'='*80}")
-        print(f"Total variables: {len(all_variables)}")
-        print(f"Total pairs to scan: {len(all_variables) * (len(all_variables) - 1) // 2}")
-        print(f"States: {len(states)}")
-        print(f"Total 2D scans: {len(all_variables) * (len(all_variables) - 1) // 2 * len(states)}")
-        print(f"{'='*80}\n")
-        
-        all_results = []
-        
-        # Scan all pairs of variables
-        for i in range(len(all_variables)):
-            for j in range(i + 1, len(all_variables)):
-                var1 = all_variables[i]
-                var2 = all_variables[j]
-                
-                print(f"\n{'='*60}")
-                print(f"2D Scan: {var1['category']}.{var1['var_name']} × {var2['category']}.{var2['var_name']}")
-                print(f"{'='*60}")
-                
-                for state in states:
-                    print(f"\n  State: {state}")
-                    
-                    # Perform 2D scan
-                    scan_2d_results = self.scan_2d_variable_pair(
-                        state, var1, var2
-                    )
-                    
-                    # Find optimal point (max FOM)
-                    idx_max = scan_2d_results["fom"].idxmax()
-                    optimal_row = scan_2d_results.loc[idx_max]
-                    
-                    print(f"    Optimal: {var1['var_name']}={optimal_row['cut1']:.2f}, "
-                          f"{var2['var_name']}={optimal_row['cut2']:.2f}")
-                    print(f"    Max FOM: {optimal_row['fom']:.3f}")
-                    print(f"    n_sig: {optimal_row['n_sig']:.0f}, n_bkg: {optimal_row['n_bkg']:.1f}")
-                    
-                    all_results.append({
-                        "state": state,
-                        "var1_category": var1['category'],
-                        "var1_name": var1['var_name'],
-                        "var1_branch": var1['branch_name'],
-                        "var1_optimal": optimal_row['cut1'],
-                        "var2_category": var2['category'],
-                        "var2_name": var2['var_name'],
-                        "var2_branch": var2['branch_name'],
-                        "var2_optimal": optimal_row['cut2'],
-                        "max_fom": optimal_row['fom'],
-                        "n_sig": optimal_row['n_sig'],
-                        "n_bkg": optimal_row['n_bkg']
-                    })
-                    
-                    # Save 2D heatmap
-                    self._plot_2d_fom_heatmap(
-                        scan_2d_results, var1, var2, state
-                    )
-        
-        results_df = pd.DataFrame(all_results)
-        
-        # Save results
-        output_dir = Path(self.config.paths["output"]["tables_dir"])
-        output_dir.mkdir(exist_ok=True, parents=True)
-        results_df.to_csv(output_dir / "optimized_cuts_2d_pairs.csv", index=False)
-        
-        print(f"\n✓ Saved 2D optimization results to: {output_dir / 'optimized_cuts_2d_pairs.csv'}")
-        
-        return results_df
-    
-    def optimize_2d_all_variables(self) -> pd.DataFrame:
-        """
-        Perform 2D optimization: variables × states (1D scan organized in 2D table)
-        
-        Returns:
-            DataFrame with optimal cuts for each (variable, state) pair
-            
-        Columns: [variable, state, optimal_cut, max_fom]
-        """
-        states = ["jpsi", "etac", "chic0", "chic1"]
-        
-        # Collect all optimizable variables from config
-        categories = ["bu", "bachelor_p", "kplus", "kminus"]
-        
-        all_results = []
-        
-        for category in categories:
-            # Get config with proper key name
-            config_key = f"{category}_optimizable_selection"
-            opt_config = self.config.selection.get(config_key, {})
-            
-            if not opt_config:
-                print(f"⚠️  No optimizable config found for {category}")
-                continue
-            
-            for var_name, var_config in opt_config.items():
-                if var_name == "notes":  # Skip notes section
-                    continue
-                
-                # Get branch name from config (now all configs have branch_name)
-                branch_name = var_config.get("branch_name")
-                if not branch_name:
-                    # Fallback to old mapping method if branch_name not in config
-                    branch_name = self._get_branch_name_for_variable(category, var_name)
-                    print(f"  ⚠️  No branch_name in config for {category}.{var_name}, using fallback: {branch_name}")
-                
-                print(f"\n{'='*60}")
-                print(f"Optimizing: {category}.{var_name}")
-                print(f"Branch: {branch_name}")
-                print(f"{'='*60}")
-                
-                for state in states:
-                    print(f"\n  State: {state}")
-                    
-                    # Scan this variable for this state
-                    scan_results = self.scan_single_variable(
-                        state, var_name, branch_name, var_config
-                    )
-                    
-                    # Find optimal cut (max FOM)
-                    idx_max = scan_results["fom"].idxmax()
-                    optimal_row = scan_results.loc[idx_max]
-                    
-                    print(f"    Optimal cut: {optimal_row['cut_value']:.3f}")
-                    print(f"    Max FOM: {optimal_row['fom']:.3f}")
-                    print(f"    n_sig: {optimal_row['n_sig']:.0f}, n_bkg: {optimal_row['n_bkg']:.1f}")
-                    
-                    all_results.append({
-                        "category": category,
-                        "variable": var_name,
-                        "branch_name": branch_name,
-                        "state": state,
-                        "optimal_cut": optimal_row["cut_value"],
-                        "max_fom": optimal_row["fom"],
-                        "n_sig_at_optimal": optimal_row["n_sig"],
-                        "n_bkg_at_optimal": optimal_row["n_bkg"],
-                        "cut_type": var_config["cut_type"]
-                    })
-                    
-                    # Optionally save scan plot (disabled for cleaner output)
-                    # self._plot_fom_scan(scan_results, category, var_name, state, var_config)
-        
-        results_df = pd.DataFrame(all_results)
-        
-        # Save results
-        output_dir = Path(self.config.paths["output"]["tables_dir"])
-        output_dir.mkdir(exist_ok=True, parents=True)
-        
-        # Save complete results
-        results_df.to_csv(output_dir / "optimized_cuts_all.csv", index=False)
-        
-        # Save per-state tables
-        for state in states:
-            state_df = results_df[results_df["state"] == state].copy()
-            state_df.to_csv(output_dir / f"optimized_cuts_{state}.csv", index=False)
-            print(f"✓ Saved optimized cuts for {state}: {len(state_df)} variables")
-        
-        # Generate summary table
-        self._generate_optimization_summary(results_df)
         
         return results_df
     

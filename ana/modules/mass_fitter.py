@@ -194,11 +194,13 @@ class MassFitter:
             return self.bkg_pdfs[year], self.argus_params[year]["c"]
         
         # ARGUS endpoint - set BEYOND the fit range to avoid sharp cutoff
-        # Typical choice: 100-200 MeV above fit range upper limit
+        # Read offset from config (default 200 MeV for backward compatibility)
+        endpoint_offset = self.config.particles.get("fitting", {}).get("argus_endpoint_offset", 200.0)
+        
         m0 = ROOT.RooRealVar(
             f"m0_argus_{year}",
             "ARGUS endpoint [MeV/c^{2}]",
-            self.fit_range[1] + 200.0  # Extended beyond fit range
+            self.fit_range[1] + endpoint_offset  # Extended beyond fit range
         )
         m0.setConstant(True)
         
