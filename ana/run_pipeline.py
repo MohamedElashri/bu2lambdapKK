@@ -165,43 +165,32 @@ class PipelineManager:
         data_manager = DataManager(self.config)
         lambda_selector = LambdaSelector(self.config)
         
-        # Load and process DATA
-        print("\n[Loading DATA]")
+        # Load and process REAL DATA
+        print("[Loading Real Data]")
         data_dict = {}
         for year in years:
             data_dict[year] = {}
             for track_type in track_types:
                 print(f"  {year} {track_type}...", end="", flush=True)
                 
-                # Load data from both magnets and combine
-                events_md = data_manager.load_tree("data", year, "MD", track_type)
-                events_mu = data_manager.load_tree("data", year, "MU", track_type)
+                # Load data from both magnets using unified method
+                events = data_manager.load_and_process(
+                    "data", year, track_type,
+                    apply_derived_branches=True,
+                    apply_trigger=False
+                )
                 
-                # Handle missing files gracefully (for data this should be critical, but we check)
-                available_events = []
-                if events_md is not None:
-                    available_events.append(events_md)
-                if events_mu is not None:
-                    available_events.append(events_mu)
-                
-                if not available_events:
+                if events is None:
                     print(f" ❌ Both polarities missing! Skipping data {year} {track_type}")
                     continue
                 
-                events = ak.concatenate(available_events)
-                
-                # Compute derived branches (M_LpKm_h2, etc.)
-                events = data_manager.compute_derived_branches(events)
-                
                 # Apply Lambda cuts
-                events_after = lambda_selector.apply_lambda_cuts(events)
-                
                 n_before = len(events)
+                events_after = lambda_selector.apply_lambda_cuts(events)
                 n_after = len(events_after)
                 eff = 100 * n_after / n_before if n_before > 0 else 0
                 
                 data_dict[year][track_type] = events_after
-                
                 print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
         
         # Load and process PHASE-SPACE MC (KpKm - for background estimation)
@@ -212,35 +201,24 @@ class PipelineManager:
             for track_type in track_types:
                 print(f"  {year} {track_type}...", end="", flush=True)
                 
-                # Load KpKm MC from both magnets and combine
-                events_md = data_manager.load_tree("KpKm", year, "MD", track_type)
-                events_mu = data_manager.load_tree("KpKm", year, "MU", track_type)
+                # Load KpKm MC from both magnets using unified method
+                events = data_manager.load_and_process(
+                    "KpKm", year, track_type,
+                    apply_derived_branches=True,
+                    apply_trigger=False
+                )
                 
-                # Handle missing files gracefully
-                available_events = []
-                if events_md is not None:
-                    available_events.append(events_md)
-                if events_mu is not None:
-                    available_events.append(events_mu)
-                
-                if not available_events:
+                if events is None:
                     print(f" ❌ Both polarities missing! Skipping KpKm {year} {track_type}")
                     continue
                 
-                events = ak.concatenate(available_events)
-                
-                # Compute derived branches
-                events = data_manager.compute_derived_branches(events)
-                
                 # Apply Lambda cuts
-                events_after = lambda_selector.apply_lambda_cuts(events)
-                
                 n_before = len(events)
+                events_after = lambda_selector.apply_lambda_cuts(events)
                 n_after = len(events_after)
                 eff = 100 * n_after / n_before if n_before > 0 else 0
                 
                 phase_space_dict[year][track_type] = events_after
-                
                 print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
         
         # Load and process MC (all 4 signal states)
@@ -259,32 +237,23 @@ class PipelineManager:
                 for track_type in track_types:
                     print(f"    {year} {track_type}...", end="", flush=True)
                     
-                    # Load MC from both magnets and combine
                     # Map state names: jpsi -> Jpsi, others stay lowercase
                     state_name = "Jpsi" if state == "jpsi" else state
-                    events_md = data_manager.load_tree(state_name, year, "MD", track_type)
-                    events_mu = data_manager.load_tree(state_name, year, "MU", track_type)
                     
-                    # Handle missing files gracefully (collect available events)
-                    available_events = []
-                    if events_md is not None:
-                        available_events.append(events_md)
-                    if events_mu is not None:
-                        available_events.append(events_mu)
+                    # Load MC from both magnets using unified method
+                    events = data_manager.load_and_process(
+                        state_name, year, track_type,
+                        apply_derived_branches=True,
+                        apply_trigger=False
+                    )
                     
-                    if not available_events:
+                    if events is None:
                         print(f" ❌ Both polarities missing! Skipping {state} {year} {track_type}")
                         continue
                     
-                    events = ak.concatenate(available_events)
-                    
-                    # Compute derived branches (M_LpKm_h2, etc.)
-                    events = data_manager.compute_derived_branches(events)
-                    
                     # Apply Lambda cuts
-                    events_after = lambda_selector.apply_lambda_cuts(events)
-                    
                     n_before = len(events)
+                    events_after = lambda_selector.apply_lambda_cuts(events)
                     n_after = len(events_after)
                     eff = 100 * n_after / n_before if n_before > 0 else 0
                     

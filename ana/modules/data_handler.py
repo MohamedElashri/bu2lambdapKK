@@ -207,7 +207,9 @@ class DataManager:
                   year: str,
                   magnet: str,
                   track_type: str = "LL",
-                  channel_name: str = "B2L0barPKpKm") -> ak.Array:
+                  channel_name: str = "B2L0barPKpKm",
+                  apply_derived_branches: bool = False,
+                  apply_trigger: bool = False) -> Optional[ak.Array]:
         """
         Load a single ROOT tree using proper data structure
         
@@ -217,9 +219,11 @@ class DataManager:
             magnet: "MD" or "MU"
             track_type: "LL" or "DD" (Lambda reconstruction category)
             channel_name: Name of decay channel in ROOT file
+            apply_derived_branches: If True, compute derived branches after loading
+            apply_trigger: If True, apply trigger selection after loading
             
         Returns:
-            Awkward array with all branches
+            Awkward array with all branches, or None if file not found (for MC)
         """
         is_mc = particle_type != "data"
         
@@ -296,6 +300,14 @@ class DataManager:
             raise DataLoadError(
                 f"Error reading ROOT file {filepath}: {e}"
             )
+        
+        # Optionally apply derived branches
+        if apply_derived_branches:
+            events = self.compute_derived_branches(events)
+        
+        # Optionally apply trigger selection
+        if apply_trigger:
+            events = self.apply_trigger_selection(events)
             
         print(f"✓ Loaded {particle_type} {year}_{magnet}_{track_type}: {len(events)} events")
         return events
@@ -430,11 +442,68 @@ class DataManager:
         
         return events[trigger_pass]
     
+    def load_and_process(
+        self,
+        particle_type: str,
+        year: str,
+        track_type: str,
+        magnets: Optional[List[str]] = None,
+        apply_derived_branches: bool = True,
+        apply_trigger: bool = False
+    ) -> Optional[ak.Array]:
+        """
+        Unified method to load and process data from multiple magnets.
+        Eliminates duplicate loading logic throughout the codebase.
+        
+        Args:
+            particle_type: "data", "Jpsi", "etac", "chic0", "chic1", "KpKm"
+            year: "2016", "2017", or "2018"
+            track_type: "LL" or "DD" 
+            magnets: List of magnets to load (default ["MD", "MU"])
+            apply_derived_branches: If True, compute derived branches
+            apply_trigger: If True, apply trigger selection
+            
+        Returns:
+            Combined awkward array from all magnets, or None if no files found
+        """
+        if magnets is None:
+            magnets = ["MD", "MU"]
+        
+        available_events = []
+        
+        for magnet in magnets:
+            events = self.load_tree(
+                particle_type, year, magnet, track_type,
+                apply_derived_branches=False,  # Apply after combining
+                apply_trigger=False
+            )
+            if events is not None:
+                available_events.append(events)
+        
+        if not available_events:
+            print(f"⚠️  No files found for {particle_type} {year} {track_type}")
+            return None
+        
+        # Concatenate all available events
+        events = ak.concatenate(available_events)
+        
+        # Apply processing steps after combining
+        if apply_derived_branches:
+            events = self.compute_derived_branches(events)
+        
+        if apply_trigger:
+            events = self.apply_trigger_selection(events)
+        
+        return events
+    
     def load_all_data_combined_magnets(self, 
                                        particle_type: str,
                                        track_types: List[str] = ["LL", "DD"]) -> Dict[str, ak.Array]:
         """
-        Load data combining MagDown + MagUp and track types for each year
+        Load data combining MagDown + MagUp and track types for each year.
+        
+        DEPRECATED: Use load_and_process() instead for more flexibility.
+        This method is kept for backward compatibility.
         
         Args:
             particle_type: "data", "Jpsi", "etac", etc.
@@ -448,18 +517,16 @@ class DataManager:
         for year in self.config.paths["data"]["years"]:
             year_events = []
             
-            for magnet in self.config.paths["data"]["magnets"]:
-                for track_type in track_types:
-                    try:
-                        events = self.load_tree(particle_type, year, magnet, track_type)
-                        events = self.compute_derived_branches(events)
-                        events = self.apply_trigger_selection(events)
-                        year_events.append(events)
-                    except (FileNotFoundError, ValueError) as e:
-                        print(f"✗ {e}")
+            for track_type in track_types:
+                events = self.load_and_process(
+                    particle_type, year, track_type,
+                    apply_derived_branches=True,
+                    apply_trigger=True
+                )
+                if events is not None:
+                    year_events.append(events)
             
             if year_events:
-                # Concatenate all combinations
                 combined = ak.concatenate(year_events)
                 data_by_year[str(year)] = combined
                 print(f"✓ Combined {particle_type} {year}: {len(combined)} events\n")
