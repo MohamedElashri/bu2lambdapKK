@@ -198,3 +198,7 @@ efficiencies.md
 
 ## analysis output directory
 analysis_output/
+
+## all md files except when their name is README.md
+*.md
+!README.md

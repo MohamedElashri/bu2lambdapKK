@@ -59,7 +59,7 @@ class EfficiencyCalculator:
         Extract optimized cuts for a specific charmonium state.
         
         Args:
-            state: "jpsi", "etac", "chic0", "chic1"
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
             
         Returns:
             DataFrame with cuts for this state only
@@ -81,7 +81,7 @@ class EfficiencyCalculator:
         
         Args:
             mc_events: Awkward array (MC events after Lambda cuts)
-            state: "jpsi", "etac", "chic0", "chic1"
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
             
         Returns:
             Filtered awkward array with events passing all cuts
@@ -143,7 +143,7 @@ class EfficiencyCalculator:
         
         Args:
             mc_events: Awkward array with MC events after Lambda pre-selection
-            state: "jpsi", "etac", "chic0", "chic1"
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
             
         Returns:
             Dictionary with keys:
@@ -207,7 +207,11 @@ class EfficiencyCalculator:
         print("  - Focus on RATIOS: ε_state / ε_J/ψ (many factors cancel)")
         print("="*80)
         
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
+        # States with MC available
+        # Note: etac_2s has no MC, will use chi_c1 efficiency as proxy
+        mc_states = ["jpsi", "etac", "chic0", "chic1"]
+        
+        for state in mc_states:
             efficiencies[state] = {}
             
             print(f"\n[State: {state}]")
@@ -235,6 +239,23 @@ class EfficiencyCalculator:
                 print(f"            N_pass_cuts = {n_after}")
                 print(f"            ε_sel = {n_after}/{n_before} = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%)")
         
+        # Add etac_2s efficiency by copying chi_c1 (no MC available)
+        print(f"\n{'='*80}")
+        print("ADDING ETA_C(2S) EFFICIENCY")
+        print(f"{'='*80}")
+        print("Note: No MC available for eta_c(2S)")
+        print("      Using chi_c1 efficiency as proxy (similar mass, width, cuts)")
+        
+        if "chic1" in efficiencies:
+            efficiencies["etac_2s"] = efficiencies["chic1"].copy()
+            print("✓ Copied chi_c1 efficiency to etac_2s")
+            for year in sorted(efficiencies["etac_2s"].keys()):
+                eff = efficiencies["etac_2s"][year]["eff"]
+                err = efficiencies["etac_2s"][year]["err"]
+                print(f"  Year {year}: ε_sel = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%) [from chi_c1]")
+        else:
+            print("  Warning: No chi_c1 efficiency found to copy")
+        
         return efficiencies
     
     def calculate_efficiency_ratios(
@@ -245,7 +266,7 @@ class EfficiencyCalculator:
         Calculate efficiency RATIOS relative to J/ψ.
         
         This is what enters the branching fraction ratio formula!
-        R(BR) = [N_state / N_J/ψ] × [ε_J/ψ / ε_state] × [BR_norm]
+        R(BR) = [N_state / N_J/ψ] * [ε_J/ψ / ε_state] * [BR_norm]
         
         Many systematic uncertainties cancel in the ratio ε_J/ψ / ε_state.
         
@@ -319,7 +340,7 @@ class EfficiencyCalculator:
         """
         Generate efficiency summary table (similar to Table 26 in reference).
         
-        Format: States (rows) × Years (columns)
+        Format: States (rows) * Years (columns)
         Shows ε_sel ± error for each combination
         
         Args:
@@ -333,7 +354,7 @@ class EfficiencyCalculator:
         from pathlib import Path
         
         rows = []
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             row = {"State": state}
             for year in sorted(efficiencies[state].keys()):
                 eff = efficiencies[state][year]["eff"]

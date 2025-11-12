@@ -69,7 +69,7 @@ class SelectionOptimizer:
         
         Args:
             n_mc_after_cuts: Number of MC events passing cuts and in signal region
-            state: Charmonium state ("jpsi", "etac", "chic0", "chic1")
+            state: Charmonium state ("jpsi", "etac", "chic0", "chic1") - Note: etac_2s uses chi_c1 cuts
             year: Data-taking year ("2016", "2017", "2018")
         
         Returns:
@@ -202,7 +202,7 @@ class SelectionOptimizer:
         
         Args:
             data_events: Real data events after cuts
-            state: Charmonium state ("jpsi", "etac", "chic0", "chic1")
+            state: Charmonium state ("jpsi", "etac", "chic0", "chic1") - Note: etac_2s uses chi_c1 cuts
         
         Returns:
             float: Estimated background in signal region
@@ -240,7 +240,7 @@ class SelectionOptimizer:
         Scan a single variable and compute FOM at each cut value
         
         Args:
-            state: "jpsi", "etac", "chic0", "chic1"
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 cuts
             variable_name: Logical name (e.g., "bu_pt")
             branch_name: Actual branch name in tree
             scan_config: {begin, end, step, cut_type, description}
@@ -340,7 +340,7 @@ class SelectionOptimizer:
         Perform 2D scan of two variables simultaneously
         
         Args:
-            state: Charmonium state ("jpsi", "etac", "chic0", "chic1")
+            state: Charmonium state ("jpsi", "etac", "chic0", "chic1") - Note: etac_2s uses chi_c1 cuts
             var1: {category, var_name, branch_name, config}
             var2: {category, var_name, branch_name, config}
             
@@ -514,6 +514,8 @@ class SelectionOptimizer:
         import itertools
         import numpy as np
         
+        # States with MC available for optimization
+        # Note: etac_2s has no MC, will use chi_c1 cuts as proxy
         states = ["jpsi", "etac", "chic0", "chic1"]
         
         # Get N-D grid scan variables from config
@@ -684,17 +686,35 @@ class SelectionOptimizer:
         
         results_df = pd.DataFrame(all_results)
         
+        # Add etac_2s cuts by copying chi_c1 (no MC available for etac_2s)
+        print(f"\n{'='*80}")
+        print("ADDING ETA_C(2S) CUTS")
+        print(f"{'='*80}")
+        print("Note: No MC available for eta_c(2S)")
+        print("      Using chi_c1 cuts as proxy (similar mass and width)")
+        
+        chic1_cuts = results_df[results_df["state"] == "chic1"].copy()
+        if len(chic1_cuts) > 0:
+            etac2s_cuts = chic1_cuts.copy()
+            etac2s_cuts["state"] = "etac_2s"
+            results_df = pd.concat([results_df, etac2s_cuts], ignore_index=True)
+            print("✓ Copied chi_c1 cuts to etac_2s")
+        else:
+            print("⚠️  Warning: No chi_c1 cuts found to copy")
+        
         # Save results
         output_dir = Path(self.config.paths["output"]["tables_dir"])
         output_dir.mkdir(exist_ok=True, parents=True)
         
         results_df.to_csv(output_dir / "optimized_cuts_nd.csv", index=False)
         
-        # Save per-state tables
-        for state in states:
+        # Save per-state tables (including etac_2s)
+        all_states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
+        for state in all_states:
             state_df = results_df[results_df["state"] == state].copy()
-            state_df.to_csv(output_dir / f"optimized_cuts_nd_{state}.csv", index=False)
-            print(f"✓ Saved N-D optimized cuts for {state}")
+            if len(state_df) > 0:
+                state_df.to_csv(output_dir / f"optimized_cuts_nd_{state}.csv", index=False)
+                print(f"✓ Saved N-D optimized cuts for {state}")
         
         print(f"\n✓ N-D optimization complete!")
         
@@ -831,7 +851,7 @@ class SelectionOptimizer:
         summary = pivot.join(cut_info)
         
         # Reorder columns
-        col_order = ['branch_name', 'cut_type', 'jpsi', 'etac', 'chic0', 'chic1']
+        col_order = ['branch_name', 'cut_type', 'jpsi', 'etac', 'chic0', 'chic1', 'etac_2s']
         summary = summary[col_order]
         
         # Save as markdown and CSV

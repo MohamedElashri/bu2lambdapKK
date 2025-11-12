@@ -80,12 +80,13 @@ class PresentationTableGenerator:
         fom_formula = r"FOM = n_{sig} / \sqrt{n_{bkg} + n_{sig}}"
         
         # Group by state
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         state_names = {
             "jpsi": r"$J/\psi$",
             "etac": r"$\eta_c$",
             "chic0": r"$\chi_{c0}$",
-            "chic1": r"$\chi_{c1}$"
+            "chic1": r"$\chi_{c1}$",
+            "etac_2s": r"$\eta_c(2S)$"
         }
         
         for state in states:
@@ -206,12 +207,13 @@ class PresentationTableGenerator:
         print("TABLE 2: SIGNAL YIELDS")
         print("=" * 80)
         
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         state_names = {
             "jpsi": r"$J/\psi$",
             "etac": r"$\eta_c$",
             "chic0": r"$\chi_{c0}$",
-            "chic1": r"$\chi_{c1}$"
+            "chic1": r"$\chi_{c1}$",
+            "etac_2s": r"$\eta_c(2S)$"
         }
         
         # Yields by year
@@ -372,12 +374,13 @@ class PresentationTableGenerator:
         print("TABLE 4: SELECTION EFFICIENCIES")
         print("=" * 80)
         
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         state_names = {
             "jpsi": r"$J/\psi$",
             "etac": r"$\eta_c$",
             "chic0": r"$\chi_{c0}$",
-            "chic1": r"$\chi_{c1}$"
+            "chic1": r"$\chi_{c1}$",
+            "etac_2s": r"$\eta_c(2S)$"
         }
         
         # Parse the efficiency table (it has a specific format)
@@ -452,12 +455,13 @@ class PresentationTableGenerator:
         print("TABLE 5: ANALYSIS SUMMARY")
         print("=" * 80)
         
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         state_names = {
             "jpsi": r"$J/\psi$",
             "etac": r"$\eta_c$",
             "chic0": r"$\chi_{c0}$",
-            "chic1": r"$\chi_{c1}$"
+            "chic1": r"$\chi_{c1}$",
+            "etac_2s": r"$\eta_c(2S)$"
         }
         
         summary_data = []

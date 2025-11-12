@@ -42,11 +42,6 @@ center = 3637.8  # MeV/c²
 window = 23.2  # ±23.2 MeV → 2×Γ
 comment = "Medium width state (Γ = 11.6 MeV)"
 
-[signal_regions.psi3770]
-center = 3778.1  # MeV/c²
-window = 55.0  # ±55 MeV → 2×Γ
-comment = "Broad state (Γ = 27.5 MeV)"
-
 [integrated_luminosity]
 # Integrated luminosity in fb⁻¹
 # Combined MagDown + MagUp for each year
@@ -59,7 +54,7 @@ comment = "Broad state (Γ = 27.5 MeV)"
 comment = """
 SIGNAL REGION PHILOSOPHY:
 - Narrow states (J/ψ, χc1): Resolution-limited, window = 3σ detector resolution
-- Broad states (ηc, ψ(3770)): Natural width dominates, window = 2×Γ
+- Broad states (ηc): Natural width dominates, window = 2*Γ
 - Medium states (χc0, ηc(2S)): Compromise between resolution and width
 
 MASS WINDOWS:

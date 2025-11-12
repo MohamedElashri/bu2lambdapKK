@@ -16,7 +16,6 @@ etac_1s = 2984.1   # ηc(1S)
 chic0 = 3414.71    # χc0(1P)
 chic1 = 3510.67    # χc1(1P)
 etac_2s = 3637.8   # ηc(2S)
-psi3770 = 3778.1   # ψ(3770)
 
 [pdg_widths]
 # All widths in MeV/c²
@@ -26,7 +25,6 @@ etac_1s = 30.5     # ηc(1S) natural width
 chic0 = 10.6       # χc0(1P)
 chic1 = 0.88       # χc1(1P)
 etac_2s = 11.6     # ηc(2S)
-psi3770 = 27.5     # ψ(3770)
 
 [pdg_branching_fractions]
 # Known from PDG (for information/future use)

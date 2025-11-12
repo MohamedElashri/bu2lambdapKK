@@ -131,7 +131,7 @@ class ConfigValidator:
     def _validate_physics(self):
         """Validate physics constants"""
         # Check PDG masses
-        required_masses = ["jpsi", "etac_1s", "chic0", "chic1", "lambda", "proton", "kaon"]
+        required_masses = ["jpsi", "etac_1s", "chic0", "chic1", "etac_2s", "lambda", "proton", "kaon"]
         for particle in required_masses:
             if particle not in self.config.physics["pdg_masses"]:
                 self.errors.append(f"Missing PDG mass for {particle} in physics.toml")
@@ -151,7 +151,7 @@ class ConfigValidator:
     def _validate_detector(self):
         """Validate detector parameters"""
         # Check signal regions
-        required_states = ["jpsi", "etac", "chic0", "chic1"]
+        required_states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         for state in required_states:
             if state not in self.config.detector["signal_regions"]:
                 self.errors.append(f"Missing signal region for {state} in detector.toml")

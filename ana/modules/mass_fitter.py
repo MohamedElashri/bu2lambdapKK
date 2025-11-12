@@ -34,13 +34,12 @@ class MassFitter:
     - Use RooVoigtian (RBW ⊗ Gaussian) for signal shapes
     - ARGUS function for background (standard for B meson analyses)
     
-    Signal PDFs per state (all 6 charmonium states):
+    Signal PDFs per state (all 5 charmonium states):
     - ηc(1S): RBW ⊗ Gaussian, M and Γ fixed to PDG
     - J/ψ: RBW ⊗ Gaussian, M and Γ fixed to PDG
     - χc0: RBW ⊗ Gaussian, M and Γ fixed to PDG
     - χc1: RBW ⊗ Gaussian, M and Γ fixed to PDG
-    - ηc(2S): RBW ⊗ Gaussian, M and Γ fixed to PDG (uses χc1 optimization)
-    - ψ(3770): RBW ⊗ Gaussian, M and Γ fixed to PDG (uses χc1 optimization)
+    - ηc(2S): RBW ⊗ Gaussian, M and Γ fixed to PDG
     
     Background: ARGUS function (standard for B meson combinatorial background)
     
@@ -117,7 +116,7 @@ class MassFitter:
         Uses RooVoigtian (Relativistic Breit-Wigner ⊗ Gaussian)
         
         Args:
-            state: State name ("jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770")
+            state: State name ("jpsi", "etac", "chic0", "chic1", "etac_2s")
             mass_var: Observable mass variable
             
         Returns:
@@ -135,8 +134,7 @@ class MassFitter:
             "etac": "etac_1s",
             "chic0": "chic0",
             "chic1": "chic1",
-            "etac_2s": "etac_2s",
-            "psi3770": "psi3770"
+            "etac_2s": "etac_2s"
         }
         config_key = config_key_map.get(state_lower, state_lower)
         
@@ -273,8 +271,8 @@ class MassFitter:
         coef_list = ROOT.RooArgList()
         year_yields = {}
         
-        # Signal components (6 charmonium states)
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770"]:
+        # Signal components (5 charmonium states)
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             # Create signal PDF (shares mass/width/resolution across years)
             sig_pdf = self.create_signal_pdf(state, mass_var)
             
@@ -506,7 +504,7 @@ class MassFitter:
         masses_result = {}
         widths_result = {}
         
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             mass_val = self.masses[state].getVal()
             mass_err = self.masses[state].getError()
             masses_result[state] = (mass_val, mass_err)
@@ -579,12 +577,11 @@ class MassFitter:
             "chic0": ROOT.kMagenta + 1,   # Bright magenta
             "chic1": ROOT.kOrange + 1,    # Bright orange
             "etac_2s": ROOT.kCyan + 1,    # Bright cyan
-            "psi3770": ROOT.kViolet + 1,  # Bright violet
             "background": ROOT.kGray + 1  # Gray for background
         }
         
         # Plot signal components with DOTTED lines (high contrast)
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             component_name = f"pdf_signal_{state}"
             model.plotOn(frame, ROOT.RooFit.Components(component_name),
                         ROOT.RooFit.Name(state),
@@ -645,10 +642,9 @@ class MassFitter:
             "chic0": "#chi_{c0}(1P)",
             "chic1": "#chi_{c1}(1P)",
             "etac_2s": "#eta_{c}(2S)",
-            "psi3770": "#psi(3770)",
             "background": "Combinatorial bkg."
         }
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "psi3770", "background"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "background"]:
             legend.AddEntry(state, state_labels[state], "l")
         legend.Draw()
         

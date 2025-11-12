@@ -108,7 +108,7 @@ class TableValidator:
         # Load source data
         source = pd.read_csv(self.tables_dir / "optimized_cuts.csv")
         
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         
         for state in states:
             state_data = source[source["state"] == state]
@@ -146,7 +146,7 @@ class TableValidator:
         source = pd.read_csv(self.tables_dir / "phase5_yields.csv")
         
         # Check all required combinations exist
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         years = ["2016", "2017", "2018", "combined"]
         
         missing = []
@@ -247,7 +247,7 @@ class TableValidator:
         # Load source data
         source = pd.read_csv(self.tables_dir / "efficiencies.csv")
         
-        states = ["jpsi", "etac", "chic0", "chic1"]
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         years = ["2016", "2017", "2018"]
         
         for state in states:

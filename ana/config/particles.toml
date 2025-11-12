@@ -8,7 +8,6 @@ etac_1s = 2984.1   # ηc(1S)
 chic0 = 3414.71    # χc0(1P)
 chic1 = 3510.67    # χc1(1P)
 etac_2s = 3637.8   # ηc(2S)
-psi3770 = 3778.1   # ψ(3770)
 
 [pdg_widths]
 # All widths in MeV/c²
@@ -17,7 +16,6 @@ etac_1s = 30.5     # ηc(1S) natural width
 chic0 = 10.6       # χc0(1P)
 chic1 = 0.88       # χc1(1P)
 etac_2s = 11.6     # ηc(2S)
-psi3770 = 27.5     # ψ(3770)
 
 [mass_windows]
 # Fixed mass windows for selection (not optimized)
@@ -53,11 +51,6 @@ comment = "Narrow state, resolution-limited like J/ψ"
 center = 3637.8
 window = 23.2  # ±23.2 MeV → 2×Γ
 comment = "Medium width state"
-
-[signal_regions.psi3770]
-center = 3778.1
-window = 55.0  # ±55 MeV → 2×Γ
-comment = "Broad state"
 
 [fitting]
 # Maximum likelihood fitting configuration
