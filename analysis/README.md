@@ -252,7 +252,7 @@ make pipeline
 
 **Output:**
 - `tables/optimized_cuts.csv` - Optimal cuts
-- `plots/optimization/*.png` - FOM scan plots
+- `plots/optimization/*.pdf` - FOM scan plots
 
 **Note:** For draft analysis, you can skip this and use simple cuts (e.g., Bu_PT > 2000 MeV)
 
@@ -347,7 +347,7 @@ Ratios: ~0.96-1.11 (close to 1.0)
 **Output:**
 - `tables/branching_fraction_ratios.csv` - Final BR ratios
 - `tables/yield_consistency.csv` - Consistency check
-- `plots/yield_consistency_check.png` - Consistency plot
+- `plots/yield_consistency_check.pdf` - Consistency plot
 - `results/final_results.md` - Complete summary
 
 **Actual results (2016-2018):**
@@ -493,7 +493,7 @@ Each ROOT file should contain:
 
 ### Plots (pdf format)
 - `fit_*.pdf` - Mass fit results
-- `yield_consistency_check.png` - Consistency across years
+- `yield_consistency_check.pdf` - Consistency across years
 
 ### Results (Markdown)
 - `final_results.md` - Complete analysis summary with:

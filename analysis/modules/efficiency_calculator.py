@@ -354,7 +354,7 @@ class EfficiencyCalculator:
         from pathlib import Path
         
         rows = []
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
+        for state in sorted(efficiencies.keys()):
             row = {"State": state}
             for year in sorted(efficiencies[state].keys()):
                 eff = efficiencies[state][year]["eff"]

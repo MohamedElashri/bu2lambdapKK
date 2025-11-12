@@ -864,7 +864,11 @@ class PipelineManager:
         
         # Check cache
         if use_cached:
-            cached = self._load_cache("5", "fit_results")
+            dependencies = self._compute_phase_dependencies(
+                phase="5",
+                extra_params={"years": list(data_final.keys())}
+            )
+            cached = self.cache.load("phase5_fit_results", dependencies=dependencies)
             if cached is not None:
                 print("✓ Loaded cached fit results")
                 return cached
@@ -887,7 +891,7 @@ class PipelineManager:
         # Cache results
         dependencies = self._compute_phase_dependencies(
             phase="5",
-            extra_params={"states": list(data_dict.keys())}
+            extra_params={"years": list(data_final.keys())}
         )
         self.cache.save("phase5_fit_results", fit_results, 
                        dependencies=dependencies,
@@ -936,7 +940,11 @@ class PipelineManager:
         
         # Check cache
         if use_cached:
-            cached = self._load_cache("6", "efficiencies")
+            dependencies = self._compute_phase_dependencies(
+                phase="6",
+                extra_params={"states": list(mc_final.keys())}
+            )
+            cached = self.cache.load("phase6_efficiencies", dependencies=dependencies)
             if cached is not None:
                 print("✓ Loaded cached efficiencies")
                 return cached
@@ -975,13 +983,25 @@ class PipelineManager:
                 
                 print(f"    {year}: ε = {eff_result['eff']:.4f} ± {eff_result['err']:.4f} ({100*eff_result['eff']:.2f}%)")
         
+        # Add etac_2s efficiency by copying chi_c1 (no MC available)
+        if "chic1" in efficiencies:
+            print(f"\n  etac_2s:")
+            print("    Note: No MC available for eta_c(2S)")
+            print("    Using chi_c1 efficiency as proxy (similar mass, width, cuts)")
+            efficiencies["etac_2s"] = {}
+            for year in efficiencies["chic1"].keys():
+                efficiencies["etac_2s"][year] = efficiencies["chic1"][year].copy()
+                eff = efficiencies["etac_2s"][year]["eff"]
+                err = efficiencies["etac_2s"][year]["err"]
+                print(f"    {year}: ε = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%) [from chi_c1]")
+        
         # Calculate efficiency ratios (returns DataFrame)
         ratios_df = eff_calculator.calculate_efficiency_ratios(efficiencies)
         
         # Cache results
         dependencies = self._compute_phase_dependencies(
             phase="6",
-            extra_params={"states": list(mc_dict.keys())}
+            extra_params={"states": list(mc_final.keys())}
         )
         self.cache.save("phase6_efficiencies", efficiencies, 
                        dependencies=dependencies,
@@ -1150,8 +1170,8 @@ class PipelineManager:
         print("    - tables/branching_fraction_ratios.csv")
         print("    - tables/yield_consistency.csv")
         print("\n  Plots:")
-        print("    - plots/fit_*.png (mass fits)")
-        print("    - plots/yield_consistency_check.png")
+        print("    - plots/fit_*.pdf (mass fits)")
+        print("    - plots/yield_consistency_check.pdf")
         print("\n  Results:")
         print("    - results/final_results.md")
         

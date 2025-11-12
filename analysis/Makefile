@@ -143,7 +143,7 @@ list-outputs: ## List all output files
 	@ls -lh analysis_output/tables/*.csv 2>/dev/null || printf "  None\n"
 	@printf "\n"
 	@printf "\033[1;33mPlots:\033[0m\n"
-	@ls -lh analysis_output/plots/*.png 2>/dev/null || printf "  None\n"
+	@ls -lh analysis_output/plots/*.pdf 2>/dev/null || printf "  None\n"
 	@printf "\n"
 	@printf "\033[1;33mResults:\033[0m\n"
 	@ls -lh analysis_output/results/*.md 2>/dev/null || printf "  None\n"
