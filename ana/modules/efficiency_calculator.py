@@ -5,7 +5,9 @@ Implements Phase 6 efficiency calculation (simplified approach).
 Following plan.md specification.
 """
 
-from typing import Dict, Any
+from __future__ import annotations
+
+from typing import Dict, Any, Optional, Tuple
 import pandas as pd
 import numpy as np
 import awkward as ak
@@ -26,7 +28,7 @@ class EfficiencyCalculator:
     
     Components NOT included (deferred to full analysis):
     - ε_acc: Acceptance (from truth) - assumed ~1.0 (cancels in ratios)
-    - ε_reco×strip: Reconstruction + stripping - assumed similar for all states
+    - ε_reco*strip: Reconstruction + stripping - assumed similar for all states
     - ε_trig: Trigger - assumed similar for all states (OR already applied)
     
     This simplification is justified because:
@@ -35,29 +37,35 @@ class EfficiencyCalculator:
     3. Similar trigger efficiency (all have high-pT tracks)
     4. Focus is on statistical precision first, systematics later
     
-    Following plan.md Phase 6 specification exactly.
+    
+    Attributes:
+        config: TOML configuration object
+        optimized_cuts: DataFrame containing optimized cuts per state
     """
     
-    def __init__(self, config: Any, optimized_cuts_df=None):
+    def __init__(self, config: Any, optimized_cuts_df: Optional[pd.DataFrame] = None) -> None:
         """
-        Initialize efficiency calculator
+        Initialize efficiency calculator.
         
         Args:
             config: TOMLConfig with paths and parameters
             optimized_cuts_df: DataFrame from Phase 4 with optimal cuts per state
         """
-        self.config = config
-        self.optimized_cuts = optimized_cuts_df
+        self.config: Any = config
+        self.optimized_cuts: Optional[pd.DataFrame] = optimized_cuts_df
     
-    def get_cuts_for_state(self, state: str):
+    def get_cuts_for_state(self, state: str) -> pd.DataFrame:
         """
-        Extract optimized cuts for a specific charmonium state
+        Extract optimized cuts for a specific charmonium state.
         
         Args:
             state: "jpsi", "etac", "chic0", "chic1"
             
         Returns:
             DataFrame with cuts for this state only
+            
+        Raises:
+            EfficiencyError: If optimized cuts not provided
         """
         if self.optimized_cuts is None:
             raise EfficiencyError(
@@ -67,9 +75,9 @@ class EfficiencyCalculator:
         
         return self.optimized_cuts[self.optimized_cuts["state"] == state]
     
-    def apply_optimized_cuts(self, mc_events, state: str):
+    def apply_optimized_cuts(self, mc_events: ak.Array, state: str) -> ak.Array:
         """
-        Apply all optimized cuts from Phase 4 to MC events
+        Apply all optimized cuts from Phase 4 to MC events.
         
         Args:
             mc_events: Awkward array (MC events after Lambda cuts)
@@ -77,6 +85,9 @@ class EfficiencyCalculator:
             
         Returns:
             Filtered awkward array with events passing all cuts
+            
+        Raises:
+            EfficiencyError: If unknown cut type encountered
         """
         import awkward as ak
         
@@ -117,9 +128,13 @@ class EfficiencyCalculator:
         
         return mc_events[mask]
     
-    def calculate_selection_efficiency(self, mc_events, state: str):
+    def calculate_selection_efficiency(
+        self,
+        mc_events: ak.Array,
+        state: str
+    ) -> Dict[str, Any]:
         """
-        Calculate SELECTION EFFICIENCY ONLY (Phase 6 simplified approach)
+        Calculate SELECTION EFFICIENCY ONLY (Phase 6 simplified approach).
         
         ε_sel = N_pass_all_cuts / N_after_lambda_cuts
         
@@ -131,7 +146,11 @@ class EfficiencyCalculator:
             state: "jpsi", "etac", "chic0", "chic1"
             
         Returns:
-            (efficiency, statistical_error)
+            Dictionary with keys:
+                - 'eff': Efficiency value (float)
+                - 'err': Statistical error (float)
+                - 'n_before': Events before cuts (int)
+                - 'n_after': Events after cuts (int)
         """
         import awkward as ak
         import numpy as np
@@ -159,16 +178,21 @@ class EfficiencyCalculator:
             "n_after": n_after
         }
     
-    def calculate_all_efficiencies(self, mc_by_state):
+    def calculate_all_efficiencies(
+        self,
+        mc_by_state: Dict[str, Dict[str, ak.Array]]
+    ) -> Dict[str, Dict[str, Dict[str, Any]]]:
         """
-        Calculate selection efficiencies for all (state, year) pairs
+        Calculate selection efficiencies for all (state, year) pairs.
         
         Args:
-            mc_by_state: {state: {year: awkward_array}}
-                        MC events already after Lambda pre-selection
+            mc_by_state: Nested dictionary structure:
+                {state: {year: awkward_array}}
+                MC events already after Lambda pre-selection
         
         Returns:
-            {state: {year: {"eff": value, "err": error, "n_before": N, "n_after": N}}}
+            Nested dictionary structure:
+                {state: {year: {"eff": value, "err": error, "n_before": N, "n_after": N}}}
         """
         import awkward as ak
         
@@ -213,9 +237,12 @@ class EfficiencyCalculator:
         
         return efficiencies
     
-    def calculate_efficiency_ratios(self, efficiencies):
+    def calculate_efficiency_ratios(
+        self,
+        efficiencies: Dict[str, Dict[str, Dict[str, Any]]]
+    ) -> pd.DataFrame:
         """
-        Calculate efficiency RATIOS relative to J/ψ
+        Calculate efficiency RATIOS relative to J/ψ.
         
         This is what enters the branching fraction ratio formula!
         R(BR) = [N_state / N_J/ψ] × [ε_J/ψ / ε_state] × [BR_norm]
@@ -223,10 +250,11 @@ class EfficiencyCalculator:
         Many systematic uncertainties cancel in the ratio ε_J/ψ / ε_state.
         
         Args:
-            efficiencies: {state: {year: {"eff": value, "err": error, ...}}}
+            efficiencies: Nested dictionary:
+                {state: {year: {"eff": value, "err": error, ...}}}
             
         Returns:
-            DataFrame with efficiency ratios per year
+            DataFrame with efficiency ratios per year, saved to CSV
         """
         import pandas as pd
         import numpy as np
@@ -284,15 +312,22 @@ class EfficiencyCalculator:
         
         return df
     
-    def generate_efficiency_table(self, efficiencies):
+    def generate_efficiency_table(
+        self,
+        efficiencies: Dict[str, Dict[str, Dict[str, Any]]]
+    ) -> pd.DataFrame:
         """
-        Generate efficiency summary table (similar to Table 26 in reference)
+        Generate efficiency summary table (similar to Table 26 in reference).
         
         Format: States (rows) × Years (columns)
         Shows ε_sel ± error for each combination
         
         Args:
-            efficiencies: {state: {year: {"eff": value, "err": error, ...}}}
+            efficiencies: Nested dictionary:
+                {state: {year: {"eff": value, "err": error, ...}}}
+                
+        Returns:
+            DataFrame with formatted efficiency table, saved to CSV and Markdown
         """
         import pandas as pd
         from pathlib import Path

@@ -19,6 +19,8 @@ Usage:
   python run_pipeline.py [--skip-optimization] [--use-cached] [--years 2016,2017]
 """
 
+from __future__ import annotations
+
 import sys
 import argparse
 from pathlib import Path
@@ -26,7 +28,7 @@ import pickle
 import pandas as pd
 import numpy as np
 import awkward as ak
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple, Optional
 import json
 
 # Add modules to path
@@ -47,23 +49,22 @@ class PipelineManager:
     and intermediate result caching.
     """
     
-    def __init__(self, config_dir: str = "config", cache_dir: str = "cache"):
+    def __init__(self, config_dir: str = "./config", cache_dir: str = "./cache") -> None:
         """
-        Initialize pipeline manager
+        Initialize pipeline manager.
         
         Args:
-            config_dir: Directory containing TOML configuration files
-            cache_dir: Directory for caching intermediate results
+            config_dir: Path to configuration directory
+            cache_dir: Path to cache directory for intermediate results
         """
-        self.config_dir = Path(config_dir)
-        self.cache_dir = Path(cache_dir)
+        self.config: TOMLConfig = TOMLConfig(config_dir)
+        self.cache_dir: Path = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True, parents=True)
         
         # Load configuration
         print("\n" + "="*80)
         print("PHASE 1: CONFIGURATION VALIDATION")
         print("="*80)
-        self.config = TOMLConfig(str(self.config_dir))
         self._validate_config()
         
         # Create output directories
@@ -109,25 +110,43 @@ class PipelineManager:
         """Get path for cached intermediate result"""
         return self.cache_dir / f"phase{phase}_{name}.pkl"
     
-    def _save_cache(self, phase: str, name: str, data: Any):
-        """Save intermediate result to cache"""
+    def _save_cache(self, phase: str, name: str, data: Any) -> None:
+        """
+        Save intermediate results to pickle file.
+        
+        Args:
+            phase: Phase number or identifier
+            name: Cache name
+            data: Data to cache
+        """
         cache_file = self._cache_path(phase, name)
         with open(cache_file, 'wb') as f:
             pickle.dump(data, f)
         print(f"  → Cached: {cache_file.name}")
     
-    def _load_cache(self, phase: str, name: str) -> Any:
-        """Load intermediate result from cache"""
+    def _load_cache(self, phase: str, name: str) -> Optional[Any]:
+        """
+        Load intermediate results from pickle file.
+        
+        Args:
+            phase: Phase number or identifier
+            name: Cache name
+            
+        Returns:
+            Cached data if exists, None otherwise
+        """
         cache_file = self._cache_path(phase, name)
         if not cache_file.exists():
             return None
         with open(cache_file, 'rb') as f:
             return pickle.load(f)
     
-    def phase2_load_data_and_lambda_cuts(self, 
-                                         years: List[str] = None, 
-                                         track_types: List[str] = None,
-                                         use_cached: bool = False):
+    def phase2_load_data_and_lambda_cuts(
+        self,
+        years: List[str],
+        track_types: List[str] = ["LL", "DD"],
+        use_cached: bool = False
+    ) -> Tuple[Dict[str, Dict[str, ak.Array]], Dict[str, Dict[str, Dict[str, ak.Array]]], Dict[str, Dict[str, ak.Array]], Dict[str, Dict[str, int]]]:
         """
         Phase 2: Load data/MC and apply Lambda pre-selection
         
@@ -141,6 +160,8 @@ class PipelineManager:
         Returns:
             data_dict: {year: {track_type: awkward_array}}
             mc_dict: {state: {year: {track_type: awkward_array}}}
+            phase_space_dict: {year: {track_type: awkward_array}}
+            mc_generated_counts: {state: {year: {track_type: int}}}
         """
         print("\n" + "="*80)
         print("PHASE 2: DATA/MC LOADING + LAMBDA PRE-SELECTION")
@@ -280,18 +301,22 @@ class PipelineManager:
         
         return data_dict, mc_dict, phase_space_dict, mc_generated_counts
     
-    def phase3_selection_optimization(self, data_dict: Dict, mc_dict: Dict, 
-                                     phase_space_dict: Dict,
-                                     mc_generated_counts: Dict,
-                                     use_cached: bool = False,
-                                     force_rerun: bool = False):
+    def phase3_selection_optimization(
+        self,
+        data_dict: Dict[str, Dict[str, ak.Array]],
+        mc_dict: Dict[str, Dict[str, Dict[str, ak.Array]]],
+        phase_space_dict: Dict[str, Dict[str, ak.Array]],
+        mc_generated_counts: Dict[str, Dict[str, int]],
+        use_cached: bool = False,
+        force_rerun: bool = False
+    ) -> pd.DataFrame:
         """
         Phase 3: Optimize selection cuts using signal MC and real data
         
         CORRECT APPROACH:
         - Signal: signal MC (J/ψ, ηc, χc) - scaled to expected observed events
         - Background: real data sidebands - interpolated to signal region
-        - Formula: n_sig = ε × L × σ_eff × 10³
+        - Formula: n_sig = ε * L * σ_eff * 10³
           where ε = n_mc_after_cuts / n_mc_generated (total selection efficiency)
         
         Args:
@@ -381,7 +406,7 @@ class PipelineManager:
         print("\n✓ IMPORTANT: Correct optimization approach:")
         print("    Signal: signal MC (J/ψ, ηc, χc) - scaled to expected events")
         print("    Background: real data sidebands - interpolated to signal region")
-        print("    Formula: n_sig = ε × L × σ_eff × 10³")
+        print("    Formula: n_sig = ε * L * σ_eff * 10³")
         print("    Where ε = n_mc_after_cuts / n_mc_generated (full selection efficiency)")
         print("    This properly estimates signal efficiency and background level!")
         
@@ -394,7 +419,7 @@ class PipelineManager:
         )
         
         # Run N-D grid scan optimization
-        print("\n⚠️  Running N-D GRID SCAN: exhaustive search over 7 variables")
+        print("\n  Running N-D GRID SCAN: exhaustive search over 7 variables")
         print("    Testing all combinations in 7D space ")
         print("    Lambda cuts are FIXED (already applied in Phase 2)")
         optimized_cuts_df = optimizer.optimize_nd_grid_scan()
@@ -407,10 +432,14 @@ class PipelineManager:
         
         return optimized_cuts_df
     
-    def phase4_apply_optimized_cuts(self, data_dict: Dict, mc_dict: Dict,
-                                   optimized_cuts_df: pd.DataFrame,
-                                   apply_cuts_to_data: bool = None,
-                                   data_cut_state: str = None):
+    def phase4_apply_optimized_cuts(
+        self,
+        data_dict: Dict[str, Dict[str, ak.Array]],
+        mc_dict: Dict[str, Dict[str, Dict[str, ak.Array]]],
+        optimized_cuts_df: pd.DataFrame,
+        apply_cuts_to_data: Optional[bool] = None,
+        data_cut_state: Optional[str] = None
+    ) -> Tuple[Dict[str, Dict[str, ak.Array]], Dict[str, Dict[str, Dict[str, ak.Array]]]]:
         """
         Phase 4: Apply optimized cuts to MC (and optionally to data)
         
@@ -473,7 +502,7 @@ class PipelineManager:
             state_cuts = optimized_cuts_df[optimized_cuts_df["state"] == state]
             
             if len(state_cuts) == 0:
-                print(f"  ⚠️  No cuts found for {state}, using Lambda cuts only")
+                print(f"  No cuts found for {state}, using Lambda cuts only")
                 mc_final[state] = mc_dict[state]
                 continue
             
@@ -496,7 +525,7 @@ class PipelineManager:
                         cut_type = cut_row["cut_type"]
                         
                         if branch not in events.fields:
-                            print(f"    ⚠️  Branch {branch} not found, skipping")
+                            print(f"    Branch {branch} not found, skipping")
                             continue
                         
                         branch_data = events[branch]
@@ -520,7 +549,7 @@ class PipelineManager:
         # Data: Apply cuts only if requested (for control plots, validation, etc.)
         # For fitting, we DON'T apply cuts (all states fit to same data)
         if apply_cuts_to_data:
-            print(f"\n⚠️  APPLYING CUTS TO DATA (using {data_cut_state} cuts)")
+            print(f"\n  APPLYING CUTS TO DATA (using {data_cut_state} cuts)")
             print("    This should ONLY be used for control plots or validation!")
             print("    For mass fitting, use apply_cuts_to_data=False")
             
@@ -528,7 +557,7 @@ class PipelineManager:
             data_cuts = optimized_cuts_df[optimized_cuts_df["state"] == data_cut_state]
             
             if len(data_cuts) == 0:
-                print(f"  ⚠️  No cuts found for {data_cut_state}, data unchanged")
+                print(f"    No cuts found for {data_cut_state}, data unchanged")
                 data_final = data_dict
             else:
                 for year in data_dict:
@@ -582,8 +611,8 @@ class PipelineManager:
         
         print("\n✓ Phase 4 complete:")
         if apply_cuts_to_data:
-            print(f"  → Data: CUTS APPLIED (using {data_cut_state} cuts)")
-            print("      ⚠️  Use this only for control plots/validation, NOT for fitting!")
+            print("  → Data: CUTS APPLIED (using {data_cut_state} cuts)")
+            print("       Use this only for control plots/validation, NOT for fitting!")
         else:
             print("  → Data: UNCHANGED (Lambda pre-selection only)")
             print("      All charmonium states will be fit simultaneously to same data")
@@ -592,7 +621,11 @@ class PipelineManager:
         
         return data_final, mc_final
     
-    def apply_manual_cuts(self, events: ak.Array, cuts: Dict[str, Dict]) -> ak.Array:
+    def apply_manual_cuts(
+        self,
+        events: ak.Array,
+        cuts: Dict[str, Dict[str, Any]]
+    ) -> ak.Array:
         """
         Apply manual cuts to any event array (data or MC)
         
@@ -663,7 +696,11 @@ class PipelineManager:
         
         return events_after
     
-    def phase5_mass_fitting(self, data_final: Dict, use_cached: bool = False):
+    def phase5_mass_fitting(
+        self,
+        data_final: Dict[str, Dict[str, ak.Array]],
+        use_cached: bool = False
+    ) -> Dict[str, Any]:
         """
         Phase 5: Fit charmonium mass spectrum to extract yields
         
@@ -730,16 +767,19 @@ class PipelineManager:
         
         return fit_results
     
-    def phase6_efficiency_calculation(self, mc_final: Dict, 
-                                     optimized_cuts_df: pd.DataFrame,
-                                     use_cached: bool = False):
+    def phase6_efficiency_calculation(
+        self,
+        mc_final: Dict[str, Dict[str, Dict[str, ak.Array]]],
+        optimized_cuts_df: pd.DataFrame,
+        use_cached: bool = False
+    ) -> Dict[str, Any]:
         """
         Phase 6: Calculate selection efficiencies from MC
         
         Args:
             mc_final: MC after Lambda cuts (before Bu cuts)
             optimized_cuts_df: Optimized cuts to apply
-            use_cached: Use cached efficiency results
+            use_cached: Use cached efficiency results if available
         
         Returns:
             efficiencies: {state: {year: {"eff": value, "err": error}}}
@@ -802,13 +842,17 @@ class PipelineManager:
         
         return efficiencies
     
-    def phase7_branching_ratios(self, fit_results: Dict, efficiencies: Dict):
+    def phase7_branching_ratios(
+        self,
+        yields: Dict[str, Dict[str, Tuple[float, float]]],
+        efficiencies: Dict[str, Dict[str, Dict[str, Any]]]
+    ) -> pd.DataFrame:
         """
         Phase 7: Calculate branching fraction ratios
         
         Args:
-            fit_results: Results from Phase 5 (yields)
-            efficiencies: Results from Phase 6
+            yields: Yields from Phase 5 {year: {state: (value, error)}}
+            efficiencies: Results from Phase 6 {state: {year: {"eff": value, "err": error}}}
         
         Returns:
             ratios_df: DataFrame with BR ratios
@@ -819,7 +863,7 @@ class PipelineManager:
         
         # Initialize calculator
         bf_calculator = BranchingFractionCalculator(
-            yields=fit_results["yields"],
+            yields=yields,
             efficiencies=efficiencies,
             config=self.config
         )
@@ -839,8 +883,13 @@ class PipelineManager:
         
         return ratios_df
     
-    def run_full_pipeline(self, years: list = None, track_types: list = None,
-                         force_reoptimize: bool = False, use_cached: bool = True):
+    def run_full_pipeline(
+        self,
+        years: Optional[List[str]] = None,
+        track_types: Optional[List[str]] = None,
+        force_reoptimize: bool = False,
+        no_cache: bool = False
+    ) -> Dict[str, Any]:
         """
         Execute complete analysis pipeline
         
@@ -848,8 +897,15 @@ class PipelineManager:
             years: Years to process (default: all)
             track_types: Track types to process (default: all)
             force_reoptimize: Force re-running cut optimization (ignore saved/cached results)
+            no_cache: Force reprocessing (ignore all cached results)
+        
+        Returns:
+            results: Dictionary with all results
             use_cached: Use cached intermediate results when available
         """
+        # Convert no_cache to use_cached for internal use
+        use_cached = not no_cache
+        
         print("\n" + "="*80)
         print("B⁺ → Λ̄pK⁻K⁺ CHARMONIUM ANALYSIS - FULL PIPELINE")
         print("="*80)
@@ -905,7 +961,7 @@ class PipelineManager:
         )
         
         # Phase 7: Branching fraction ratios
-        ratios_df = self.phase7_branching_ratios(fit_results, efficiencies)
+        ratios_df = self.phase7_branching_ratios(fit_results["yields"], efficiencies)
         
         # Final summary
         self._print_final_summary(ratios_df)
@@ -945,7 +1001,7 @@ class PipelineManager:
         print("    - results/final_results.md")
         
         print("\n" + "="*80)
-        print("⚠️  IMPORTANT NOTES:")
+        print("  IMPORTANT NOTES:")
         print("="*80)
         print("  1. This is a DRAFT analysis with statistical uncertainties only")
         print("  2. Systematic uncertainties to be added later")
@@ -987,7 +1043,6 @@ def main():
     # Parse years and track types
     years = args.years.split(",")
     track_types = args.track_types.split(",")
-    use_cached = not args.no_cache
     
     # Validate configuration before running pipeline
     print("Validating configuration...")
@@ -1006,7 +1061,7 @@ def main():
         years=years,
         track_types=track_types,
         force_reoptimize=args.force_reoptimize,
-        use_cached=use_cached
+        no_cache=args.no_cache
     )
     
     return results

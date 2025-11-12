@@ -4,25 +4,39 @@ Branch configuration manager
 Handles loading and parsing branch configurations from branches_config.toml
 """
 
+from __future__ import annotations
+
 import tomli
 from pathlib import Path
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set, Optional, Any
 import logging
 
 from .exceptions import ConfigurationError
 
 
 class BranchConfig:
-    """Manager for branch configuration"""
+    """Manager for branch configuration.
     
-    def __init__(self, config_path: Optional[str] = None):
+    Attributes:
+        logger: Logger instance for this class
+        config: Loaded TOML configuration dictionary
+        data_to_common: Mapping from data branch names to common names
+        mc_to_common: Mapping from MC branch names to common names
+        common_to_data: Mapping from common names to data branch names
+        common_to_mc: Mapping from common names to MC branch names
+    """
+    
+    def __init__(self, config_path: Optional[str] = None) -> None:
         """
-        Initialize branch configuration
+        Initialize branch configuration.
         
-        Parameters:
-        - config_path: Path to branches_config.toml (auto-detected if None)
+        Args:
+            config_path: Path to branches_config.toml (auto-detected if None)
+            
+        Raises:
+            ConfigurationError: If configuration file not found
         """
-        self.logger = logging.getLogger("Bu2LambdaPKK.BranchConfig")
+        self.logger: logging.Logger = logging.getLogger("Bu2LambdaPKK.BranchConfig")
         
         # Auto-detect config file
         if config_path is None:
@@ -38,19 +52,19 @@ class BranchConfig:
         
         # Load configuration
         with open(config_path, 'rb') as f:
-            self.config = tomli.load(f)
+            self.config: Dict[str, Any] = tomli.load(f)
         
         # Build alias mappings for quick lookup
         self._build_alias_maps()
         
         self.logger.info(f"Loaded branch configuration from {config_path}")
     
-    def _build_alias_maps(self):
-        """Build reverse lookup maps for aliases"""
-        self.data_to_common = {}  # data branch name -> common name
-        self.mc_to_common = {}    # mc branch name -> common name
-        self.common_to_data = {}  # common name -> data branch name
-        self.common_to_mc = {}    # common name -> mc branch name
+    def _build_alias_maps(self) -> None:
+        """Build reverse lookup maps for aliases."""
+        self.data_to_common: Dict[str, str] = {}  # data branch name -> common name
+        self.mc_to_common: Dict[str, str] = {}    # mc branch name -> common name
+        self.common_to_data: Dict[str, str] = {}  # common name -> data branch name
+        self.common_to_mc: Dict[str, str] = {}    # common name -> mc branch name
         
         if 'aliases' not in self.config:
             return
@@ -224,12 +238,20 @@ class BranchConfig:
         return rename_map
     
     def list_available_sets(self) -> List[str]:
-        """List all available branch sets"""
+        """List all available branch sets.
+        
+        Returns:
+            List of branch set names
+        """
         return [k for k in self.config['branches'].keys() 
                 if k != 'load_sets']
     
     def list_available_presets(self) -> List[str]:
-        """List all available presets"""
+        """List all available presets.
+        
+        Returns:
+            List of preset names
+        """
         return list(self.config.get('presets', {}).keys())
     
     def get_branches_by_particle(self, particle: str, sets: List[str],
@@ -264,17 +286,24 @@ class BranchConfig:
         
         return branches
     
-    def validate_branches(self, branches: List[str], 
-                         available_branches: List[str]) -> Dict:
+    def validate_branches(
+        self,
+        branches: List[str],
+        available_branches: List[str]
+    ) -> Dict[str, Any]:
         """
-        Validate that requested branches exist in the file
+        Validate that requested branches exist in the file.
         
-        Parameters:
-        - branches: List of requested branch names
-        - available_branches: List of available branches from ROOT file
+        Args:
+            branches: List of requested branch names
+            available_branches: List of available branches from ROOT file
         
         Returns:
-        - Dictionary with 'valid' and 'missing' lists
+            Dictionary with keys:
+                - 'valid': List of found branches
+                - 'missing': List of missing branches
+                - 'found': Count of found branches
+                - 'total_requested': Total number requested
         """
         available_set = set(available_branches)
         requested_set = set(branches)

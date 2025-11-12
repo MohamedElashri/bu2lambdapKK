@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -6,7 +8,7 @@ import matplotlib.pyplot as plt
 
 class BranchingFractionCalculator:
     """
-    Calculate branching fraction ratios relative to J/ψ
+    Calculate branching fraction ratios relative to J/ψ.
     
     Key formula:
     
@@ -22,13 +24,22 @@ class BranchingFractionCalculator:
     - Uses efficiency ratios from Phase 6
     - Combines all years with proper error propagation
     - Statistical uncertainties only (draft analysis)
+    
+    Attributes:
+        yields: Dictionary of yields per year and state with errors
+        efficiencies: Dictionary of efficiencies per state and year
+        config: Configuration object
     """
     
-    def __init__(self, 
-                 yields: Dict[str, Dict[str, Tuple[float, float]]],
-                 efficiencies: Dict[str, Dict[str, Dict[str, float]]],
-                 config: Any):
+    def __init__(
+        self,
+        yields: Dict[str, Dict[str, Tuple[float, float]]],
+        efficiencies: Dict[str, Dict[str, Dict[str, float]]],
+        config: Any
+    ) -> None:
         """
+        Initialize branching fraction calculator.
+        
         Args:
             yields: {year: {state: (value, error)}}
                    e.g., {"2016": {"jpsi": (1000.0, 50.0), "etac": (200.0, 20.0)}}
@@ -36,22 +47,24 @@ class BranchingFractionCalculator:
                    e.g., {"jpsi": {"2016": {"eff": 0.85, "err": 0.03}}}
             config: Configuration object with paths
         """
-        self.yields = yields
-        self.efficiencies = efficiencies
-        self.config = config
+        self.yields: Dict[str, Dict[str, Tuple[float, float]]] = yields
+        self.efficiencies: Dict[str, Dict[str, Dict[str, float]]] = efficiencies
+        self.config: Any = config
         
-    def calculate_efficiency_corrected_yield(self, 
-                                            state: str) -> Tuple[float, float]:
+    def calculate_efficiency_corrected_yield(self, state: str) -> Tuple[float, float]:
         """
-        Calculate Σ(N^year / ε^year) for a given state
+        Calculate Σ(N^year / ε^year) for a given state.
         
         Sum over all years, propagating uncertainties properly.
         
         Error propagation for Y = N/ε:
         σ_Y = Y × sqrt((σ_N/N)² + (σ_ε/ε)²)
         
+        Args:
+            state: State name ("jpsi", "etac", "chic0", "chic1")
+        
         Returns:
-            (corrected_yield, error)
+            Tuple of (corrected_yield, error)
         """
         corrected_yields = []
         errors_sq = []
@@ -83,13 +96,16 @@ class BranchingFractionCalculator:
     
     def calculate_ratio_to_jpsi(self, state: str) -> Tuple[float, float]:
         """
-        Calculate ratio of branching fractions relative to J/ψ
+        Calculate ratio of branching fractions relative to J/ψ.
         
-        R = [Br(B⁺→cc̄ X) × Br(cc̄→Λ̄pK⁻)] / [Br(B⁺→J/ψ X) × Br(J/ψ→Λ̄pK⁻)]
+        R = [Br(B⁺→cc̄ X) * Br(cc̄→Λ̄pK⁻)] / [Br(B⁺→J/ψ X) * Br(J/ψ→Λ̄pK⁻)]
           = Σ(N_cc/ε_cc) / Σ(N_J/ψ/ε_J/ψ)
         
+        Args:
+            state: State name ("etac", "chic0", "chic1")
+        
         Returns:
-            (ratio, error)
+            Tuple of (ratio, error)
         """
         # Efficiency-corrected yields
         yield_cc, err_cc = self.calculate_efficiency_corrected_yield(state)
@@ -108,7 +124,7 @@ class BranchingFractionCalculator:
     
     def calculate_all_ratios(self) -> pd.DataFrame:
         """
-        Calculate all branching fraction ratios
+        Calculate all branching fraction ratios.
         
         Results:
         - ηc/J/ψ
@@ -117,7 +133,7 @@ class BranchingFractionCalculator:
         - χc1/χc0 (derived from above)
         
         Returns:
-            DataFrame with results
+            DataFrame with ratio results, saved to CSV
         """
         results = []
         
@@ -129,9 +145,9 @@ class BranchingFractionCalculator:
         for state in ["etac", "chic0", "chic1"]:
             ratio, error = self.calculate_ratio_to_jpsi(state)
             
-            print(f"\nBr(B⁺ → {state} X) × Br({state} → Λ̄pK⁻)")
+            print(f"\nBr(B⁺ → {state} X) * Br({state} → Λ̄pK⁻)")
             print(f"───────────────────────────────────────────")
-            print(f"Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)")
+            print(f"Br(B⁺ → J/ψ X) * Br(J/ψ → Λ̄pK⁻)")
             print(f"= {ratio:.3f} ± {error:.3f}")
             
             results.append({
@@ -152,9 +168,9 @@ class BranchingFractionCalculator:
         rel_err0 = err0 / ratio_chic0_jpsi if ratio_chic0_jpsi > 0 else 0.0
         error_chic1_chic0 = ratio_chic1_chic0 * np.sqrt(rel_err1**2 + rel_err0**2)
         
-        print(f"\nBr(B⁺ → χc1 X) × Br(χc1 → Λ̄pK⁻)")
+        print(f"\nBr(B⁺ → χc1 X) * Br(χc1 → Λ̄pK⁻)")
         print(f"───────────────────────────────────────────")
-        print(f"Br(B⁺ → χc0 X) × Br(χc0 → Λ̄pK⁻)")
+        print(f"Br(B⁺ → χc0 X) * Br(χc0 → Λ̄pK⁻)")
         print(f"= {ratio_chic1_chic0:.3f} ± {error_chic1_chic0:.3f}")
         
         results.append({
@@ -174,14 +190,14 @@ class BranchingFractionCalculator:
     
     def check_yield_consistency_per_year(self) -> pd.DataFrame:
         """
-        Check consistency of yields per year
-        Following Table 28 in reference analysis
+        Check consistency of yields per year.
         
-        Plot: N/(L×ε) vs year
-        Should be consistent if detector stable
+        Following Table 28 in reference analysis.
+        Plot: N/(L*ε) vs year
+        Should be consistent if detector stable.
         
         Returns:
-            DataFrame with N/(L×ε) for each (state, year)
+            DataFrame with N/(L*ε) for each (state, year), saved to CSV with plot
         """
         results = []
         
@@ -240,7 +256,7 @@ class BranchingFractionCalculator:
         
         # Save
         plot_dir = Path(self.config.paths["output"]["plots_dir"])
-        plt.savefig(plot_dir / "yield_consistency_check.png", dpi=150, bbox_inches='tight')
+        plt.savefig(plot_dir / "yield_consistency_check.pdf", dpi=150, bbox_inches='tight')
         plt.close()
         
         print("\n✓ Yield consistency check saved")
@@ -251,14 +267,17 @@ class BranchingFractionCalculator:
         
         return df
     
-    def generate_final_summary(self, ratios_df: pd.DataFrame):
+    def generate_final_summary(self, ratios_df: pd.DataFrame) -> None:
         """
-        Generate final summary of results
+        Generate final summary of results.
         
         Creates:
-        1. Markdown summary
-        2. LaTeX table
-        3. Summary plot
+        1. Markdown summary file
+        2. Formatted results table
+        3. Next steps documentation
+        
+        Args:
+            ratios_df: DataFrame containing calculated ratios
         """
         output_dir = Path(self.config.paths["output"]["results_dir"])
         output_dir.mkdir(exist_ok=True, parents=True)

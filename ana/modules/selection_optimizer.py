@@ -1,49 +1,66 @@
+from __future__ import annotations
+
 import matplotlib.pyplot as plt
 import awkward as ak
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 from .exceptions import OptimizationError
 
 class SelectionOptimizer:
     """
-    Optimize cuts on B+, bachelor p̄, K+, K- using Figure of Merit
-    Perform 2D optimization: (variable × charmonium_state)
+    Optimize cuts on B+, bachelor p̄, K+, K- using Figure of Merit.
     
-    Lambda cuts are already applied (pre-selection)
+    Perform 2D optimization: (variable * charmonium_state)
+    Lambda cuts are already applied (pre-selection).
+    
+    Attributes:
+        signal_mc: Signal MC events by state and year
+        phase_space_mc: Phase-space MC events by year
+        data: Real data events by year
+        mc_generated_counts: Generator-level event counts
+        config: Configuration object
     """
     
-    def __init__(self, 
-                 signal_mc: Dict[str, Dict[str, ak.Array]],
-                 phase_space_mc: Dict[str, ak.Array],
-                 data: Dict[str, ak.Array],
-                 mc_generated_counts: Dict[str, Dict[str, int]],
-                 config: Any):
+    def __init__(
+        self,
+        signal_mc: Dict[str, Dict[str, ak.Array]],
+        phase_space_mc: Dict[str, ak.Array],
+        data: Dict[str, ak.Array],
+        mc_generated_counts: Dict[str, Dict[str, int]],
+        config: Any
+    ) -> None:
         """
-        signal_mc: {state: {year: events_after_lambda_cuts}}
-        phase_space_mc: {year: events_after_lambda_cuts} (KpKm non-resonant)
-        data: {year: events_after_lambda_cuts}
-        mc_generated_counts: {state: {year: n_generated}} (generator level, before cuts)
-        """
-        self.signal_mc = signal_mc
-        self.phase_space_mc = phase_space_mc
-        self.data = data
-        self.mc_generated_counts = mc_generated_counts
-        self.config = config
+        Initialize selection optimizer.
         
-    def scale_signal_to_expected_events(self,
-                                        n_mc_after_cuts: int,
-                                        state: str,
-                                        year: str) -> float:
+        Args:
+            signal_mc: {state: {year: events_after_lambda_cuts}}
+            phase_space_mc: {year: events_after_lambda_cuts} (KpKm non-resonant)
+            data: {year: events_after_lambda_cuts}
+            mc_generated_counts: {state: {year: n_generated}} (generator level, before cuts)
+            config: Configuration object
+        """
+        self.signal_mc: Dict[str, Dict[str, ak.Array]] = signal_mc
+        self.phase_space_mc: Dict[str, ak.Array] = phase_space_mc
+        self.data: Dict[str, ak.Array] = data
+        self.mc_generated_counts: Dict[str, Dict[str, int]] = mc_generated_counts
+        self.config: Any = config
+        
+    def scale_signal_to_expected_events(
+        self,
+        n_mc_after_cuts: int,
+        state: str,
+        year: str
+    ) -> float:
         """
         Scale MC to data-equivalent for realistic FOM optimization
         
         For FOM to work correctly, n_sig and n_bkg must be on the same scale
         (both representing expected events in data).
         
-        We scale MC by: (n_mc_after_cuts / n_mc_generated) × scale_factor
+        We scale MC by: (n_mc_after_cuts / n_mc_generated) * scale_factor
         
         Where scale_factor is chosen to give realistic S/B ratios without
         needing unknown state-specific branching fractions. We use a
@@ -83,8 +100,15 @@ class SelectionOptimizer:
         Maximizing FOM balances:
         - Signal efficiency (want high n_sig)
         - Background rejection (want low n_bkg)
+        
+        Args:
+            n_sig: Number of signal events
+            n_bkg: Number of background events
+        
+        Returns:
+            FOM value (higher is better), 0.0 if invalid
         """
-        if n_sig <= 0:
+        if n_bkg + n_sig <= 0:
             return 0.0
         return n_sig / np.sqrt(n_bkg + n_sig)
     
@@ -137,23 +161,33 @@ class SelectionOptimizer:
         
         return (low_mass, high_mass)
     
-    def count_events_in_region(self, 
-                               events: ak.Array,
-                               region: Tuple[float, float]) -> int:
+    def count_events_in_region(
+        self,
+        events: ak.Array,
+        region: Tuple[float, float]
+    ) -> int:
         """
-        Count events in M_LpKm mass window
+        Count events in mass region.
         
-        Note: Uses M_LpKm_h2 (h2 is K- in charmonium candidate Λ̄pK⁻)
-              h1 is K+, h2 is K- (confirmed from PDG ID analysis)
+        Uses M_LpKm_h2 (Lambdabar-p-Kminus system mass).
+        
+        Args:
+            events: Awkward array of events
+            region: Tuple of (low_mass, high_mass) in MeV
+            
+        Returns:
+            Number of events in region
         """
         # Use M_LpKm_h2 (h2 = K- from charmonium, h1 = K+)
         mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in events.fields else "M_LpKm"
         mask = (events[mass_branch] > region[0]) & (events[mass_branch] < region[1])
         return ak.sum(mask)
     
-    def estimate_background_in_signal_region(self,
-                                            data_events: ak.Array,
-                                            state: str) -> float:
+    def estimate_background_in_signal_region(
+        self,
+        data_events: ak.Array,
+        state: str
+    ) -> float:
         """
         Estimate combinatorial background in signal region from real data sidebands
         
@@ -161,10 +195,10 @@ class SelectionOptimizer:
         This gives the true background level in data for cut optimization.
         
         Method:
-        1. Count events in low sideband [center - 4×window, center - window]
-        2. Count events in high sideband [center + window, center + 4×window]
+        1. Count events in low sideband [center - 4*window, center - window]
+        2. Count events in high sideband [center + window, center + 4*window]
         3. Average the two sidebands
-        4. Scale by width ratio: background_in_signal = avg_sideband × (signal_width / sideband_width)
+        4. Scale by width ratio: background_in_signal = avg_sideband * (signal_width / sideband_width)
         
         Args:
             data_events: Real data events after cuts
@@ -195,11 +229,13 @@ class SelectionOptimizer:
         
         return n_bkg_estimate
     
-    def scan_single_variable(self,
-                            state: str,
-                            variable_name: str,
-                            branch_name: str,
-                            scan_config: dict) -> pd.DataFrame:
+    def scan_single_variable(
+        self,
+        state: str,
+        variable_name: str,
+        branch_name: str,
+        scan_config: dict
+    ) -> pd.DataFrame:
         """
         Scan a single variable and compute FOM at each cut value
         
@@ -294,7 +330,12 @@ class SelectionOptimizer:
         
         return pd.DataFrame(results)
     
-    def scan_2d_variable_pair(self, state: str, var1: dict, var2: dict) -> pd.DataFrame:
+    def scan_2d_variable_pair(
+        self,
+        state: str,
+        var1: Dict[str, Any],
+        var2: Dict[str, Any]
+    ) -> pd.DataFrame:
         """
         Perform 2D scan of two variables simultaneously
         
@@ -419,7 +460,7 @@ class SelectionOptimizer:
     
     def _get_branch_name_for_variable(self, category: str, var_name: str) -> str:
         """
-        Map (category, variable) to actual branch name in normalized data
+        Map (category, variable) to actual branch name in normalized data.
         
         This mapping is based on branch naming conventions after normalization.
         """
@@ -659,12 +700,14 @@ class SelectionOptimizer:
         
         return results_df
     
-    def _plot_fom_scan(self, 
-                       scan_results: pd.DataFrame,
-                       category: str,
-                       var_name: str,
-                       state: str,
-                       var_config: dict):
+    def _plot_fom_scan(
+        self,
+        scan_results: pd.DataFrame,
+        category: str,
+        var_name: str,
+        state: str,
+        var_config: dict
+    ) -> None:
         """
         Plot FOM scan for a single (variable, state) pair
         Similar to Appendix A figures in reference analysis
@@ -710,8 +753,13 @@ class SelectionOptimizer:
         plt.savefig(plot_dir / filename, dpi=150, bbox_inches='tight')
         plt.close()
     
-    def _plot_2d_fom_heatmap(self, scan_2d_results: pd.DataFrame, 
-                             var1: dict, var2: dict, state: str):
+    def _plot_2d_fom_heatmap(
+        self,
+        scan_2d_results: pd.DataFrame,
+        var1: Dict[str, Any],
+        var2: Dict[str, Any],
+        state: str
+    ) -> None:
         """
         Plot 2D heatmap of FOM as function of two variables
         
@@ -762,7 +810,7 @@ class SelectionOptimizer:
         plt.savefig(plot_dir / filename, dpi=150, bbox_inches='tight')
         plt.close()
     
-    def _generate_optimization_summary(self, results_df: pd.DataFrame):
+    def _generate_optimization_summary(self, results_df: pd.DataFrame) -> None:
         """
         Generate summary table similar to Table 7 in reference analysis
         

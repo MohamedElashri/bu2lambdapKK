@@ -5,13 +5,17 @@ Implements RooFit-based simultaneous mass fitting for charmonium states.
 Following plan.md Phase 5 specification.
 """
 
+from __future__ import annotations
+
 import ROOT
 import numpy as np
 import awkward as ak
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Optional
 import os
+
+from .exceptions import FittingError
 
 # Enable RooFit batch mode for better performance
 ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
@@ -39,52 +43,61 @@ class MassFitter:
     - ψ(3770): RBW ⊗ Gaussian, M and Γ fixed to PDG (uses χc1 optimization)
     
     Background: ARGUS function (standard for B meson combinatorial background)
+    
+    Attributes:
+        config: Configuration object
+        fit_range: Mass fit range tuple
+        mass_var: RooRealVar for mass observable
+        signal_pdfs: Dictionary of signal PDFs per state
+        bkg_pdfs: Dictionary of background PDFs per year
+        models: Dictionary of combined models per year
+        yields: Nested dictionary of yield variables
     """
     
-    def __init__(self, config: Any):
+    def __init__(self, config: Any) -> None:
         """
-        Initialize mass fitter with configuration
+        Initialize mass fitter with configuration.
         
         Args:
             config: TOMLConfig object with particles, paths configuration
         """
-        self.config = config
-        self.fit_range = config.particles["mass_windows"]["charmonium_fit_range"]
+        self.config: Any = config
+        self.fit_range: Tuple[float, float] = config.particles["mass_windows"]["charmonium_fit_range"]
         
         # B+ mass window for pre-selection (applied BEFORE fitting)
-        self.bu_mass_min = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_min", 5255.0)
-        self.bu_mass_max = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_max", 5305.0)
+        self.bu_mass_min: float = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_min", 5255.0)
+        self.bu_mass_max: float = config.selection.get("bu_fixed_selection", {}).get("mass_corrected_max", 5305.0)
         
         # Fitting configuration
-        fitting_config = config.particles.get("fitting", {})
-        self.use_binned_fit = fitting_config.get("use_binned_fit", True)
-        self.bin_width = fitting_config.get("bin_width", 5.0)
+        fitting_config: Dict[str, Any] = config.particles.get("fitting", {})
+        self.use_binned_fit: bool = fitting_config.get("use_binned_fit", True)
+        self.bin_width: float = fitting_config.get("bin_width", 5.0)
         
         # Calculate number of bins automatically: always maintain bin_width MeV/bin
-        fit_range_width = self.fit_range[1] - self.fit_range[0]
-        self.nbins = int(fit_range_width / self.bin_width)
+        fit_range_width: float = self.fit_range[1] - self.fit_range[0]
+        self.nbins: int = int(fit_range_width / self.bin_width)
         
         # Shared parameters across years (will be created on first use)
-        self.masses = {}      # M_J/ψ, M_ηc, M_χc0, M_χc1
-        self.widths = {}      # Γ states (some fixed, some floating)
-        self.resolution = None  # Single resolution parameter (shared)
+        self.masses: Dict[str, ROOT.RooRealVar] = {}      # M_J/ψ, M_ηc, M_χc0, M_χc1
+        self.widths: Dict[str, ROOT.RooRealVar] = {}      # Γ states (some fixed, some floating)
+        self.resolution: Optional[ROOT.RooRealVar] = None  # Single resolution parameter (shared)
         
         # Observable (shared across all fits)
-        self.mass_var = None
+        self.mass_var: Optional[ROOT.RooRealVar] = None
         
         # Store all PDFs and variables to prevent garbage collection
-        self.signal_pdfs = {}  # {state: pdf}
-        self.bkg_pdfs = {}     # {year: pdf}
+        self.signal_pdfs: Dict[str, ROOT.RooAbsPdf] = {}  # {state: pdf}
+        self.bkg_pdfs: Dict[str, ROOT.RooAbsPdf] = {}     # {year: pdf}
 
-        self.models = {}       # {year: model}
-        self.yields = {}       # {year: {state: yield_var}}
+        self.models: Dict[str, ROOT.RooAbsPdf] = {}       # {year: model}
+        self.yields: Dict[str, Dict[str, ROOT.RooRealVar]] = {}       # {year: {state: yield_var}}
         
     def setup_observable(self) -> ROOT.RooRealVar:
         """
-        Define RooRealVar for M(Λ̄pK⁻) invariant mass
+        Define RooRealVar for M(Λ̄pK⁻) invariant mass.
         
         Returns:
-            RooRealVar for mass observable
+            ROOT.RooRealVar for mass observable
         """
         if self.mass_var is None:
             self.mass_var = ROOT.RooRealVar(
@@ -97,7 +110,7 @@ class MassFitter:
             self.mass_var.setBins(self.nbins)
         return self.mass_var
     
-    def create_signal_pdf(self, state: str, mass_var: ROOT.RooRealVar) -> ROOT.RooVoigtian:
+    def create_signal_pdf(self, state: str, mass_var: ROOT.RooRealVar) -> ROOT.RooAbsPdf:
         """
         Create signal PDF for one charmonium state
         
@@ -176,7 +189,7 @@ class MassFitter:
         
         return signal_pdf
     
-    def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooArgusBG, ROOT.RooRealVar]:
+    def create_background_pdf(self, mass_var: ROOT.RooRealVar, year: str) -> Tuple[ROOT.RooAbsPdf, ROOT.RooRealVar]:
         """
         Create ARGUS background PDF
         
@@ -241,11 +254,11 @@ class MassFitter:
         
         return bkg_pdf, c
     
-    def build_model_for_year(self, year: str, mass_var: ROOT.RooRealVar) -> Tuple[ROOT.RooAddPdf, Dict[str, ROOT.RooRealVar]]:
+    def build_model_for_year(self, year: str, mass_var: ROOT.RooRealVar) -> Tuple[ROOT.RooAbsPdf, Dict[str, ROOT.RooRealVar]]:
         """
         Build full extended likelihood model for one year
         
-        PDF = Σ[N_state × Signal_state] + N_bkg × Background
+        PDF = Σ[N_state * Signal_state] + N_bkg * Background
         
         States: ηc(1S), J/ψ, χc0, χc1, ηc(2S), ψ(3770)
         
@@ -308,28 +321,34 @@ class MassFitter:
         
         return total_pdf, year_yields
     
-    def perform_fit(self, data_by_year: Dict[str, ak.Array], fit_combined: bool = True) -> Dict[str, Any]:
+    def perform_fit(
+        self,
+        data_by_year: Dict[str, ak.Array],
+        fit_combined: bool = True
+    ) -> Dict[str, Any]:
         """
-        Perform mass fits to all years (per-year AND combined)
+        Perform mass fits to all years (per-year AND combined).
         
-        Strategy:
-        1. Apply B+ mass window cut [5255, 5305] MeV
-        2. Fit each year separately with shared physics parameters
-        3. Fit combined dataset (all years together)
-        4. Model all 6 charmonium states simultaneously with ARGUS background
+        Following Phase 5:
+        - Fit each year individually (MagDown + MagUp already combined)
+        - Share physical parameters (masses, widths, resolution) across years
+        - Extract per-year yields for efficiency correction
+        - Also fit combined dataset for overall yield check
         
         Args:
-            data_by_year: {year: awkward_array} with M_LpKm_h2 and Bu_M_DTF_PV branches
+            data_by_year: {year: awkward_array} with M_LpKm_h2 branch
             fit_combined: If True, also fit combined dataset
             
         Returns:
-            {
-                "yields": {year: {state: (value, error)}},  # includes "combined"
-                "masses": {state: (value, error)},
-                "widths": {state: (value, error)},
-                "resolution": (value, error),
-                "fit_results": {year: RooFitResult}  # includes "combined"
-            }
+            Dictionary with fit results:
+            - "yields": {year: {state: (value, error)}}
+            - "masses": {state: (value, error)}
+            - "widths": {state: (value, error)}
+            - "resolution": (value, error)
+            - "fit_quality": {year: {"status": int, "minNll": float}}
+            
+        Raises:
+            FittingError: If fit fails for any year
         """
         mass_var = self.setup_observable()
         
@@ -511,9 +530,14 @@ class MassFitter:
             "fit_results": all_fit_results
         }
     
-    def plot_fit_result(self, year: str, mass_var: ROOT.RooRealVar, 
-                       dataset: ROOT.RooDataSet, model: ROOT.RooAddPdf,
-                       yields: Dict[str, ROOT.RooRealVar]):
+    def plot_fit_result(
+        self,
+        year: str,
+        mass_var: Any,
+        dataset: Any,
+        model: Any,
+        yields: Dict[str, Any]
+    ) -> None:
         """
         Plot fit result with LHCb publication quality
         
