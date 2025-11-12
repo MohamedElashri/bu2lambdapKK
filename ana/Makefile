@@ -50,7 +50,7 @@ pipeline: ## Run full analysis pipeline (all years: 2016, 2017, 2018)
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
 	@printf "\033[0;34mComplete Analysis Pipeline - All Years (2016, 2017, 2018)\033[0m\n"
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[1;33m📊 Phases: 2 → 3 → 4 → 5 → 6 → 7\033[0m\n"
+	@printf "\033[1;33m📊 Phases: 1 (Config Validation) → 2 → 3 → 4 → 5 → 6 → 7\033[0m\n"
 	@printf "\033[1;33m📊 Includes: Per-year + Combined fits\033[0m\n\n"
 	@$(PYTHON) run_pipeline.py --years 2016,2017,2018
 
@@ -89,24 +89,24 @@ workflow-production: ## Production workflow: full pipeline with all data
 
 show-results: ## Show final results table
 	@printf "\033[0;34mFinal Branching Fraction Ratios:\033[0m\n"
-	@if [ -f tables/branching_fraction_ratios.csv ]; then \
-		column -s, -t < tables/branching_fraction_ratios.csv; \
+	@if [ -f analysis_output/tables/branching_fraction_ratios.csv ]; then \
+		column -s, -t < analysis_output/tables/branching_fraction_ratios.csv; \
 	else \
 		printf "\033[0;31mNo results yet. Run pipeline first.\033[0m\n"; \
 	fi
 
 show-yields: ## Show fitted yields
 	@printf "\033[0;34mFitted Yields:\033[0m\n"
-	@if [ -f tables/phase5_yields.csv ]; then \
-		column -s, -t < tables/phase5_yields.csv; \
+	@if [ -f analysis_output/tables/phase5_yields.csv ]; then \
+		column -s, -t < analysis_output/tables/phase5_yields.csv; \
 	else \
 		printf "\033[0;31mNo yields yet. Run phase 5 first.\033[0m\n"; \
 	fi
 
 show-efficiencies: ## Show selection efficiencies
 	@printf "\033[0;34mSelection Efficiencies:\033[0m\n"
-	@if [ -f tables/efficiencies.csv ]; then \
-		column -s, -t < tables/efficiencies.csv; \
+	@if [ -f analysis_output/tables/efficiencies.csv ]; then \
+		column -s, -t < analysis_output/tables/efficiencies.csv; \
 	else \
 		printf "\033[0;31mNo efficiencies yet. Run phase 6 first.\033[0m\n"; \
 	fi
@@ -114,13 +114,13 @@ show-efficiencies: ## Show selection efficiencies
 list-outputs: ## List all output files
 	@printf "\033[0;34mOutput Files:\033[0m\n"
 	@printf "\033[1;33mTables:\033[0m\n"
-	@ls -lh tables/*.csv 2>/dev/null || printf "  None\n"
+	@ls -lh analysis_output/tables/*.csv 2>/dev/null || printf "  None\n"
 	@printf "\n"
 	@printf "\033[1;33mPlots:\033[0m\n"
-	@ls -lh plots/*.png 2>/dev/null || printf "  None\n"
+	@ls -lh analysis_output/plots/*.png 2>/dev/null || printf "  None\n"
 	@printf "\n"
 	@printf "\033[1;33mResults:\033[0m\n"
-	@ls -lh results/*.md 2>/dev/null || printf "  None\n"
+	@ls -lh analysis_output/results/*.md 2>/dev/null || printf "  None\n"
 
 ##@ Cleanup
 
@@ -131,21 +131,19 @@ clean-cache: ## Remove cached intermediate results
 
 clean-outputs: ## Remove output files (tables, plots, results)
 	@printf "\033[0;34mRemoving output files...\033[0m\n"
-	@rm -rf tables/*.csv tables/*.md tables/*.json tables/presentation/*.md tables/presentation/*.csv
-	@rm -rf plots/*.pdf plots/*/*.pdf
-	@rm -rf results/*.md
+	@rm -rf analysis_output
 	@printf "\033[0;32mOutputs cleaned\033[0m\n"
 
 clean-all: clean-cache clean-outputs ## Remove everything (cache + outputs)
 	@printf "\033[0;32mAll intermediate files removed\033[0m\n"
 
-clean: clean-cache ## Alias for clean-cache
+clean: clean-all ## Alias for clean-all (removes both cache and outputs)
 
 ##@ Development
 
 validate-config: ## Validate TOML configuration files
 	@printf "\033[0;34mValidating configuration files...\033[0m\n"
-	@$(PYTHON) -c "from modules.data_handler import TOMLConfig; config = TOMLConfig(); print('✓ All config files valid')"
+	@$(PYTHON) utils/validate_config.py
 
 check-dependencies: ## Check if all required packages are installed
 	@printf "\033[0;34mChecking dependencies...\033[0m\n"
@@ -161,27 +159,9 @@ check-dependencies: ## Check if all required packages are installed
 
 setup-dirs: ## Create necessary directories
 	@printf "\033[0;34mCreating directories...\033[0m\n"
-	@mkdir -p cache tables plots results
-	@mkdir -p plots/fits plots/optimization
+	@mkdir -p cache analysis_output/tables analysis_output/plots analysis_output/results
+	@mkdir -p analysis_output/plots/fits analysis_output/plots/optimization
 	@printf "\033[0;32mDirectories created\033[0m\n"
-
-##@ Documentation
-
-docs: ## Open README.md
-	@if command -v xdg-open > /dev/null; then \
-		xdg-open README.md; \
-	elif command -v open > /dev/null; then \
-		open README.md; \
-	else \
-		cat README.md; \
-	fi
-
-show-plan: ## Show plan.md
-	@if command -v less > /dev/null; then \
-		less plan.md; \
-	else \
-		cat plan.md; \
-	fi
 
 ##@ Information
 

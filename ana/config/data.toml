@@ -36,17 +36,17 @@ MC Organization:
 
 [output]
 # Output directories for analysis results
-plots_dir = "./plots"
-tables_dir = "./tables"
-results_dir = "./results"
+plots_dir = "./analysis_output/plots"
+tables_dir = "./analysis_output/tables"
+results_dir = "./analysis_output/results"
 docs_dir = "./docs"
 
 [output.subdirs]
 # Automatic subdirectories created by pipeline
-fits = "./plots/fits"  # Mass fit plots
-optimization = "./plots/optimization"  # FOM scan plots
-efficiencies = "./plots/efficiencies"  # Efficiency plots
-branching_fractions = "./plots/branching_fractions"  # Final results plots
+fits = "./analysis_output/plots/fits"  # Mass fit plots
+optimization = "./analysis_output/plots/optimization"  # FOM scan plots
+efficiencies = "./analysis_output/plots/efficiencies"  # Efficiency plots
+branching_fractions = "./analysis_output/plots/branching_fractions"  # Final results plots
 
 [cache]
 # Caching intermediate results for faster re-running

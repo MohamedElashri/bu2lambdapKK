@@ -334,7 +334,8 @@ class PipelineManager:
         print("PHASE 3: SELECTION OPTIMIZATION")
         print("="*80)
         
-        cuts_file = Path("tables/optimized_cuts.csv")
+        tables_dir = Path(self.config.paths["output"]["tables_dir"])
+        cuts_file = tables_dir / "optimized_cuts.csv"
         
         # Check for existing results
         if not force_rerun and cuts_file.exists():
@@ -347,7 +348,7 @@ class PipelineManager:
                 print("✓ Loaded cached optimized cuts")
                 return cached
         
-        print("\n⚠️  Running full 2D optimization (this may take 30-60 minutes)")
+        print("\n  Running full 2D optimization (this may take 30-60 minutes)")
         print("    You can skip this and use default cuts if needed\n")
         
         # Combine track types (LL + DD) for optimizer
@@ -480,12 +481,12 @@ class PipelineManager:
         print(f"  apply_cuts_to_data = {apply_cuts_to_data}")
         if apply_cuts_to_data:
             print(f"  data_cut_state = {data_cut_state}")
-            print(f"  ⚠️  WARNING: Cuts will be applied to data!")
+            print(f"    WARNING: Cuts will be applied to data!")
         else:
             print(f"  → Data will remain unchanged (correct for mass fitting)")
         
         if optimized_cuts_df is None or len(optimized_cuts_df) == 0:
-            print("\n⚠️  No optimized cuts provided - using Lambda cuts only")
+            print("\n No optimized cuts provided - using Lambda cuts only")
             return data_dict, mc_dict
         
         print(f"\nApplying {len(optimized_cuts_df)} optimized cut values")
@@ -606,7 +607,8 @@ class PipelineManager:
                                  for state in states}
         }
         
-        with open("tables/phase4_summary.json", "w") as f:
+        tables_dir = Path(self.config.paths["output"]["tables_dir"])
+        with open(tables_dir / "phase4_summary.json", "w") as f:
             json.dump(summary, f, indent=2)
         
         print("\n✓ Phase 4 complete:")
@@ -666,7 +668,7 @@ class PipelineManager:
         # Apply each cut
         for branch_name, cut_spec in cuts.items():
             if branch_name not in events.fields:
-                print(f"  ⚠️  Branch {branch_name} not found, skipping")
+                print(f"    Branch {branch_name} not found, skipping")
                 continue
             
             branch_data = events[branch_name]
@@ -683,7 +685,7 @@ class PipelineManager:
             elif cut_type == "less":
                 mask = mask & (branch_data < cut_val)
             else:
-                print(f"  ⚠️  Unknown cut_type '{cut_type}', skipping {branch_name}")
+                print(f"    Unknown cut_type '{cut_type}', skipping {branch_name}")
                 continue
             
             print(f"  Applied: {branch_name} {cut_type} {cut_val}")
@@ -761,9 +763,10 @@ class PipelineManager:
                 })
         
         yields_df = pd.DataFrame(yields_data)
-        yields_df.to_csv("tables/phase5_yields.csv", index=False)
+        tables_dir = Path(self.config.paths["output"]["tables_dir"])
+        yields_df.to_csv(tables_dir / "phase5_yields.csv", index=False)
         
-        print(f"\n✓ Phase 5 complete: Yields saved to tables/phase5_yields.csv")
+        print(f"\n✓ Phase 5 complete: Yields saved to {tables_dir / 'phase5_yields.csv'}")
         
         return fit_results
     
@@ -1046,7 +1049,7 @@ def main():
     
     # Validate configuration before running pipeline
     print("Validating configuration...")
-    from validate_config import ConfigValidator
+    from utils.validate_config import ConfigValidator
     validator = ConfigValidator(config_dir="config", verbose=False)
     if not validator.validate_all():
         print("\nConfiguration validation failed. Please fix errors before running pipeline.")

@@ -194,6 +194,7 @@ agent.md
 
 ## results and summaries
 *_summary.json
-results
 efficiencies.md
-tables
+
+## analysis output directory
+analysis_output/
