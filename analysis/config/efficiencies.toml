@@ -8,9 +8,9 @@
 [efficiency_components]
 # Which components are calculated vs provided
 acceptance = "calculated"  # From MC truth (generator level → detector acceptance)
-reconstruction = "placeholder"  # COMBINED with stripping for now
+reconstruction = "placeholder"  # I still need to figure it out
 stripping = "user_provided"  # From data-driven stripping campaign
-trigger = "calculated"  # From phase space MC (KpKm sample)
+trigger = "calculated"  # From the data that pass trigger selection
 selection = "calculated"  # From MC (offline selection on reconstructed)
 
 [efficiency_components.notes]

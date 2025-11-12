@@ -283,20 +283,20 @@ For MASS FITTING, always use apply_cuts_to_data=false!
 # Useful for testing, validation, or if you want to fix specific cut values
 # Leave empty to use optimized cuts from Phase 3
 #
-# To use manual cuts, either:
+# To use manual cuts, we either:
 #   1. Uncomment the example cuts below, OR
 #   2. Add cuts here and run with: python run_pipeline.py --use-manual-cuts
 #
 # Format: branch_name = { cut_type = "greater"|"less", value = float }
 #
-# Example (based on typical LHCb cuts - uncomment to use):
-# Bu_PT = { cut_type = "greater", value = 3000.0 }
-# Bu_FDCHI2_OWNPV = { cut_type = "greater", value = 100.0 }
-# Bu_IPCHI2_OWNPV = { cut_type = "less", value = 10.0 }
-# Bu_DTF_chi2 = { cut_type = "less", value = 30.0 }
-# h1_ProbNNk = { cut_type = "greater", value = 0.1 }
-# h2_ProbNNk = { cut_type = "greater", value = 0.1 }
-# p_ProbNNp = { cut_type = "greater", value = 0.1 }
+# Example (uncomment to use):
+Bu_PT = { cut_type = "greater", value = 3000.0 }
+Bu_FDCHI2_OWNPV = { cut_type = "greater", value = 100.0 }
+Bu_IPCHI2_OWNPV = { cut_type = "less", value = 10.0 }
+Bu_DTF_chi2 = { cut_type = "less", value = 30.0 }
+h1_ProbNNk = { cut_type = "greater", value = 0.1 }
+h2_ProbNNk = { cut_type = "greater", value = 0.1 }
+p_ProbNNp = { cut_type = "greater", value = 0.1 }
 
 [manual_cuts.notes]
 comment = """

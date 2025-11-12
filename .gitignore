@@ -202,3 +202,6 @@ analysis_output/
 ## all md files except when their name is README.md
 *.md
 !README.md
+
+## cache
+cache/
