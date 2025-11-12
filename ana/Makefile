@@ -3,11 +3,13 @@
 # Quick reference:
 #   make help          - Show all available targets
 #   make venv          - Activate virtual environment
-#   make pipeline      - Run full analysis pipeline
-#   make quick-test    - Quick test with 2016 LL only
+#   make pipeline      - Run full analysis pipeline (All years: 2016, 2017, 2018)
+#   make pipeline-2016 - Run with 2016 data only
+#   make pipeline-2017 - Run with 2017 data only
+#   make pipeline-2018 - Run with 2018 data only
 #   make clean         - Remove cache and output files
 
-.PHONY: help clean pipeline phase2 phase3 phase5 phase6 phase7 venv
+.PHONY: help clean pipeline venv
 
 # Virtual environment detection
 VENV_DIR := $(shell if [ -d ".venv" ]; then echo ".venv"; elif [ -d "../.venv" ]; then echo "../.venv"; else echo ""; fi)
@@ -69,59 +71,8 @@ pipeline-no-cache: ## Run pipeline forcing reprocessing (no cache)
 	@printf "\033[0;31m⚠️  Forcing full reprocessing\033[0m\n"
 	@$(PYTHON) run_pipeline.py --years 2016,2017,2018 --no-cache
 
-quick-test: ## Quick pipeline test (2016 LL only)
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mQuick Test Pipeline (2016 LL only)\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[1;33m📊 Testing with minimal dataset\033[0m\n\n"
-	@$(PYTHON) run_phase.py 2 --years 2016 --track-types LL
-	@$(PYTHON) run_phase.py 5
-	@$(PYTHON) run_phase.py 6
-	@$(PYTHON) run_phase.py 7
-	@printf "\n\033[0;32m✅ Quick test complete! Check tables/ for results\033[0m\n"
-
-##@ Individual Phases (with auto-dependency resolution)
-
-phase2: ## Phase 2: Load data/MC with Lambda cuts
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mPhase 2: Load Data/MC with Λ̄ Pre-selection\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@$(PYTHON) run_phase.py 2
-
-phase2-quick: ## Phase 2: Load 2016 only (for quick testing)
-	@printf "\033[0;34m═══ Phase 2: Quick Test (2016 only) ═══\033[0m\n"
-	@$(PYTHON) run_phase.py 2 --years 2016
-
-phase3: ## Phase 3: Selection optimization (auto-runs Phase 2 if needed)
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mPhase 3: Selection Optimization (auto-runs Phase 2 if needed)\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[1;33m📊 2D FOM scan to find optimal Bu-level cuts\033[0m\n"
-	@printf "\033[1;33m    Use 'make pipeline' to skip optimization and use default cuts\033[0m\n\n"
-	@$(PYTHON) run_phase.py 3
-
-optimize: ## Alias for phase3 (selection optimization)
-	@$(MAKE) phase3
-
-phase5: ## Phase 5: Mass fitting (auto-runs Phase 2 if needed)
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mPhase 5: Mass Fitting (auto-runs Phase 2 if needed)\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@$(PYTHON) run_phase.py 5
-
-phase6: ## Phase 6: Efficiency calculation (auto-runs Phase 2 if needed)
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mPhase 6: Efficiency Calculation (auto-runs Phase 2 if needed)\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@$(PYTHON) run_phase.py 6
-
-phase7: ## Phase 7: Branching fraction ratios (auto-runs phases 2,5,6 if needed)
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;34mPhase 7: Branching Fraction Ratios (auto-runs phases 2,5,6 if needed)\033[0m\n"
-	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
-	@$(PYTHON) run_phase.py 7
-
 ##@ Workflow Examples
+
 
 workflow-production: ## Production workflow: full pipeline with all data
 	@printf "\033[0;34mProduction workflow\033[0m\n"
@@ -255,8 +206,8 @@ info: ## Show pipeline information
 	@printf "  7. Branching fraction ratios\n\n"
 	@printf "\033[0;32mQuick Start:\033[0m\n"
 	@printf "  make venv              # Check/activate virtual environment\n"
-	@printf "  make quick-test        # Test with 2016 LL\n"
-	@printf "  make pipeline          # Full analysis\n"
+	@printf "  make pipeline-2016     # Test with 2016 data\n"
+	@printf "  make pipeline          # Full analysis (all years)\n"
 	@printf "  make show-results      # View final results\n\n"
 	@printf "\033[0;32mDocumentation:\033[0m\n"
 	@printf "  README.md   - Complete usage guide\n"

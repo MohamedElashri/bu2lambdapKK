@@ -57,66 +57,36 @@ python run_pipeline.py --years 2016,2017,2018 --no-cache
 
 ---
 
+## Pipeline Workflow
 
-### Run Individual Phases (with Automatic Dependencies)
+The pipeline runs all phases automatically through `run_pipeline.py`:
+
+**Integrated Phases:**
+1. Configuration validation
+2. Data/MC loading with Lambda pre-selection
+3. Selection optimization (optional, skipped by default)
+4. Apply selection cuts
+5. Mass fitting
+6. Efficiency calculation
+7. Branching fraction ratios
+
+### Cache Management
+
+The pipeline caches intermediate results for efficiency:
+
 ```bash
-# Phase 2: Load data/MC with Lambda cuts
-python run_phase.py 2 --years 2016,2017,2018
+# Use cache (fast, default)
+make pipeline
 
-# Phase 5: Mass fitting (auto-runs Phase 2 if needed)
-python run_phase.py 5
+# Force reprocessing (ignores cache)
+make pipeline-no-cache
+# or
+python run_pipeline.py --no-cache --years 2016,2017,2018
 
-# Phase 6: Efficiency calculation (auto-runs Phase 2 if needed)
-python run_phase.py 6
-
-# Phase 7: Branching ratios (auto-runs Phases 2, 5, 6 if needed)
-python run_phase.py 7
-
-# Force reprocessing (ignore cache)
-python run_phase.py 7 --no-cache
-```
-
-**Key Feature:** Each phase automatically checks for and runs prerequisite phases if their cached results are not found. You can run any phase directly without worrying about dependencies!
-
-## Automatic Dependency Resolution
-
-The pipeline now features **automatic dependency resolution**. Each phase checks if prerequisite phases have been run and automatically executes them if needed.
-
-### Phase Dependencies
-```
-Phase 2: None (loads raw data/MC)
-         ↓
-Phase 3: Phase 2 (optional optimization)
-         ↓
-Phase 5: Phase 2 (fits data mass spectra)
-         ↓
-Phase 6: Phase 2 (calculates MC efficiencies)
-         ↓
-Phase 7: Phases 5 + 6 (computes BR ratios)
-```
-
-### Example Workflows
-
-**Scenario 1: Fresh Start**
-```bash
-# Just run Phase 7 - it will automatically run 2, 5, and 6 first
-make phase7
-```
-
-**Scenario 2: Reprocess Only Fitting**
-```bash
-# Delete Phase 5 cache, then run Phase 7
-rm cache/phase5_fit_results.pkl
-make phase7  # Will rerun Phase 5, skip 2 and 6 (cache exists)
-```
-
-**Scenario 3: Full Reprocessing**
-```bash
-# Clear all cache
-make clean-cache
-
-# Run any phase - all prerequisites will be executed
-make phase7  # Runs 2 → 5 → 6 → 7
+# Clear specific cached results
+rm cache/phase5_fit_results.pkl  # Refit masses
+rm cache/phase2_*.pkl            # Reload data
+make clean-cache                 # Clear all cache
 ```
 
 ## Pipeline Phases
@@ -316,7 +286,7 @@ rm cache/*.pkl
 
 **Issue:** "No cached data found"
 ```
-Solution: Run Phase 2 first: python run_phase.py 2
+Solution: Run the pipeline to generate cache: python run_pipeline.py --years 2016
 ```
 
 **Issue:** "Data root directory not found"
@@ -423,37 +393,39 @@ Each ROOT file should contain:
 
 ### First Time Running
 ```bash
-# 1. Validate everything works with small dataset
-python run_phase.py 2 --years 2016 --track-types LL
+# 1. Test with single year (fast)
+make pipeline-2016
+# or
+python run_pipeline.py --years 2016
 
-# 2. If successful, run full Phase 2
-python run_phase.py 2
+# 2. View results
+make show-results
 
-# 3. Skip optimization, use default cuts
-# 4. Run fitting on data
-python run_phase.py 5 --use-cached
-
-# 5. Calculate efficiencies from MC
-python run_phase.py 6 --use-cached
-
-# 6. Compute final BR ratios
-python run_phase.py 7
+# 3. If successful, run full pipeline (all years)
+make pipeline
+# or
+python run_pipeline.py --years 2016,2017,2018
 ```
 
 ### Re-running After Updates
 ```bash
 # Clear cache and reprocess
-rm cache/*.pkl
-python run_pipeline.py --no-cache
+make clean-cache
+make pipeline
+
+# Or force reprocessing directly
+python run_pipeline.py --no-cache --years 2016,2017,2018
 ```
 
-### Quick Test on Subset
+### Quick Test
 ```bash
-# Test with 2016 LL only (fast)
-python run_phase.py 2 --years 2016 --track-types LL
-python run_phase.py 5 --use-cached
-python run_phase.py 6 --use-cached
-python run_phase.py 7
+# Test with single year
+make pipeline-2016
+
+# View outputs
+make show-yields
+make show-efficiencies
+make show-results
 ```
 
 ### Production Run
