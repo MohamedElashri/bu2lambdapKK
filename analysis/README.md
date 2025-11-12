@@ -680,34 +680,3 @@ plots/optimization_variables/
     ├── h2_ProbNNk_combined.pdf
     └── p_ProbNNp_combined.pdf
 ```
-
-**Plot features:**
-- MC (left): Shows variable distribution for signal
-  - Plot range optimized per variable (e.g., Bu_PT starts at 0, Bu_FDCHI2 at 0)
-- Data (right): $B^+ \to \bar{\Lambda} p K^+ K^-$ decay  
-  - Plot range adjusted per variable (e.g., Bu_PT starts at 2900, Bu_FDCHI2 at 100)
-- Colored vertical lines: Optimal cut values for each state
-  - All 4 states have **identical optimal cuts** (lines overlap)
-  - Red (J/ψ), Orange (ηc), Purple (χc0), Brown (χc1)
-- Green shaded region: Accepted events after cut
-- Normalized distributions for shape comparison
-- Combined plots labeled as "2016-2018" instead of "Combined"
-
-**Important notes:**
-- All 4 charmonium states found the **same optimal cuts** during optimization
-- Optimal cuts loaded from `tables/optimized_cuts_nd_{state}.csv`
-- MC: No trigger selection applied (~243k events total)
-- Data: Trigger selection applied (~1.28M events total)
-- Separate plot ranges for MC vs data to focus on relevant regions
-
----
-
-## Support
-
-For issues or questions:
-1. Check this README
-2. Review `plan.md` for detailed phase specifications
-3. Run individual phase tests in `tests/test_phase*.py`
-4. Check intermediate cache files for debugging
-
-````
