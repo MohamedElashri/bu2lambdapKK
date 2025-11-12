@@ -2,7 +2,7 @@
 """
 Complete Pipeline Integration for B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis
 
-This script orchestrates all phases (0-7) with real data and MC processing.
+This script orchestrates all phases (1-7) with real data and MC processing.
 Each phase saves intermediate results for reproducibility and debugging.
 
 Phases:
@@ -40,6 +40,7 @@ from modules.selection_optimizer import SelectionOptimizer
 from modules.mass_fitter import MassFitter
 from modules.efficiency_calculator import EfficiencyCalculator
 from modules.branching_fraction_calculator import BranchingFractionCalculator
+from modules.cache_manager import CacheManager
 from modules.exceptions import ConfigurationError, AnalysisError
 
 
@@ -58,8 +59,10 @@ class PipelineManager:
             cache_dir: Path to cache directory for intermediate results
         """
         self.config: TOMLConfig = TOMLConfig(config_dir)
-        self.cache_dir: Path = Path(cache_dir)
-        self.cache_dir.mkdir(exist_ok=True, parents=True)
+        self.config_dir: Path = Path(config_dir)
+        
+        # Initialize hash-based cache manager
+        self.cache: CacheManager = CacheManager(cache_dir)
         
         # Load configuration
         print("\n" + "="*80)
@@ -71,7 +74,11 @@ class PipelineManager:
         self._setup_output_dirs()
         
         print("✓ Configuration loaded and validated")
-        print(f"✓ Cache directory: {self.cache_dir}")
+        print(f"✓ Cache directory: {self.cache.cache_dir}")
+        
+        # Display cache stats
+        stats = self.cache.get_cache_stats()
+        print(f"✓ Cache: {stats['num_entries']} entries, {stats['total_size_mb']:.1f} MB")
         
     def _validate_config(self):
         """Validate that all required configuration is present"""
@@ -106,40 +113,56 @@ class PipelineManager:
             dir_path = Path(self.config.paths["output"][f"{category}_dir"])
             dir_path.mkdir(exist_ok=True, parents=True)
     
-    def _cache_path(self, phase: str, name: str) -> Path:
-        """Get path for cached intermediate result"""
-        return self.cache_dir / f"phase{phase}_{name}.pkl"
+    def _get_config_files(self) -> List[Path]:
+        """Get list of all configuration files for dependency tracking."""
+        config_files: List[Path] = []
+        for config_file in self.config_dir.glob("*.toml"):
+            config_files.append(config_file)
+        return config_files
     
-    def _save_cache(self, phase: str, name: str, data: Any) -> None:
+    def _compute_phase_dependencies(
+        self,
+        phase: str,
+        extra_params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, str]:
         """
-        Save intermediate results to pickle file.
+        Compute dependencies for a specific phase.
         
         Args:
-            phase: Phase number or identifier
-            name: Cache name
-            data: Data to cache
-        """
-        cache_file = self._cache_path(phase, name)
-        with open(cache_file, 'wb') as f:
-            pickle.dump(data, f)
-        print(f"  → Cached: {cache_file.name}")
-    
-    def _load_cache(self, phase: str, name: str) -> Optional[Any]:
-        """
-        Load intermediate results from pickle file.
+            phase: Phase identifier
+            extra_params: Additional parameters to include in dependency hash
         
-        Args:
-            phase: Phase number or identifier
-            name: Cache name
-            
         Returns:
-            Cached data if exists, None otherwise
+            Dict of dependency hashes
         """
-        cache_file = self._cache_path(phase, name)
-        if not cache_file.exists():
-            return None
-        with open(cache_file, 'rb') as f:
-            return pickle.load(f)
+        # Always include all config files
+        config_files = self._get_config_files()
+        
+        # Phase-specific code files
+        code_files: List[Path] = []
+        if phase == "2":
+            code_files = [
+                Path(__file__).parent / "modules" / "data_handler.py",
+                Path(__file__).parent / "modules" / "lambda_selector.py",
+            ]
+        elif phase == "3":
+            code_files = [
+                Path(__file__).parent / "modules" / "selection_optimizer.py",
+            ]
+        elif phase == "5":
+            code_files = [
+                Path(__file__).parent / "modules" / "mass_fitter.py",
+            ]
+        elif phase == "6":
+            code_files = [
+                Path(__file__).parent / "modules" / "efficiency_calculator.py",
+            ]
+        
+        return self.cache.compute_dependencies(
+            config_files=config_files,
+            code_files=code_files,
+            extra_params=extra_params
+        )
     
     def phase2_load_data_and_lambda_cuts(
         self,
@@ -172,15 +195,24 @@ class PipelineManager:
         if track_types is None:
             track_types = ["LL", "DD"]
         
+        # Compute dependencies for cache validation
+        dependencies = self._compute_phase_dependencies(
+            phase="2",
+            extra_params={"years": years, "track_types": track_types}
+        )
+        
         # Check cache
         if use_cached:
-            data_dict = self._load_cache("2", "data_after_lambda")
-            mc_dict = self._load_cache("2", "mc_after_lambda")
-            phase_space_dict = self._load_cache("2", "phase_space_after_lambda")
-            mc_generated_counts = self._load_cache("2", "mc_generated_counts")
+            data_dict = self.cache.load("phase2_data_after_lambda", dependencies=dependencies)
+            mc_dict = self.cache.load("phase2_mc_after_lambda", dependencies=dependencies)
+            phase_space_dict = self.cache.load("phase2_phase_space_after_lambda", dependencies=dependencies)
+            mc_generated_counts = self.cache.load("phase2_mc_generated_counts", dependencies=dependencies)
+            
             if data_dict is not None and mc_dict is not None and phase_space_dict is not None and mc_generated_counts is not None:
                 print("✓ Loaded cached data, signal MC, and phase-space MC (after Lambda cuts)")
                 return data_dict, mc_dict, phase_space_dict, mc_generated_counts
+            else:
+                print("  Cache miss or invalidated - will recompute")
         
         # Initialize data manager and Lambda selector
         data_manager = DataManager(self.config)
@@ -287,11 +319,19 @@ class PipelineManager:
                     
                     print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
         
-        # Cache results
-        self._save_cache("2", "data_after_lambda", data_dict)
-        self._save_cache("2", "mc_after_lambda", mc_dict)
-        self._save_cache("2", "phase_space_after_lambda", phase_space_dict)
-        self._save_cache("2", "mc_generated_counts", mc_generated_counts)
+        # Cache results with dependencies
+        self.cache.save("phase2_data_after_lambda", data_dict, 
+                       dependencies=dependencies, 
+                       description="Data after Lambda cuts")
+        self.cache.save("phase2_mc_after_lambda", mc_dict, 
+                       dependencies=dependencies, 
+                       description="Signal MC after Lambda cuts")
+        self.cache.save("phase2_phase_space_after_lambda", phase_space_dict, 
+                       dependencies=dependencies, 
+                       description="Phase-space MC after Lambda cuts")
+        self.cache.save("phase2_mc_generated_counts", mc_generated_counts, 
+                       dependencies=dependencies, 
+                       description="Generator-level MC counts")
         
         print("\n✓ Phase 2 complete: Data, signal MC, and phase-space MC loaded")
         print("  → Data: used for background estimation in optimization AND final fitting")
@@ -308,7 +348,8 @@ class PipelineManager:
         phase_space_dict: Dict[str, Dict[str, ak.Array]],
         mc_generated_counts: Dict[str, Dict[str, int]],
         use_cached: bool = False,
-        force_rerun: bool = False
+        force_rerun: bool = False,
+        use_manual_cuts: bool = False
     ) -> pd.DataFrame:
         """
         Phase 3: Optimize selection cuts using signal MC and real data
@@ -326,6 +367,7 @@ class PipelineManager:
             mc_generated_counts: Generator-level MC counts (before Lambda cuts)
             use_cached: Use cached optimization results
             force_rerun: Force re-optimization even if cache exists
+            use_manual_cuts: Use manual cuts from config instead of running optimizer
         
         Returns:
             optimized_cuts_df: DataFrame with optimal cuts per state
@@ -337,13 +379,34 @@ class PipelineManager:
         tables_dir = Path(self.config.paths["output"]["tables_dir"])
         cuts_file = tables_dir / "optimized_cuts.csv"
         
+        # Check if manual cuts are specified in config
+        manual_cuts_config = self.config.selection.get("manual_cuts", {})
+        has_manual_cuts = any(k for k in manual_cuts_config.keys() if k != "notes")
+        
+        if use_manual_cuts or has_manual_cuts:
+            if not has_manual_cuts:
+                raise AnalysisError(
+                    "--use-manual-cuts flag set but no manual cuts defined in config/selection.toml!\n"
+                    "Please add cuts to [manual_cuts] section or remove the flag."
+                )
+            
+            print("✓ Using MANUAL CUTS from config (skipping optimization)")
+            print("="*80)
+            return self._create_manual_cuts_dataframe(manual_cuts_config)
+        
         # Check for existing results
         if not force_rerun and cuts_file.exists():
             print(f"✓ Loading existing optimized cuts from {cuts_file}")
             return pd.read_csv(cuts_file)
         
+        # Compute dependencies for cache validation
+        dependencies = self._compute_phase_dependencies(
+            phase="3",
+            extra_params={"states": list(mc_dict.keys())}
+        )
+        
         if use_cached and not force_rerun:
-            cached = self._load_cache("3", "optimized_cuts")
+            cached = self.cache.load("phase3_optimized_cuts", dependencies=dependencies)
             if cached is not None:
                 print("✓ Loaded cached optimized cuts")
                 return cached
@@ -426,12 +489,86 @@ class PipelineManager:
         optimized_cuts_df = optimizer.optimize_nd_grid_scan()
         
         # Cache and save
-        self._save_cache("3", "optimized_cuts", optimized_cuts_df)
+        self.cache.save("phase3_optimized_cuts", optimized_cuts_df, 
+                       dependencies=dependencies,
+                       description="Optimized selection cuts")
         optimized_cuts_df.to_csv(cuts_file, index=False)
         
         print(f"\n✓ Phase 3 complete: Optimized cuts saved to {cuts_file}")
         
         return optimized_cuts_df
+    
+    def _create_manual_cuts_dataframe(self, manual_cuts_config: Dict[str, Any]) -> pd.DataFrame:
+        """
+        Convert manual cuts from config to optimized_cuts_df format.
+        
+        Args:
+            manual_cuts_config: Manual cuts section from config
+        
+        Returns:
+            DataFrame with same format as optimized cuts
+        """
+        # Get N-D grid variables to know which cuts to expect
+        nd_config = self.config.selection.get("nd_optimizable_selection", {})
+        
+        all_results = []
+        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
+        
+        print("\nManual cuts specified:")
+        for branch_name, cut_spec in manual_cuts_config.items():
+            if branch_name == "notes":
+                continue
+            
+            cut_type = cut_spec.get("cut_type")
+            cut_value = cut_spec.get("value")
+            
+            if cut_type is None or cut_value is None:
+                print(f"  ⚠️  Skipping {branch_name}: missing cut_type or value")
+                continue
+            
+            # Find variable name from nd_config
+            var_name = None
+            description = f"Manual cut: {branch_name}"
+            for nd_var, nd_spec in nd_config.items():
+                if nd_var != "notes" and nd_spec.get("branch_name") == branch_name:
+                    var_name = nd_var
+                    description = nd_spec.get("description", description)
+                    break
+            
+            if var_name is None:
+                var_name = branch_name.lower()
+            
+            print(f"  {branch_name:20s} {cut_type:>7s} {cut_value:8.3f}")
+            
+            # Apply same cuts to all states
+            for state in states:
+                all_results.append({
+                    "state": state,
+                    "variable": var_name,
+                    "branch_name": branch_name,
+                    "optimal_cut": cut_value,
+                    "cut_type": cut_type,
+                    "max_fom": 0.0,  # Not applicable for manual cuts
+                    "n_sig_at_optimal": 0.0,
+                    "n_bkg_at_optimal": 0.0,
+                    "description": description
+                })
+        
+        if not all_results:
+            raise AnalysisError(
+                "No valid manual cuts found in config!\n"
+                "Check [manual_cuts] section format in config/selection.toml"
+            )
+        
+        cuts_df = pd.DataFrame(all_results)
+        
+        # Save to file
+        tables_dir = Path(self.config.paths["output"]["tables_dir"])
+        tables_dir.mkdir(exist_ok=True, parents=True)
+        cuts_df.to_csv(tables_dir / "optimized_cuts.csv", index=False)
+        print(f"\n✓ Manual cuts saved to {tables_dir / 'optimized_cuts.csv'}")
+        
+        return cuts_df
     
     def phase4_apply_optimized_cuts(
         self,
@@ -748,7 +885,13 @@ class PipelineManager:
         fit_results = fitter.perform_fit(data_combined)
         
         # Cache results
-        self._save_cache("5", "fit_results", fit_results)
+        dependencies = self._compute_phase_dependencies(
+            phase="5",
+            extra_params={"states": list(data_dict.keys())}
+        )
+        self.cache.save("phase5_fit_results", fit_results, 
+                       dependencies=dependencies,
+                       description="Mass fit results")
         
         # Save yields table
         yields_data = []
@@ -836,7 +979,13 @@ class PipelineManager:
         ratios_df = eff_calculator.calculate_efficiency_ratios(efficiencies)
         
         # Cache results
-        self._save_cache("6", "efficiencies", efficiencies)
+        dependencies = self._compute_phase_dependencies(
+            phase="6",
+            extra_params={"states": list(mc_dict.keys())}
+        )
+        self.cache.save("phase6_efficiencies", efficiencies, 
+                       dependencies=dependencies,
+                       description="Efficiency calculations")
         
         # Save tables
         eff_calculator.generate_efficiency_table(efficiencies)
@@ -891,7 +1040,8 @@ class PipelineManager:
         years: Optional[List[str]] = None,
         track_types: Optional[List[str]] = None,
         force_reoptimize: bool = False,
-        no_cache: bool = False
+        no_cache: bool = False,
+        use_manual_cuts: bool = False
     ) -> Dict[str, Any]:
         """
         Execute complete analysis pipeline
@@ -901,6 +1051,7 @@ class PipelineManager:
             track_types: Track types to process (default: all)
             force_reoptimize: Force re-running cut optimization (ignore saved/cached results)
             no_cache: Force reprocessing (ignore all cached results)
+            use_manual_cuts: Use manual cuts from config instead of running grid scan
         
         Returns:
             results: Dictionary with all results
@@ -947,7 +1098,8 @@ class PipelineManager:
         optimized_cuts_df = self.phase3_selection_optimization(
             data_dict, mc_dict, phase_space_dict, mc_generated_counts,
             use_cached=use_cached,
-            force_rerun=force_reoptimize
+            force_rerun=force_reoptimize,
+            use_manual_cuts=use_manual_cuts
         )
         
         # Phase 4: Apply optimized cuts
@@ -1040,6 +1192,11 @@ def main():
         default="LL,DD",
         help="Comma-separated list of track types (default: LL,DD)"
     )
+    parser.add_argument(
+        "--use-manual-cuts",
+        action="store_true",
+        help="Use manual cuts from config/selection.toml [manual_cuts] section (skips grid scan optimization)"
+    )
     
     args = parser.parse_args()
     
@@ -1064,7 +1221,8 @@ def main():
         years=years,
         track_types=track_types,
         force_reoptimize=args.force_reoptimize,
-        no_cache=args.no_cache
+        no_cache=args.no_cache,
+        use_manual_cuts=args.use_manual_cuts
     )
     
     return results

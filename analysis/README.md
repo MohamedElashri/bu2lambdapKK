@@ -89,6 +89,119 @@ rm cache/phase2_*.pkl            # Reload data
 make clean-cache                 # Clear all cache
 ```
 
+## Manual Cuts (Skip Optimization)
+
+### Overview
+
+Use manual cuts to **skip the 10-20 minute grid scan optimization** (Phase 3). Perfect for:
+- **Quick testing**: Rapid iteration during development
+- **Fixed cuts**: Physics-motivated values
+- **Validation**: Compare manual vs. optimized cuts
+
+### Usage
+
+**Method 1: Automatic Detection** (config-based)
+```bash
+# 1. Edit config/selection.toml and uncomment manual cuts
+vim config/selection.toml
+
+# 2. Run pipeline (auto-detects manual cuts)
+python run_pipeline.py --years 2016
+
+# Or use Makefile
+make pipeline-manual-2016
+```
+
+**Method 2: Explicit Flag**
+```bash
+python run_pipeline.py --use-manual-cuts --years 2016
+```
+
+### Configuration Format
+
+Edit `config/selection.toml`:
+
+```toml
+[manual_cuts]
+Bu_PT = { cut_type = "greater", value = 5000.0 }
+Bu_FDCHI2_OWNPV = { cut_type = "greater", value = 150.0 }
+Bu_IPCHI2_OWNPV = { cut_type = "less", value = 9.0 }
+Bu_DTF_chi2 = { cut_type = "less", value = 20.0 }
+h1_ProbNNk = { cut_type = "greater", value = 0.2 }
+h2_ProbNNk = { cut_type = "greater", value = 0.2 }
+p_ProbNNp = { cut_type = "greater", value = 0.25 }
+```
+
+### Available Variables
+
+| Branch Name | Description | Typical Range | Cut Type |
+|-------------|-------------|---------------|----------|
+| `Bu_PT` | B+ transverse momentum (MeV/c) | 3000-10000 | greater |
+| `Bu_FDCHI2_OWNPV` | B+ flight distance χ² | 100-500 | greater |
+| `Bu_IPCHI2_OWNPV` | B+ impact parameter χ² | 0-25 | less |
+| `Bu_DTF_chi2` | B+ decay tree fit χ² | 0-50 | less |
+| `h1_ProbNNk` | K+ PID probability | 0.0-0.5 | greater |
+| `h2_ProbNNk` | K- PID probability | 0.0-0.5 | greater |
+| `p_ProbNNp` | Bachelor p̄ PID probability | 0.0-0.5 | greater |
+
+### What Happens
+
+| Phase | With Manual Cuts | With Grid Scan |
+|-------|------------------|----------------|
+| Phase 2 | Load data  | Load data  |
+| Phase 3 | Use manual cuts ⚡ **(skips 10-20 min!)** | Run optimization  |
+| Phases 4-7 | Continue normally  | Continue normally  |
+
+### Output
+
+Manual cuts create the same `tables/optimized_cuts.csv` format:
+- Compatible with all downstream phases
+- `max_fom = 0.0` (not optimized)
+- Applies same cuts to **all states** (not state-dependent)
+
+### When to Use
+
+| Scenario | Use Manual Cuts? | Use Grid Scan? |
+|----------|------------------|----------------|
+| Quick testing | ✅ Yes | ❌ No |
+| Production analysis | ❌ No | ✅ Yes |
+| State-dependent cuts | ❌ No | ✅ Yes (required) |
+| Development/iteration | ✅ Yes | ❌ No |
+| Physics-motivated cuts | ✅ Yes (with justification) | Optional |
+
+### Limitations
+
+- **State-independence**: Manual cuts apply to ALL states (J/ψ, ηc, χc0, χc1)
+- **No FOM**: Manual cuts don't have optimization metrics
+- **Lambda cuts still fixed**: Only affects 7 optimizable variables
+
+For **state-dependent optimization**, use the grid scan (comment out manual cuts).
+
+### Makefile Targets
+
+```bash
+make pipeline-manual         # Manual cuts, all years
+make pipeline-manual-2016    # Manual cuts, 2016 only
+make pipeline-manual-test    # Manual cuts, quick test
+```
+
+### Switching Back to Grid Scan
+
+```toml
+[manual_cuts]
+# Comment out all cuts to use grid scan optimization
+# Bu_PT = { cut_type = "greater", value = 5000.0 }
+# Bu_FDCHI2_OWNPV = { cut_type = "greater", value = 150.0 }
+# ...
+```
+
+Then run normally:
+```bash
+make pipeline
+```
+
+---
+
 ## Pipeline Phases
 
 ### Phase 0: Branch Discovery (Manual)

@@ -71,6 +71,32 @@ pipeline-no-cache: ## Run pipeline forcing reprocessing (no cache)
 	@printf "\033[0;31m⚠️  Forcing full reprocessing\033[0m\n"
 	@$(PYTHON) run_pipeline.py --years 2016,2017,2018 --no-cache
 
+pipeline-manual: ## Run pipeline with manual cuts (skips grid scan optimization)
+	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
+	@printf "\033[0;34mPipeline with Manual Cuts - All Years (2016, 2017, 2018)\033[0m\n"
+	@printf "\033[0;34m═══════════════════════════════════════════════════════════════════════════════\033[0m\n"
+	@printf "\033[1;33m⚡ Skipping Phase 3 optimization (using manual cuts from config)\033[0m\n"
+	@printf "\033[1;33m📝 Edit config/selection.toml [manual_cuts] section to define cuts\033[0m\n\n"
+	@$(PYTHON) run_pipeline.py --use-manual-cuts --years 2016,2017,2018
+
+pipeline-manual-2016: ## Run pipeline with manual cuts (2016 only, fast!)
+	@printf "\033[0;34m═══ Pipeline (Manual Cuts): 2016 Only ═══\033[0m\n"
+	@printf "\033[1;33m⚡ Skipping optimization (saves 10-20 minutes)\033[0m\n"
+	@$(PYTHON) run_pipeline.py --use-manual-cuts --years 2016
+
+pipeline-manual-2017: ## Run pipeline with manual cuts (2017 only)
+	@printf "\033[0;34m═══ Pipeline (Manual Cuts): 2017 Only ═══\033[0m\n"
+	@$(PYTHON) run_pipeline.py --use-manual-cuts --years 2017
+
+pipeline-manual-2018: ## Run pipeline with manual cuts (2018 only)
+	@printf "\033[0;34m═══ Pipeline (Manual Cuts): 2018 Only ═══\033[0m\n"
+	@$(PYTHON) run_pipeline.py --use-manual-cuts --years 2018
+
+pipeline-manual-test: ## Quick test with manual cuts (2016, no cache)
+	@printf "\033[0;34m═══ Quick Test (Manual Cuts + No Cache) ═══\033[0m\n"
+	@printf "\033[1;33m⚡ Fast iteration for testing cut values\033[0m\n"
+	@$(PYTHON) run_pipeline.py --use-manual-cuts --no-cache --years 2016
+
 ##@ Workflow Examples
 
 

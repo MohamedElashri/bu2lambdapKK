@@ -279,26 +279,44 @@ For MASS FITTING, always use apply_cuts_to_data=false!
 """
 
 [manual_cuts]
-# Optional: Define manual cuts to override optimized cuts
+# Optional: Define manual cuts to SKIP grid scan optimization
 # Useful for testing, validation, or if you want to fix specific cut values
 # Leave empty to use optimized cuts from Phase 3
 #
-# Example format:
+# To use manual cuts, either:
+#   1. Uncomment the example cuts below, OR
+#   2. Add cuts here and run with: python run_pipeline.py --use-manual-cuts
+#
+# Format: branch_name = { cut_type = "greater"|"less", value = float }
+#
+# Example (based on typical LHCb cuts - uncomment to use):
 # Bu_PT = { cut_type = "greater", value = 5000.0 }
+# Bu_FDCHI2_OWNPV = { cut_type = "greater", value = 150.0 }
 # Bu_IPCHI2_OWNPV = { cut_type = "less", value = 9.0 }
+# Bu_DTF_chi2 = { cut_type = "less", value = 20.0 }
 # h1_ProbNNk = { cut_type = "greater", value = 0.2 }
 # h2_ProbNNk = { cut_type = "greater", value = 0.2 }
 # p_ProbNNp = { cut_type = "greater", value = 0.25 }
 
 [manual_cuts.notes]
 comment = """
-Manual cuts will OVERRIDE optimized cuts if specified.
-Use this for:
-  - Testing specific cut values before optimization
+Manual cuts will OVERRIDE grid scan optimization if specified.
+
+USAGE:
+  python run_pipeline.py --use-manual-cuts
+
+OR: Pipeline will automatically detect manual cuts in config
+
+Use cases:
+  - Testing specific cut values quickly (skip 10-20 min optimization)
   - Fixing cuts based on physics knowledge
   - Validation studies
+  - Quick iterations during analysis development
   
-To use optimized cuts from Phase 3, leave manual_cuts empty.
+To use optimized cuts from Phase 3 grid scan, leave [manual_cuts] empty.
+
+NOTE: Manual cuts are applied to ALL states (not state-dependent).
+      For state-dependent cuts, use the grid scan optimizer.
 """
 
 optimization_comment = """
