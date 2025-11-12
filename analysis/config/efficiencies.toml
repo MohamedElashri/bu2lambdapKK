@@ -17,9 +17,9 @@ selection = "calculated"  # From MC (offline selection on reconstructed)
 comment = """
 Efficiency Calculation Strategy:
 - Acceptance (ε_acc): Calculated from MC truth matching
-- Reconstruction (ε_reco): Placeholder = 0 (combined with stripping)
+- Reconstruction (ε_reco): Placeholder = 0 (I still need to figure it out)
 - Stripping (ε_strip): User must provide from data-driven campaign
-- Trigger (ε_trig): Calculated from KpKm phase space MC
+- Trigger (ε_trig): Calculated from the data that pass trigger selection
 - Selection (ε_sel): Calculated from signal MC after optimized cuts
 
 NOTE: Full efficiency study will be done separately later!
