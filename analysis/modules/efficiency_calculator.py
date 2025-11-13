@@ -289,7 +289,7 @@ class EfficiencyCalculator:
         print("  R(BR_state / BR_J/ψ) = [N_state / N_J/ψ] × [ε_J/ψ / ε_state]")
         print("="*80)
         
-        for state in ["etac", "chic0", "chic1"]:
+        for state in ["etac", "chic0", "chic1", "etac_2s"]:
             for year in sorted(efficiencies["jpsi"].keys()):
                 eff_state = efficiencies[state][year]["eff"]
                 eff_jpsi = efficiencies["jpsi"][year]["eff"]

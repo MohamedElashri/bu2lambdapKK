@@ -130,6 +130,7 @@ class BranchingFractionCalculator:
         - ηc/J/ψ
         - χc0/J/ψ
         - χc1/J/ψ
+        - ηc(2S)/J/ψ
         - χc1/χc0 (derived from above)
         
         Returns:
@@ -142,7 +143,7 @@ class BranchingFractionCalculator:
         print("="*80)
         
         # Direct ratios to J/ψ
-        for state in ["etac", "chic0", "chic1"]:
+        for state in ["etac", "chic0", "chic1", "etac_2s"]:
             ratio, error = self.calculate_ratio_to_jpsi(state)
             
             print(f"\nBr(B⁺ → {state} X) * Br({state} → Λ̄pK⁻)")
@@ -201,7 +202,7 @@ class BranchingFractionCalculator:
         """
         results = []
         
-        for state in ["jpsi", "etac", "chic0", "chic1"]:
+        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             for year in sorted(self.yields.keys()):
                 # Skip "combined" - we check per-year consistency
                 if year == "combined":
@@ -232,11 +233,12 @@ class BranchingFractionCalculator:
         
         df = pd.DataFrame(results)
         
-        # Plot
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        # Plot (2x3 grid for 5 states)
+        fig, axes = plt.subplots(2, 3, figsize=(18, 10))
         axes = axes.flatten()
         
-        for i, state in enumerate(["jpsi", "etac", "chic0", "chic1"]):
+        states_to_plot = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
+        for i, state in enumerate(states_to_plot):
             ax = axes[i]
             data_state = df[df["state"] == state]
             
