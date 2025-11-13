@@ -3,13 +3,14 @@
 # Quick reference:
 #   make help          - Show all available targets
 #   make venv          - Activate virtual environment
+#   make tests         - Run all tests with coverage
 #   make pipeline      - Run full analysis pipeline (All years: 2016, 2017, 2018)
 #   make pipeline-2016 - Run with 2016 data only
 #   make pipeline-2017 - Run with 2017 data only
 #   make pipeline-2018 - Run with 2018 data only
 #   make clean         - Remove cache and output files
 
-.PHONY: help clean pipeline venv
+.PHONY: help clean pipeline venv tests test test-unit test-integration test-quick test-coverage test-watch test-failed test-verbose
 
 # Virtual environment detection
 VENV_DIR := $(shell if [ -d ".venv" ]; then echo ".venv"; elif [ -d "../.venv" ]; then echo "../.venv"; else echo ""; fi)
@@ -188,6 +189,45 @@ setup-dirs: ## Create necessary directories
 	@mkdir -p cache analysis_output/tables analysis_output/plots analysis_output/results
 	@mkdir -p analysis_output/plots/fits analysis_output/plots/optimization
 	@printf "\033[0;32mDirectories created\033[0m\n"
+
+##@ Testing
+
+tests: ## Run all tests with coverage
+	@printf "\033[0;34m═══════════════════════════════════════════════════════════════\033[0m\n"
+	@printf "\033[0;34m  Running Test Suite\033[0m\n"
+	@printf "\033[0;34m═══════════════════════════════════════════════════════════════\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -v --cov=analysis/modules --cov-report=term-missing --cov-report=html
+
+test: tests ## Alias for tests
+
+test-unit: ## Run only unit tests
+	@printf "\033[0;34mRunning unit tests...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/unit/ -v
+
+test-integration: ## Run only integration tests
+	@printf "\033[0;34mRunning integration tests...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/integration/ -v -m integration
+
+test-quick: ## Run tests without coverage (faster)
+	@printf "\033[0;34mRunning tests (quick mode)...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -v
+
+test-coverage: ## Run tests and generate HTML coverage report
+	@printf "\033[0;34mGenerating coverage report...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ --cov=analysis/modules --cov-report=html --cov-report=term
+	@printf "\033[0;32mCoverage report: htmlcov/index.html\033[0m\n"
+
+test-watch: ## Run tests in watch mode (requires pytest-watch)
+	@printf "\033[0;34mWatching for changes...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest_watch analysis/tests/ -- -v
+
+test-failed: ## Re-run only failed tests
+	@printf "\033[0;34mRe-running failed tests...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ --lf -v
+
+test-verbose: ## Run tests with extra verbosity
+	@printf "\033[0;34mRunning tests (verbose)...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -vv -s
 
 ##@ Information
 
