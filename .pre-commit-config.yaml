@@ -86,7 +86,7 @@ repos:
     hooks:
       - id: pytest-quick
         name: Run fast unit tests
-        entry: bash -c 'cd analysis && pytest tests/unit/ -m "not slow" --tb=short -q || exit 1'
+        entry: bash -c 'cd analysis && PYTHONPATH=.. pytest tests/unit/ -m "not slow" --tb=short -q || exit 1'
         language: system
         pass_filenames: false
         types: [python]
@@ -94,7 +94,7 @@ repos:
 
       - id: pytest-coverage-check
         name: Check test coverage
-        entry: bash -c 'cd analysis && pytest tests/unit/ -m "not slow" --cov=modules --cov-report=term-missing:skip-covered --cov-fail-under=40 -q || exit 1'
+        entry: bash -c 'cd analysis && PYTHONPATH=.. pytest tests/unit/ -m "not slow" --cov=modules --cov-report=term-missing:skip-covered --cov-fail-under=40 -q || exit 1'
         language: system
         pass_filenames: false
         types: [python]

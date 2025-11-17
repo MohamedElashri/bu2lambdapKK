@@ -6,7 +6,7 @@ requires = ["setuptools>=45", "wheel"]
 
 [project]
 authors = [
-  {name = "Bu2LambdaPKK Analysis Team"}
+  {name = "Mohamed Elashri"}
 ]
 description = "Analysis pipeline for Bu → Λ p K K decay"
 name = "bu2lambdapkk-analysis"
