@@ -182,7 +182,6 @@ class TableValidator:
 
         # Load source data
         source = pd.read_csv(self.tables_dir / "branching_fraction_ratios.csv")
-        yields = pd.read_csv(self.tables_dir / "phase5_yields.csv")
 
         # Check expected ratios exist
         expected_ratios = [
@@ -198,10 +197,6 @@ class TableValidator:
             if len(ratio_data) == 0:
                 self.errors.append(f"Missing BR ratio: {num}/{den}")
                 continue
-
-            # Verify ratio calculation from yields
-            num_yield_data = yields[(yields["state"] == num) & (yields["year"] == "combined")]
-            den_yield_data = yields[(yields["state"] == den) & (yields["year"] == "combined")]
 
             # Note: BR ratios in the CSV already account for efficiencies
             # and other corrections, so we can't simply verify from yields alone.

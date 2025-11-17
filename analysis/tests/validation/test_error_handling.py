@@ -92,7 +92,7 @@ class TestFileIOErrors:
         # Trying to use this as cache directory should fail gracefully
         # Note: CacheManager might handle this, but we test it fails appropriately
         try:
-            cache = CacheManager(str(cache_path))
+            CacheManager(str(cache_path))
             # If it succeeds, check it's not actually using a file as directory
             assert cache_path.is_dir() or not cache_path.exists()
         except (OSError, PermissionError, CacheError):

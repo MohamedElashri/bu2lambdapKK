@@ -67,7 +67,7 @@ def assert_dicts_equal(
             ), f"Value mismatch for key '{key}':\nActual: {actual[key]}\nExpected: {expected[key]}"
 
             if check_types:
-                assert type(actual[key]) == type(
+                assert type(actual[key]) is type(
                     expected[key]
                 ), f"Type mismatch for key '{key}':\nActual: {type(actual[key])}\nExpected: {type(expected[key])}"
 

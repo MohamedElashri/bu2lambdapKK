@@ -1027,7 +1027,7 @@ class PipelineManager:
                 print(f"    {year}: ε = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%) [from chi_c1]")
 
         # Calculate efficiency ratios (returns DataFrame)
-        ratios_df = eff_calculator.calculate_efficiency_ratios(efficiencies)
+        eff_calculator.calculate_efficiency_ratios(efficiencies)
 
         # Cache results
         dependencies = self._compute_phase_dependencies(
@@ -1077,7 +1077,7 @@ class PipelineManager:
 
         # Yield consistency check
         print("\nChecking yield consistency across years...")
-        consistency_df = bf_calculator.check_yield_consistency_per_year()
+        bf_calculator.check_yield_consistency_per_year()
 
         # Generate final summary
         bf_calculator.generate_final_summary(ratios_df)

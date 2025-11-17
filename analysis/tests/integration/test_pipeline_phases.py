@@ -56,11 +56,6 @@ class TestPipelineManagerInitialization:
         """Test that output directories are created on initialization."""
         pipeline = PipelineManager(config_dir=str(config_dir_fixture), cache_dir=str(tmp_cache_dir))
 
-        # Check output directories from config paths
-        tables_dir = Path(pipeline.config.paths["output"]["tables_dir"])
-        plots_dir = Path(pipeline.config.paths["output"]["plots_dir"])
-        results_dir = Path(pipeline.config.paths["output"]["results_dir"])
-
         # These should be created, or at least the output structure should be defined
         assert "tables_dir" in pipeline.config.paths["output"]
         assert "plots_dir" in pipeline.config.paths["output"]

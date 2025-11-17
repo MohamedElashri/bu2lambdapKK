@@ -13,14 +13,14 @@ import argparse
 import sys
 from pathlib import Path
 
+import awkward as ak
+import matplotlib.pyplot as plt
+
 # Add parent directory (ana) to path to access modules
 ana_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(ana_dir))
 
-import awkward as ak
-import matplotlib.pyplot as plt
-from modules.data_handler import DataManager, TOMLConfig
-from modules.lambda_selector import LambdaSelector
+from modules.data_handler import DataManager, TOMLConfig  # noqa: E402
 
 
 def plot_lambda_mass_comparison(mc_events, data_events, year_label, lambda_cuts):
@@ -175,7 +175,6 @@ def main():
     ana_dir = Path(__file__).parent.parent
     config = TOMLConfig(config_dir=str(ana_dir / "config"))
     data_manager = DataManager(config)
-    lambda_selector = LambdaSelector(config)
 
     # Get Lambda cuts for reference
     lambda_cuts = config.get_lambda_cuts()

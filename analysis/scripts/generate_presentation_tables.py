@@ -110,9 +110,6 @@ class PresentationTableGenerator:
                 else:
                     cut_symbol = "<"
 
-                # Format variable name for presentation
-                var_name = row["variable"].replace("_", r"\_")
-
                 table_data.append(
                     {
                         "Variable": row["description"],
@@ -380,7 +377,6 @@ class PresentationTableGenerator:
         print("TABLE 4: SELECTION EFFICIENCIES")
         print("=" * 80)
 
-        states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
         state_names = {
             "jpsi": r"$J/\psi$",
             "etac": r"$\eta_c$",
@@ -503,7 +499,7 @@ class PresentationTableGenerator:
                         eff_str = eff_data[col].iloc[0].split("±")[0].strip()
                         try:
                             effs.append(float(eff_str))
-                        except:
+                        except (ValueError, IndexError):
                             pass
 
                 if len(effs) > 0:

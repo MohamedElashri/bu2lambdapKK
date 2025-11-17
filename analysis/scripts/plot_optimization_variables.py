@@ -15,16 +15,15 @@ import argparse
 import sys
 from pathlib import Path
 
+import awkward as ak
+import matplotlib.pyplot as plt
 import pandas as pd
 
 # Add parent directory (ana) to path to access modules
 ana_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(ana_dir))
 
-import awkward as ak
-import matplotlib.pyplot as plt
-from modules.data_handler import DataManager, TOMLConfig
-from modules.lambda_selector import LambdaSelector
+from modules.data_handler import DataManager, TOMLConfig  # noqa: E402
 
 # Define the 7 optimization variables with their plotting properties
 # Separate ranges for MC and data where needed
@@ -295,7 +294,6 @@ def main():
     ana_dir = Path(__file__).parent.parent
     config = TOMLConfig(config_dir=str(ana_dir / "config"))
     data_manager = DataManager(config)
-    lambda_selector = LambdaSelector(config)
 
     # Load optimal cuts for ALL 4 states
     all_optimal_cuts = {}

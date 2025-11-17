@@ -20,7 +20,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from modules.cache_manager import CacheManager
-from modules.data_handler import TOMLConfig
 
 
 @pytest.mark.integration
@@ -30,7 +29,6 @@ class TestCacheWorkflowBasics:
     def test_save_and_load_simple_payload(self, tmp_cache_dir, config_dir_fixture):
         """Test saving and loading a simple data payload."""
         cache = CacheManager(str(tmp_cache_dir))
-        config = TOMLConfig(str(config_dir_fixture))
 
         # Create test payload
         payload = {"year": "2016", "n_events": 10000, "efficiency": 0.85}
@@ -60,7 +58,6 @@ class TestCacheWorkflowBasics:
     def test_save_multiple_entries(self, tmp_cache_dir, config_dir_fixture):
         """Test saving multiple cache entries."""
         cache = CacheManager(str(tmp_cache_dir))
-        config = TOMLConfig(str(config_dir_fixture))
 
         config_files = list(Path(config_dir_fixture).glob("*.toml"))
         deps = cache.compute_dependencies(config_files=config_files)

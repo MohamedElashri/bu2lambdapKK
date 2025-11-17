@@ -233,7 +233,7 @@ class TestConfigIdempotence:
         mtime_before = physics_file.stat().st_mtime
 
         # Load config
-        config = TOMLConfig(str(config_dir_fixture))
+        TOMLConfig(str(config_dir_fixture))
 
         # Check modification time after
         mtime_after = physics_file.stat().st_mtime
