@@ -89,6 +89,7 @@ class MassFitter:
         # Store all PDFs and variables to prevent garbage collection
         self.signal_pdfs: dict[str, ROOT.RooAbsPdf] = {}  # {state: pdf}
         self.bkg_pdfs: dict[str, ROOT.RooAbsPdf] = {}  # {year: pdf}
+        self.argus_params: dict[str, dict[str, Any]] = {}  # {year: {param: value}}
 
         self.models: dict[str, ROOT.RooAbsPdf] = {}  # {year: model}
         self.yields: dict[str, dict[str, ROOT.RooRealVar]] = {}  # {year: {state: yield_var}}
@@ -679,4 +680,3 @@ class MassFitter:
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))
         print(f"  ✓ Saved fit plot: {output_file}")
-        return str(output_file)

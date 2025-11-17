@@ -606,8 +606,8 @@ class SelectionOptimizer:
             # Grid scan: test all combinations
             best_fom = -np.inf
             best_cuts = None
-            best_n_sig = 0
-            best_n_bkg = 0
+            best_n_sig = 0.0
+            best_n_bkg = 0.0
 
             print(f"  Scanning {total_combinations:,} combinations...")
 
@@ -648,8 +648,8 @@ class SelectionOptimizer:
                 if fom > best_fom:
                     best_fom = fom
                     best_cuts = cut_combination
-                    best_n_sig = n_sig
-                    best_n_bkg = n_bkg
+                    best_n_sig = float(n_sig)
+                    best_n_bkg = float(n_bkg)
 
             print("\n  ✓ Grid scan complete!")
             print(f"  Best FOM: {best_fom:.3f}")
@@ -794,12 +794,12 @@ class SelectionOptimizer:
             aspect="auto",
             origin="lower",
             cmap="viridis",
-            extent=[
+            extent=(
                 fom_grid.columns.min(),
                 fom_grid.columns.max(),
                 fom_grid.index.min(),
                 fom_grid.index.max(),
-            ],
+            ),
         )
 
         # Add colorbar

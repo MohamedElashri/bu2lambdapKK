@@ -40,25 +40,26 @@ class BranchConfig:
         self.logger: logging.Logger = logging.getLogger("Bu2LambdaPKK.BranchConfig")
 
         # Auto-detect config file
+        config_path_obj: Path
         if config_path is None:
-            config_path = Path(__file__).parent / "branches_config.toml"
+            config_path_obj = Path(__file__).parent / "branches_config.toml"
         else:
-            config_path = Path(config_path)
+            config_path_obj = Path(config_path)
 
-        if not config_path.exists():
+        if not config_path_obj.exists():
             raise ConfigurationError(
-                f"Branch configuration file not found: {config_path}\n"
+                f"Branch configuration file not found: {config_path_obj}\n"
                 f"Expected location: {Path(__file__).parent / 'branches_config.toml'}"
             )
 
         # Load configuration
-        with open(config_path, "rb") as f:
+        with open(config_path_obj, "rb") as f:
             self.config: dict[str, Any] = tomli.load(f)
 
         # Build alias mappings for quick lookup
         self._build_alias_maps()
 
-        self.logger.info(f"Loaded branch configuration from {config_path}")
+        self.logger.info(f"Loaded branch configuration from {config_path_obj}")
 
     def _build_alias_maps(self) -> None:
         """Build reverse lookup maps for aliases."""

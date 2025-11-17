@@ -184,7 +184,7 @@ class EfficiencyCalculator:
                 {state: {year: {"eff": value, "err": error, "n_before": N, "n_after": N}}}
         """
 
-        efficiencies = {}
+        efficiencies: dict[str, dict[str, dict[str, float | int]]] = {}
 
         print("\n" + "=" * 80)
         print("PHASE 6: EFFICIENCY CALCULATION")
@@ -211,7 +211,9 @@ class EfficiencyCalculator:
                 print(f"  Year {year}: N_after_lambda = {n_before}")
 
                 # Calculate efficiency
-                eff, err = self.calculate_selection_efficiency(mc_events, state)
+                eff_result = self.calculate_selection_efficiency(mc_events, state)
+                eff = eff_result["eff"]
+                err = eff_result["err"]
 
                 # Get number after cuts for validation
                 mc_after = self.apply_optimized_cuts(mc_events, state)

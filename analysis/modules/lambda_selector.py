@@ -59,9 +59,9 @@ class LambdaSelector:
                     "Bu_MM or Bu_M",
                     "Cannot apply Lambda cuts: Reference branch (Bu_MM or Bu_M) not found",
                 )
-            mask: ak.Array = ak.ones_like(events["Bu_M"], dtype=bool)
+            mask = ak.ones_like(events["Bu_M"], dtype=bool)
         else:
-            mask: ak.Array = ak.ones_like(events["Bu_MM"], dtype=bool)
+            mask = ak.ones_like(events["Bu_MM"], dtype=bool)
 
         # Lambda mass window (use L0_MM which should be available after normalization)
         if "L0_MM" in events.fields:
