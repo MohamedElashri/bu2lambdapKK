@@ -98,19 +98,6 @@ pipeline-manual-test: ## Quick test with manual cuts (2016, no cache)
 	@printf "\033[1;33m⚡ Fast iteration for testing cut values\033[0m\n"
 	@$(PYTHON) run_pipeline.py --use-manual-cuts --no-cache --years 2016
 
-##@ Workflow Examples
-
-
-workflow-production: ## Production workflow: full pipeline with all data
-	@printf "\033[0;34mProduction workflow\033[0m\n"
-	@printf "\033[1;33mThis will run the complete pipeline on all data\033[0m\n"
-	@read -p "Continue? [y/N] " -n 1 -r; \
-	echo; \
-	if [[ $$REPLY =~ ^[Yy]$$ ]]; then \
-		$(MAKE) pipeline; \
-	else \
-		printf "\033[1;33mCancelled\033[0m\n"; \
-	fi
 
 ##@ Output Management
 
