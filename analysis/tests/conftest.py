@@ -195,6 +195,12 @@ def config_dir_fixture(tmp_test_dir: Path, sample_config_dict: Dict[str, Any]) -
     config_dir = tmp_test_dir / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     
+    # Create output directories
+    output_dir = tmp_test_dir / "output"
+    (output_dir / "tables").mkdir(parents=True, exist_ok=True)
+    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
+    (output_dir / "results").mkdir(parents=True, exist_ok=True)
+    
     # Create minimal required config files
     configs = {
         "physics.toml": {
@@ -221,7 +227,12 @@ def config_dir_fixture(tmp_test_dir: Path, sample_config_dict: Dict[str, Any]) -
         "data.toml": {
             "input_data": {"base_path": "/tmp"},
             "input_mc": {"base_path": "/tmp"},
-            "output": {"base_path": str(tmp_test_dir / "output")}
+            "output": {
+                "base_path": str(output_dir),
+                "tables_dir": str(output_dir / "tables"),
+                "plots_dir": str(output_dir / "plots"),
+                "results_dir": str(output_dir / "results")
+            }
         },
         "efficiencies.toml": {
             "trigger": {"2016": {"jpsi": 0.85}}
