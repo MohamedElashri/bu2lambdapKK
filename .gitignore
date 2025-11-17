@@ -184,11 +184,11 @@ pyrightconfig.json
 ## fits data
 **/*.pkl
 **/*.csv
-**/*.txt 
+**/*.txt
 # allow requirements.txt only
 !requirements.txt
 
-## 
+##
 .vscode/
 plan.md
 agent.md

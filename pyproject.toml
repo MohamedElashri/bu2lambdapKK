@@ -1,0 +1,140 @@
+# pyproject.toml - Project configuration for Bu2LambdaPKK analysis
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=45", "wheel"]
+
+[project]
+authors = [
+  {name = "Bu2LambdaPKK Analysis Team"}
+]
+description = "Analysis pipeline for Bu → Λ p K K decay"
+name = "bu2lambdapkk-analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+version = "1.0.0"
+
+[tool.black]
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | __pycache__
+  | htmlcov
+  | \.pytest_cache
+  | \.mypy_cache
+  | \.ruff_cache
+  | analysis/tests/fixtures
+)/
+'''
+include = '\.pyi?$'
+line-length = 100
+target-version = ['py311']
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "@abstractmethod"
+]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[tool.coverage.run]
+branch = true
+omit = [
+  "*/tests/*",
+  "*/__pycache__/*",
+  "*/htmlcov/*",
+  "*/.venv/*"
+]
+source = ["analysis/modules"]
+
+[tool.isort]
+known_first_party = ["analysis"]
+line_length = 100
+profile = "black"
+skip = [".venv", "__pycache__", "htmlcov", ".pytest_cache"]
+skip_gitignore = true
+
+[tool.mypy]
+exclude = [
+  "^analysis/tests/",
+  "^htmlcov/",
+  "^\\.venv/"
+]
+ignore_missing_imports = true
+no_strict_optional = true
+python_version = "3.11"
+warn_return_any = false
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+addopts = [
+  "--strict-markers",
+  "--strict-config",
+  "--tb=short",
+  "-ra"
+]
+filterwarnings = [
+  "ignore::DeprecationWarning"
+]
+markers = [
+  "unit: Unit tests for individual modules",
+  "integration: Integration tests for pipeline workflow",
+  "validation: Validation and error handling tests",
+  "slow: Slow-running tests (skipped in pre-commit)",
+  "cache: Tests related to cache functionality",
+  "config: Tests related to configuration loading"
+]
+minversion = "7.0"
+python_classes = ["Test*"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+testpaths = ["analysis/tests"]
+
+[tool.ruff]
+exclude = [
+  ".git",
+  ".venv",
+  "__pycache__",
+  "htmlcov",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  "analysis/tests/fixtures",
+  "eff"
+]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = [
+  "E501",  # Line too long (handled by black)
+  "B008",  # Do not perform function calls in argument defaults
+  "B904",  # Within except clause, raise with from
+  "A003",  # Class attribute shadows Python builtin
+  "N806",  # Variable in function should be lowercase
+  "N803",  # Argument name should be lowercase
+  "N816",  # Variable in global scope should not be mixedCase
+  "RET504",  # Unnecessary variable assignment before return
+  "C414",  # Unnecessary list call within sorted
+  "SIM101",  # Multiple isinstance calls
+  "SIM118",  # Use key in dict instead of key in dict.keys()
+  "UP038"  # Use X | Y in isinstance call
+]
+# Enable pycodestyle (E, W), Pyflakes (F), and isort (I)
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"eff/**" = ["ALL"]  # Ignore all linting in eff/ scripts
+"tests/**" = ["B011"]  # Allow assert False in tests

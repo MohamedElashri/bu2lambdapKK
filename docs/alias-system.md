@@ -52,8 +52,8 @@ from data_loader import DataLoader
 
 loader = DataLoader(data_dir)
 data = loader.load_data(
-    years=['16'], 
-    polarities=['MD'], 
+    years=['16'],
+    polarities=['MD'],
     track_types=['LL'],
     channel_name='B2L0barPKpKm',
     preset='standard',

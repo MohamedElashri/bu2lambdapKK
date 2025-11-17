@@ -2,94 +2,36 @@
 # SELECTION CONFIGURATION
 # ═══════════════════════════════════════════════════════════════
 
-[lambda_selection]
-# FIXED cuts (not optimized, applied to all states)
-mass_min = 1111.0  # MeV/c²
-mass_max = 1121.0  # MeV/c²
-fd_chisq_min = 250.0
-delta_z_min = 5.0  # mm (note: delta_z in mm, not significance!)
-proton_probnnp_min = 0.3
+[bachelor_p_optimizable_selection]
 
-[lambda_selection.notes]
-comment = """
-Lambda selection is FIXED (not state-dependent).
-These are pre-selection cuts ensuring good Lambda reconstruction.
-Applied before FOM optimization.
-"""
-
-# ═══════════════════════════════════════════════════════════════
-# N-D GRID SCAN VARIABLES (7 variables only)
-# ═══════════════════════════════════════════════════════════════
-# Lambda cuts are FIXED and applied in Phase 2 before optimization
-# Only these 7 variables are scanned in N-dimensional grid:
-#   3×3×3×2×4×6×3 = 3,888 combinations per state
-
-[nd_optimizable_selection]
-
-[nd_optimizable_selection.bu_pt]
-begin = 3000.0
-end = 3500.0
-step = 500.0
-cut_type = "greater"
-branch_name = "Bu_PT"
-description = "B+ transverse momentum (MeV/c)"
-
-[nd_optimizable_selection.bu_fdchi2]
-begin = 100.0
-end = 250.0
-step = 50.0
-cut_type = "greater"
-branch_name = "Bu_FDCHI2_OWNPV"
-description = "B+ flight distance chi2"
-
-[nd_optimizable_selection.bu_ipchi2]
+[bachelor_p_optimizable_selection.ipchi2]
 begin = 0.0
-end = 10.0
-step = 2.0
-cut_type = "less"
-branch_name = "Bu_IPCHI2_OWNPV"
-description = "B+ impact parameter chi2"
-
-[nd_optimizable_selection.bu_dtf_chi2]
-begin = 10.0
-end = 30.0
-step = 10.0
-cut_type = "less"
-branch_name = "Bu_DTF_chi2"
-description = "B+ decay tree fit chi2"
-
-[nd_optimizable_selection.h1_probnnk]
-begin = 0.1
-end = 0.3
-step = 0.1
+branch_name = "p_IPCHI2_OWNPV"
 cut_type = "greater"
-branch_name = "h1_ProbNNk"
-description = "K+ PID probability"
+description = "Bachelor p̄ IP χ² to PV (should be large - not from PV)"
+end = 100.0
+step = 5.0
 
-[nd_optimizable_selection.h2_probnnk]
-begin = 0.1
-end = 0.3
-step = 0.1
-cut_type = "greater"
-branch_name = "h2_ProbNNk"
-description = "K- PID probability"
-
-[nd_optimizable_selection.p_probnnp]
-begin = 0.1
-end = 0.3
-step = 0.1
-cut_type = "greater"
+[bachelor_p_optimizable_selection.probnnp]
+begin = 0.0
 branch_name = "p_ProbNNp"
-description = "Bachelor proton PID probability"
+cut_type = "greater"
+description = "Bachelor p̄ PID probability"
+end = 0.5
+step = 0.05
 
-# ═══════════════════════════════════════════════════════════════
-# OLD 1D SCAN VARIABLES (not used when method="nd_grid_scan")
-# ═══════════════════════════════════════════════════════════════
+[bachelor_p_optimizable_selection.track_chi2ndof]
+begin = 0.0
+branch_name = "p_TRACK_CHI2NDOF"
+cut_type = "less"
+description = "Bachelor p̄ track quality"
+end = 5.0
+step = 0.25
 
 [bu_fixed_selection]
+mass_corrected_max = 5305.0  # MeV/c²
 # FIXED cuts (not optimized)
 mass_corrected_min = 5255.0  # MeV/c² (B+ mass ± 25 MeV)
-mass_corrected_max = 5305.0  # MeV/c²
 
 [bu_fixed_selection.notes]
 comment = """
@@ -99,168 +41,42 @@ FIXED window, not optimized.
 """
 
 [bu_optimizable_selection]
-# Variables to optimize with FOM scan
-# Format: {variable_name}.{begin/end/step}
-
-[bu_optimizable_selection.pt]
-begin = 2000.0   # MeV/c
-end = 10000.0
-step = 500.0
-cut_type = "greater"
-branch_name = "Bu_PT"
-description = "B+ transverse momentum"
 
 [bu_optimizable_selection.dtf_chi2]
 begin = 0.0
+branch_name = "Bu_DTF_chi2"
+cut_type = "less"
+description = "B+ decay tree fit χ²"
 end = 50.0
 step = 2.0
-cut_type = "less"
-branch_name = "Bu_DTF_chi2"
-description = "B+ decay tree fit χ²"
-
-[bu_optimizable_selection.ipchi2]
-begin = 0.0
-end = 25.0
-step = 1.0
-cut_type = "less"
-branch_name = "Bu_IPCHI2_OWNPV"
-description = "B+ impact parameter χ² to PV (should be small - B from PV)"
 
 [bu_optimizable_selection.fdchi2]
 begin = 0.0
+branch_name = "Bu_FDCHI2_OWNPV"
+cut_type = "greater"
+description = "B+ flight distance χ² from PV (should be large - B flies)"
 end = 500.0
 step = 20.0
-cut_type = "greater"
-branch_name = "Bu_FDCHI2_OWNPV"
-description = "B+ flight distance χ² from PV (should be large - B flies)"
 
-[bachelor_p_optimizable_selection]
-# Bachelor antiproton cuts to optimize
-
-[bachelor_p_optimizable_selection.probnnp]
+[bu_optimizable_selection.ipchi2]
 begin = 0.0
-end = 0.5
-step = 0.05
-cut_type = "greater"
-branch_name = "p_ProbNNp"
-description = "Bachelor p̄ PID probability"
-
-[bachelor_p_optimizable_selection.track_chi2ndof]
-begin = 0.0
-end = 5.0
-step = 0.25
+branch_name = "Bu_IPCHI2_OWNPV"
 cut_type = "less"
-branch_name = "p_TRACK_CHI2NDOF"
-description = "Bachelor p̄ track quality"
+description = "B+ impact parameter χ² to PV (should be small - B from PV)"
+end = 25.0
+step = 1.0
 
-[bachelor_p_optimizable_selection.ipchi2]
-begin = 0.0
-end = 100.0
-step = 5.0
+[bu_optimizable_selection.pt]
+begin = 2000.0  # MeV/c
+branch_name = "Bu_PT"
 cut_type = "greater"
-branch_name = "p_IPCHI2_OWNPV"
-description = "Bachelor p̄ IP χ² to PV (should be large - not from PV)"
-
-[kplus_optimizable_selection]
-# K+ cuts to optimize
-
-[kplus_optimizable_selection.probnnk]
-begin = 0.0
-end = 0.5
-step = 0.05
-cut_type = "greater"
-branch_name = "h1_ProbNNk"
-description = "K+ PID probability"
-
-[kplus_optimizable_selection.track_chi2ndof]
-begin = 0.0
-end = 5.0
-step = 0.25
-cut_type = "less"
-branch_name = "h1_TRACK_CHI2NDOF"
-description = "K+ track quality"
-
-[kplus_optimizable_selection.ipchi2]
-begin = 0.0
-end = 100.0
-step = 5.0
-cut_type = "greater"
-branch_name = "h1_IPCHI2_OWNPV"
-description = "K+ IP χ² to PV"
-
-[kminus_optimizable_selection]
-# K- cuts to optimize (same structure as K+)
-
-[kminus_optimizable_selection.probnnk]
-begin = 0.0
-end = 0.5
-step = 0.05
-cut_type = "greater"
-branch_name = "h2_ProbNNk"
-description = "K- PID probability"
-
-[kminus_optimizable_selection.track_chi2ndof]
-begin = 0.0
-end = 5.0
-step = 0.25
-cut_type = "less"
-branch_name = "h2_TRACK_CHI2NDOF"
-description = "K- track quality"
-
-[kminus_optimizable_selection.ipchi2]
-begin = 0.0
-end = 100.0
-step = 5.0
-cut_type = "greater"
-branch_name = "h2_IPCHI2_OWNPV"
-description = "K- IP χ² to PV"
-
-[optimization_strategy]
-# N-D grid scan: Full exhaustive search over all variables simultaneously
-signal_scale_factor = 10000.0
-
-# Sideband definition for background estimation in FOM calculation
-sideband_low_multiplier = 4.0   # Low sideband starts at (center - 4*window)
-sideband_low_end_multiplier = 1.0  # Low sideband ends at (center - 1*window)
-sideband_high_start_multiplier = 1.0  # High sideband starts at (center + 1*window)
-sideband_high_multiplier = 4.0  # High sideband ends at (center + 4*window)
-
-description = """
-OPTIMIZATION METHOD - N-D Grid Scan:
-  - Full N-D grid search over all 7 variables simultaneously
-  - Finds globally optimal cuts considering all correlations
-  - Tests 3,888 combinations per state (3x3x3x2x4x6x3)
-  - Fast enough for this problem size (~10-20 minutes)
-  - Results are reproducible and optimal
-
-SIDEBAND REGIONS for background estimation:
-  - Signal region: center ± window (from particles.toml)
-  - Low sideband: (center - 4*window) to (center - 1*window)
-  - High sideband: (center + 1*window) to (center + 4*window)
-  
-  These multipliers define how many signal windows away the sidebands extend.
-  Wider sidebands give better background statistics but may include other resonances.
-
-SIGNAL SCALE FACTOR:
-  - Used to scale MC signal to data-equivalent for realistic FOM calculation
-  - Normalization factor ensures S/B ratios are realistic during optimization
-  - Exact value doesn't affect which cuts are optimal (comparing relative FOM)
-  - Value calibrated to match typical LHCb yields
-
-STATE-DEPENDENT OPTIMIZATION:
-  ⚠️ Different states may need different cuts!
-  - ηc: Lowest mass, softer particles → may need softer cuts
-  - J/ψ: Highest statistics → can use tighter cuts
-  - χc states: Medium requirements
-  
-  The optimization is STATE-DEPENDENT, producing separate cut values for each state.
-"""
+description = "B+ transverse momentum"
+end = 10000.0
+step = 500.0
 
 [cut_application]
 # Control whether to apply optimized cuts to data in Phase 4
 apply_cuts_to_data = false
-data_cut_state = "jpsi"
-
 comment = """
 apply_cuts_to_data: Controls cut application in Phase 4
   - false (DEFAULT): Data unchanged, all states fit to same data (CORRECT for fitting)
@@ -274,29 +90,97 @@ data_cut_state: Which state's cuts to use when apply_cuts_to_data=true
   - Making control plots with specific cuts
   - Validation studies
   - Debugging
-  
+
 For MASS FITTING, always use apply_cuts_to_data=false!
+"""
+data_cut_state = "jpsi"
+
+[kminus_optimizable_selection]
+
+[kminus_optimizable_selection.ipchi2]
+begin = 0.0
+branch_name = "h2_IPCHI2_OWNPV"
+cut_type = "greater"
+description = "K- IP χ² to PV"
+end = 100.0
+step = 5.0
+
+[kminus_optimizable_selection.probnnk]
+begin = 0.0
+branch_name = "h2_ProbNNk"
+cut_type = "greater"
+description = "K- PID probability"
+end = 0.5
+step = 0.05
+
+[kminus_optimizable_selection.track_chi2ndof]
+begin = 0.0
+branch_name = "h2_TRACK_CHI2NDOF"
+cut_type = "less"
+description = "K- track quality"
+end = 5.0
+step = 0.25
+
+[kplus_optimizable_selection]
+
+[kplus_optimizable_selection.ipchi2]
+begin = 0.0
+branch_name = "h1_IPCHI2_OWNPV"
+cut_type = "greater"
+description = "K+ IP χ² to PV"
+end = 100.0
+step = 5.0
+
+[kplus_optimizable_selection.probnnk]
+begin = 0.0
+branch_name = "h1_ProbNNk"
+cut_type = "greater"
+description = "K+ PID probability"
+end = 0.5
+step = 0.05
+
+[kplus_optimizable_selection.track_chi2ndof]
+begin = 0.0
+branch_name = "h1_TRACK_CHI2NDOF"
+cut_type = "less"
+description = "K+ track quality"
+end = 5.0
+step = 0.25
+
+[lambda_selection]
+delta_z_min = 5.0  # mm (note: delta_z in mm, not significance!)
+fd_chisq_min = 250.0
+mass_max = 1121.0  # MeV/c²
+# FIXED cuts (not optimized, applied to all states)
+mass_min = 1111.0  # MeV/c²
+proton_probnnp_min = 0.3
+
+[lambda_selection.notes]
+comment = """
+Lambda selection is FIXED (not state-dependent).
+These are pre-selection cuts ensuring good Lambda reconstruction.
+Applied before FOM optimization.
 """
 
 [manual_cuts]
+Bu_DTF_chi2 = {cut_type = "less", value = 30.0}
+Bu_FDCHI2_OWNPV = {cut_type = "greater", value = 100.0}
+Bu_IPCHI2_OWNPV = {cut_type = "less", value = 10.0}
 # Optional: Define manual cuts to SKIP grid scan optimization
 # Useful for testing, validation, or if you want to fix specific cut values
 # Leave empty to use optimized cuts from Phase 3
 #
 # To use manual cuts, we either:
-#   1. Uncomment the example cuts below, OR
-#   2. Add cuts here and run with: python run_pipeline.py --use-manual-cuts
+# 1. Uncomment the example cuts below, OR
+# 2. Add cuts here and run with: python run_pipeline.py --use-manual-cuts
 #
 # Format: branch_name = { cut_type = "greater"|"less", value = float }
 #
 # Example (uncomment to use):
-Bu_PT = { cut_type = "greater", value = 3000.0 }
-Bu_FDCHI2_OWNPV = { cut_type = "greater", value = 100.0 }
-Bu_IPCHI2_OWNPV = { cut_type = "less", value = 10.0 }
-Bu_DTF_chi2 = { cut_type = "less", value = 30.0 }
-h1_ProbNNk = { cut_type = "greater", value = 0.1 }
-h2_ProbNNk = { cut_type = "greater", value = 0.1 }
-p_ProbNNp = { cut_type = "greater", value = 0.1 }
+Bu_PT = {cut_type = "greater", value = 3000.0}
+h1_ProbNNk = {cut_type = "greater", value = 0.1}
+h2_ProbNNk = {cut_type = "greater", value = 0.1}
+p_ProbNNp = {cut_type = "greater", value = 0.1}
 
 [manual_cuts.notes]
 comment = """
@@ -312,18 +196,11 @@ Use cases:
   - Fixing cuts based on physics knowledge
   - Validation studies
   - Quick iterations during analysis development
-  
+
 To use optimized cuts from Phase 3 grid scan, leave [manual_cuts] empty.
 
 NOTE: Manual cuts are applied to ALL states (not state-dependent).
       For state-dependent cuts, use the grid scan optimizer.
-"""
-
-optimization_comment = """
-signal_scale_factor: Used to scale MC signal to data-equivalent for FOM calculation.
-This is a normalization factor that ensures S/B ratios are realistic during optimization.
-The exact value doesn't affect which cuts are optimal (we're comparing relative FOM values),
-but realistic S/B helps FOM converge properly. Value calibrated to match typical LHCb yields.
 """
 full_comment = """
 N-D grid scan: Exhaustive search over all combinations of cut values
@@ -344,3 +221,106 @@ For each state (J/ψ, ηc, χc0, χc1):
 - Find combination that maximizes FOM
 - Output optimal cuts for each state
 """
+optimization_comment = """
+signal_scale_factor: Used to scale MC signal to data-equivalent for FOM calculation.
+This is a normalization factor that ensures S/B ratios are realistic during optimization.
+The exact value doesn't affect which cuts are optimal (we're comparing relative FOM values),
+but realistic S/B helps FOM converge properly. Value calibrated to match typical LHCb yields.
+"""
+
+[nd_optimizable_selection]
+
+[nd_optimizable_selection.bu_dtf_chi2]
+begin = 10.0
+branch_name = "Bu_DTF_chi2"
+cut_type = "less"
+description = "B+ decay tree fit chi2"
+end = 30.0
+step = 10.0
+
+[nd_optimizable_selection.bu_fdchi2]
+begin = 100.0
+branch_name = "Bu_FDCHI2_OWNPV"
+cut_type = "greater"
+description = "B+ flight distance chi2"
+end = 250.0
+step = 50.0
+
+[nd_optimizable_selection.bu_ipchi2]
+begin = 0.0
+branch_name = "Bu_IPCHI2_OWNPV"
+cut_type = "less"
+description = "B+ impact parameter chi2"
+end = 10.0
+step = 2.0
+
+[nd_optimizable_selection.bu_pt]
+begin = 3000.0
+branch_name = "Bu_PT"
+cut_type = "greater"
+description = "B+ transverse momentum (MeV/c)"
+end = 3500.0
+step = 500.0
+
+[nd_optimizable_selection.h1_probnnk]
+begin = 0.1
+branch_name = "h1_ProbNNk"
+cut_type = "greater"
+description = "K+ PID probability"
+end = 0.3
+step = 0.1
+
+[nd_optimizable_selection.h2_probnnk]
+begin = 0.1
+branch_name = "h2_ProbNNk"
+cut_type = "greater"
+description = "K- PID probability"
+end = 0.3
+step = 0.1
+
+[nd_optimizable_selection.p_probnnp]
+begin = 0.1
+branch_name = "p_ProbNNp"
+cut_type = "greater"
+description = "Bachelor proton PID probability"
+end = 0.3
+step = 0.1
+
+[optimization_strategy]
+description = """
+OPTIMIZATION METHOD - N-D Grid Scan:
+  - Full N-D grid search over all 7 variables simultaneously
+  - Finds globally optimal cuts considering all correlations
+  - Tests 3,888 combinations per state (3x3x3x2x4x6x3)
+  - Fast enough for this problem size (~10-20 minutes)
+  - Results are reproducible and optimal
+
+SIDEBAND REGIONS for background estimation:
+  - Signal region: center ± window (from particles.toml)
+  - Low sideband: (center - 4*window) to (center - 1*window)
+  - High sideband: (center + 1*window) to (center + 4*window)
+
+  These multipliers define how many signal windows away the sidebands extend.
+  Wider sidebands give better background statistics but may include other resonances.
+
+SIGNAL SCALE FACTOR:
+  - Used to scale MC signal to data-equivalent for realistic FOM calculation
+  - Normalization factor ensures S/B ratios are realistic during optimization
+  - Exact value doesn't affect which cuts are optimal (comparing relative FOM)
+  - Value calibrated to match typical LHCb yields
+
+STATE-DEPENDENT OPTIMIZATION:
+  ⚠️ Different states may need different cuts!
+  - ηc: Lowest mass, softer particles → may need softer cuts
+  - J/ψ: Highest statistics → can use tighter cuts
+  - χc states: Medium requirements
+
+  The optimization is STATE-DEPENDENT, producing separate cut values for each state.
+"""
+sideband_high_multiplier = 4.0  # High sideband ends at (center + 4*window)
+sideband_high_start_multiplier = 1.0  # High sideband starts at (center + 1*window)
+sideband_low_end_multiplier = 1.0  # Low sideband ends at (center - 1*window)
+# Sideband definition for background estimation in FOM calculation
+sideband_low_multiplier = 4.0  # Low sideband starts at (center - 4*window)
+# N-D grid scan: Full exhaustive search over all variables simultaneously
+signal_scale_factor = 10000.0

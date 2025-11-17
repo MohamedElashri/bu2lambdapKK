@@ -53,7 +53,7 @@ TDW
 | `MaxLmPrtTrkChi2` | Maximum chi-squared of the proton tracks in the Lambda0 decay | 4.0 | Dimensionless |
 | `MaxLmPiTrkChi2` | Maximum chi-squared of the pion tracks in the Lambda0 decay | 4.0 | Dimensionless |
 
-3. Offline pre-selection 
+3. Offline pre-selection
 
 | Name | Explanation | Value | Unit |
 | --- | --- | --- | --- |

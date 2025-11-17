@@ -68,7 +68,7 @@ Where X ∈ {J/ψ, η_c(1S), χ_c0(1P), χ_c1(1P)}
 ### Main Equation
 
 ```
-ℬ(B⁺ → X K⁺) × ℬ(X → Λ̄pK⁻) = 
+ℬ(B⁺ → X K⁺) × ℬ(X → Λ̄pK⁻) =
     N_X × ε_norm × ℬ(J/ψ→μμ) × ℬ(B⁺→J/ψK⁺)
     ────────────────────────────────────────
     N_norm × ε_X
@@ -90,7 +90,7 @@ Where X ∈ {J/ψ, η_c(1S), χ_c0(1P), χ_c1(1P)}
    ```
    ℬ(B⁺ → X K⁺) × ℬ(X → Λ̄pK⁻) = R_X × ℬ(B⁺ → J/ψ K⁺) × ℬ(J/ψ → Λ̄pK⁻)
    ```
-   
+
    Where R_X from Table 3: R_etac = 2.299, R_chic0 = 0.279, R_chic1 = 0.201
 
 
@@ -132,7 +132,7 @@ BR_chic1 = 1.03e-7 × 0.201 = 2.08e-8
 ### Propagation Formula
 
 ```
-(δBR/BR)² = (δN_X/N_X)² + (δε_X/ε_X)² + (δN_norm/N_norm)² 
+(δBR/BR)² = (δN_X/N_X)² + (δε_X/ε_X)² + (δN_norm/N_norm)²
           + (δε_norm/ε_norm)² + (δℬ_norm/ℬ_norm)² + (δℬ_jpsi_mumu/ℬ_jpsi_mumu)²
 ```
 
@@ -254,7 +254,7 @@ BR_jpsi = N_jpsi / (N_Bp * eps_jpsi)
 ## Action Checklist
 
 - [x] Yields (Table 2) ✅
-- [x] Efficiencies (Table 4) ✅  
+- [x] Efficiencies (Table 4) ✅
 - [x] Luminosity ✅
 - [x] Ratios (Table 3) ✅
 - [x] PDG values ✅

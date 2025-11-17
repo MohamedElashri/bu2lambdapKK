@@ -220,6 +220,43 @@ test-verbose: ## Run tests with extra verbosity
 	@printf "\033[0;34mRunning tests (verbose)...\033[0m\n"
 	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -vv -s
 
+##@ Code Quality
+
+pre-commit-install: ## Install pre-commit hooks
+	@printf "\033[0;34mInstalling pre-commit hooks...\033[0m\n"
+	@cd .. && pre-commit install
+	@cd .. && pre-commit install --hook-type pre-push
+	@printf "\033[0;32m✓ Pre-commit hooks installed\033[0m\n"
+	@printf "\033[1;33mHooks will run automatically on git commit\033[0m\n"
+
+pre-commit-run: ## Run all pre-commit hooks manually
+	@printf "\033[0;34mRunning pre-commit hooks on all files...\033[0m\n"
+	@cd .. && pre-commit run --all-files
+
+pre-commit-update: ## Update pre-commit hook versions
+	@printf "\033[0;34mUpdating pre-commit hooks...\033[0m\n"
+	@cd .. && pre-commit autoupdate
+	@printf "\033[0;32m✓ Pre-commit hooks updated\033[0m\n"
+
+format: ## Format code with black and isort
+	@printf "\033[0;34mFormatting code...\033[0m\n"
+	@cd .. && black analysis/ --line-length=100
+	@cd .. && isort analysis/ --profile=black --line-length=100
+	@printf "\033[0;32m✓ Code formatted\033[0m\n"
+
+lint: ## Lint code with ruff
+	@printf "\033[0;34mLinting code...\033[0m\n"
+	@cd .. && ruff check analysis/ --fix
+	@printf "\033[0;32m✓ Linting complete\033[0m\n"
+
+typecheck: ## Run type checking with mypy
+	@printf "\033[0;34mType checking...\033[0m\n"
+	@cd .. && mypy analysis/modules/ --ignore-missing-imports --no-strict-optional
+	@printf "\033[0;32m✓ Type checking complete\033[0m\n"
+
+quality: format lint typecheck ## Run all code quality checks
+	@printf "\033[0;32m✓ All quality checks complete\033[0m\n"
+
 ##@ Information
 
 info: ## Show pipeline information
