@@ -3,14 +3,14 @@
 # Quick reference:
 #   make help          - Show all available targets
 #   make venv          - Activate virtual environment
-#   make tests         - Run all tests with coverage
+#   make test          - Run all tests with coverage
 #   make pipeline      - Run full analysis pipeline (All years: 2016, 2017, 2018)
 #   make pipeline-2016 - Run with 2016 data only
 #   make pipeline-2017 - Run with 2017 data only
 #   make pipeline-2018 - Run with 2018 data only
 #   make clean         - Remove cache and output files
 
-.PHONY: help clean pipeline venv tests test test-unit test-integration test-quick test-coverage test-watch test-failed test-verbose
+.PHONY: help clean pipeline venv test test-unit test-integration test-quick test-coverage test-watch test-failed test-verbose
 
 # Virtual environment detection
 VENV_DIR := $(shell if [ -d ".venv" ]; then echo ".venv"; elif [ -d "../.venv" ]; then echo "../.venv"; else echo ""; fi)
@@ -179,13 +179,11 @@ setup-dirs: ## Create necessary directories
 
 ##@ Testing
 
-tests: ## Run all tests with coverage
+test: ## Run all tests with coverage
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════\033[0m\n"
 	@printf "\033[0;34m  Running Test Suite\033[0m\n"
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════\033[0m\n"
 	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -v --cov=analysis/modules --cov-report=term-missing --cov-report=html
-
-test: tests ## Alias for tests
 
 test-unit: ## Run only unit tests
 	@printf "\033[0;34mRunning unit tests...\033[0m\n"
