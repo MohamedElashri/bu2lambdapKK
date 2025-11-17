@@ -195,6 +195,10 @@ test-integration: ## Run only integration tests
 	@printf "\033[0;34mRunning integration tests...\033[0m\n"
 	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/integration/ -v -m integration
 
+test-validation: ## Run only validation tests
+	@printf "\033[0;34mRunning validation tests...\033[0m\n"
+	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/validation/ -v -m validation
+
 test-quick: ## Run tests without coverage (faster)
 	@printf "\033[0;34mRunning tests (quick mode)...\033[0m\n"
 	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -v
