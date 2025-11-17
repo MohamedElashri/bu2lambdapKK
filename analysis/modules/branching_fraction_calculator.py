@@ -6,6 +6,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 
 class BranchingFractionCalculator:
@@ -145,17 +146,17 @@ class BranchingFractionCalculator:
         print("=" * 80)
 
         # Direct ratios to J/ψ
-        for state in ["etac", "chic0", "chic1", "etac_2s"]:
-            ratio, error = self.calculate_ratio_to_jpsi(state)
+        states = ["etac", "chic0", "chic1", "etac_2s"]
+        print("\nCalculating ratios...")
+        with tqdm(total=len(states), desc="Computing BR ratios", unit="state") as pbar:
+            for state in states:
+                pbar.set_postfix_str(state)
+                ratio, error = self.calculate_ratio_to_jpsi(state)
 
-            print(f"\nBr(B⁺ → {state} X) * Br({state} → Λ̄pK⁻)")
-            print("───────────────────────────────────────────")
-            print("Br(B⁺ → J/ψ X) * Br(J/ψ → Λ̄pK⁻)")
-            print(f"= {ratio:.3f} ± {error:.3f}")
-
-            results.append(
-                {"numerator": state, "denominator": "jpsi", "ratio": ratio, "stat_error": error}
-            )
+                results.append(
+                    {"numerator": state, "denominator": "jpsi", "ratio": ratio, "stat_error": error}
+                )
+                pbar.update(1)
 
         # Derived ratio: χc1/χc0
         ratio_chic1_jpsi, err1 = self.calculate_ratio_to_jpsi("chic1")

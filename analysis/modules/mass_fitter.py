@@ -12,6 +12,7 @@ from typing import Any
 
 import awkward as ak
 import ROOT
+from tqdm import tqdm
 
 # Enable RooFit batch mode for better performance
 ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
@@ -354,8 +355,10 @@ class MassFitter:
         # Prepare all datasets (per-year + combined)
         datasets_to_fit = {}
 
-        for year in sorted(data_by_year.keys()):
-            print(f"\n[Year {year}]")
+        print("Preparing datasets...")
+        with tqdm(total=len(data_by_year), desc="Preparing data", unit="year") as pbar:
+            for year in sorted(data_by_year.keys()):
+                pbar.set_postfix_str(f"Year {year}")
 
             events = data_by_year[year]
 
@@ -380,6 +383,7 @@ class MassFitter:
             )
 
             datasets_to_fit[year] = mass_filtered
+            pbar.update(1)
 
         # Create combined dataset
         if fit_combined and len(datasets_to_fit) > 1:
@@ -391,102 +395,89 @@ class MassFitter:
             print(f"  Total events: {len(combined_mass)}")
 
         # Fit each dataset
-        for dataset_name in sorted(datasets_to_fit.keys()):
-            print(f"\n{'='*60}")
-            print(f"Fitting: {dataset_name}")
-            print(f"{'='*60}")
+        print("\nFitting datasets...")
+        with tqdm(total=len(datasets_to_fit), desc="Fitting", unit="dataset") as pbar:
+            for dataset_name in sorted(datasets_to_fit.keys()):
+                pbar.set_postfix_str(f"{dataset_name}")
 
-            mass_filtered = datasets_to_fit[dataset_name]
-            print(f"  Events to fit: {len(mass_filtered)}")
+                mass_filtered = datasets_to_fit[dataset_name]
 
-            # Convert to numpy for RooDataSet/RooDataHist
-            mass_np = ak.to_numpy(mass_filtered)
+                # Convert to numpy for RooDataSet/RooDataHist
+                mass_np = ak.to_numpy(mass_filtered)
 
-            # Create dataset (binned or unbinned based on configuration)
-            if self.use_binned_fit:
-                # Create unbinned dataset first
-                temp_dataset = ROOT.RooDataSet(
-                    f"temp_data_{dataset_name}",
-                    f"Temp Data {dataset_name}",
-                    ROOT.RooArgSet(mass_var),
-                )
-                for m in mass_np:
-                    mass_var.setVal(m)
-                    temp_dataset.add(ROOT.RooArgSet(mass_var))
+                # Create dataset (binned or unbinned based on configuration)
+                if self.use_binned_fit:
+                    # Create unbinned dataset first
+                    temp_dataset = ROOT.RooDataSet(
+                        f"temp_data_{dataset_name}",
+                        f"Temp Data {dataset_name}",
+                        ROOT.RooArgSet(mass_var),
+                    )
+                    for m in mass_np:
+                        mass_var.setVal(m)
+                        temp_dataset.add(ROOT.RooArgSet(mass_var))
 
-                # Convert to binned dataset (RooDataHist)
-                dataset = ROOT.RooDataHist(
-                    f"data_{dataset_name}",
-                    f"Data {dataset_name}",
-                    ROOT.RooArgSet(mass_var),
-                    temp_dataset,
-                )
-                print(
-                    f"  RooDataHist entries: {dataset.numEntries()} (binned in {self.nbins} bins)"
-                )
-            else:
-                # Create unbinned dataset (RooDataSet)
-                dataset = ROOT.RooDataSet(
-                    f"data_{dataset_name}", f"Data {dataset_name}", ROOT.RooArgSet(mass_var)
-                )
-                for m in mass_np:
-                    mass_var.setVal(m)
-                    dataset.add(ROOT.RooArgSet(mass_var))
-                print(f"  RooDataSet entries: {dataset.numEntries()} (unbinned)")
+                    # Convert to binned dataset (RooDataHist)
+                    dataset = ROOT.RooDataHist(
+                        f"data_{dataset_name}",
+                        f"Data {dataset_name}",
+                        ROOT.RooArgSet(mass_var),
+                        temp_dataset,
+                    )
+                else:
+                    # Create unbinned dataset (RooDataSet)
+                    dataset = ROOT.RooDataSet(
+                        f"data_{dataset_name}", f"Data {dataset_name}", ROOT.RooArgSet(mass_var)
+                    )
+                    for m in mass_np:
+                        mass_var.setVal(m)
+                        dataset.add(ROOT.RooArgSet(mass_var))
 
-            # Build model for this dataset
-            model, yields = self.build_model_for_year(dataset_name, mass_var)
+                # Build model for this dataset
+                model, yields = self.build_model_for_year(dataset_name, mass_var)
 
-            # Perform fit
-            print("  Fitting...")
-            if self.use_binned_fit:
-                # Binned maximum likelihood fit
-                fit_result = model.fitTo(
-                    dataset,
-                    ROOT.RooFit.Save(),
-                    ROOT.RooFit.Extended(True),
-                    ROOT.RooFit.PrintLevel(-1),
-                    ROOT.RooFit.NumCPU(4),
-                    ROOT.RooFit.Strategy(2),  # More robust
-                )
-            else:
-                # Unbinned maximum likelihood fit
-                fit_result = model.fitTo(
-                    dataset,
-                    ROOT.RooFit.Save(),
-                    ROOT.RooFit.Extended(True),
-                    ROOT.RooFit.PrintLevel(-1),
-                    ROOT.RooFit.NumCPU(4),
-                    ROOT.RooFit.Strategy(2),  # More robust
-                )
+                # Perform fit
+                if self.use_binned_fit:
+                    # Binned maximum likelihood fit
+                    fit_result = model.fitTo(
+                        dataset,
+                        ROOT.RooFit.Save(),
+                        ROOT.RooFit.Extended(True),
+                        ROOT.RooFit.PrintLevel(-1),
+                        ROOT.RooFit.NumCPU(4),
+                        ROOT.RooFit.Strategy(2),  # More robust
+                    )
+                else:
+                    # Unbinned maximum likelihood fit
+                    fit_result = model.fitTo(
+                        dataset,
+                        ROOT.RooFit.Save(),
+                        ROOT.RooFit.Extended(True),
+                        ROOT.RooFit.PrintLevel(-1),
+                        ROOT.RooFit.NumCPU(4),
+                        ROOT.RooFit.Strategy(2),  # More robust
+                    )
 
-            # Check convergence
-            status = fit_result.status()
-            cov_qual = fit_result.covQual()
-            edm = fit_result.edm()
+                # Check convergence
+                status = fit_result.status()
 
-            print(f"  Fit status: {status} (0 = success)")
-            print(f"  Covariance quality: {cov_qual} (3 = full accurate)")
-            print(f"  EDM: {edm:.2e}")
+                if status != 0:
+                    pbar.write(f"  WARNING: Fit for {dataset_name} did not converge properly!")
 
-            if status != 0:
-                print("  WARNING: Fit did not converge properly!")
+                # Extract yields with errors
+                dataset_yields = {}
+                for state, yield_var in yields.items():
+                    value = yield_var.getVal()
+                    error = yield_var.getError()
+                    dataset_yields[state] = (value, error)
 
-            # Extract yields with errors
-            dataset_yields = {}
-            print(f"\n  Yields for {dataset_name}:")
-            for state, yield_var in yields.items():
-                value = yield_var.getVal()
-                error = yield_var.getError()
-                dataset_yields[state] = (value, error)
+                all_yields[dataset_name] = dataset_yields
+                all_fit_results[dataset_name] = fit_result
 
-                print(f"    N_{state:<12} = {value:8.0f} ± {error:6.0f}")
+                # Plot fit result
+                self.plot_fit_result(dataset_name, mass_var, dataset, model, yields)
 
-            all_yields[dataset_name] = dataset_yields
-            all_fit_results[dataset_name] = fit_result
-
-            # Plot fit result
-            self.plot_fit_result(dataset_name, mass_var, dataset, model, yields)
+                pbar.update(1)
 
         # Extract shared parameters (from last fit)
         print("\n" + "=" * 80)

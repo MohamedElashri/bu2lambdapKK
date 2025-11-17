@@ -29,6 +29,7 @@ from typing import Any
 
 import awkward as ak
 import pandas as pd
+from tqdm import tqdm
 
 # Add modules to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -41,6 +42,10 @@ from modules.exceptions import AnalysisError, ConfigurationError
 from modules.lambda_selector import LambdaSelector
 from modules.mass_fitter import MassFitter
 from modules.selection_optimizer import SelectionOptimizer
+from utils.logging_config import suppress_warnings
+
+# Suppress warnings by default (can be overridden with ANALYSIS_WARNINGS=on)
+suppress_warnings()
 
 
 class PipelineManager:
@@ -239,10 +244,11 @@ class PipelineManager:
         # Load and process REAL DATA
         print("[Loading Real Data]")
         data_dict = {}
-        for year in years:
-            data_dict[year] = {}
-            for track_type in track_types:
-                print(f"  {year} {track_type}...", end="", flush=True)
+        with tqdm(total=len(years) * len(track_types), desc="Loading data", unit="dataset") as pbar:
+            for year in years:
+                data_dict[year] = {}
+                for track_type in track_types:
+                    pbar.set_postfix_str(f"{year} {track_type}")
 
                 # Load data from both magnets using unified method
                 events = data_manager.load_and_process(
@@ -250,7 +256,8 @@ class PipelineManager:
                 )
 
                 if events is None:
-                    print(f" ❌ Both polarities missing! Skipping data {year} {track_type}")
+                    pbar.set_postfix_str(f"❌ {year} {track_type} missing")
+                    pbar.update(1)
                     continue
 
                 # Apply Lambda cuts
@@ -260,15 +267,19 @@ class PipelineManager:
                 eff = 100 * n_after / n_before if n_before > 0 else 0
 
                 data_dict[year][track_type] = events_after
-                print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
+                pbar.set_postfix_str(f"{year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)")
+                pbar.update(1)
 
         # Load and process PHASE-SPACE MC (KpKm - for background estimation)
         print("\n[Loading Phase-Space MC - KpKm for Background]")
         phase_space_dict = {}
-        for year in years:
-            phase_space_dict[year] = {}
-            for track_type in track_types:
-                print(f"  {year} {track_type}...", end="", flush=True)
+        with tqdm(
+            total=len(years) * len(track_types), desc="Loading KpKm MC", unit="dataset"
+        ) as pbar:
+            for year in years:
+                phase_space_dict[year] = {}
+                for track_type in track_types:
+                    pbar.set_postfix_str(f"{year} {track_type}")
 
                 # Load KpKm MC from both magnets using unified method
                 events = data_manager.load_and_process(
@@ -276,7 +287,8 @@ class PipelineManager:
                 )
 
                 if events is None:
-                    print(f" ❌ Both polarities missing! Skipping KpKm {year} {track_type}")
+                    pbar.set_postfix_str(f"❌ KpKm {year} {track_type} missing")
+                    pbar.update(1)
                     continue
 
                 # Apply Lambda cuts
@@ -286,7 +298,8 @@ class PipelineManager:
                 eff = 100 * n_after / n_before if n_before > 0 else 0
 
                 phase_space_dict[year][track_type] = events_after
-                print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
+                pbar.set_postfix_str(f"{year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)")
+                pbar.update(1)
 
         # Load and process MC (all 4 signal states)
         print("\n[Loading MC - Signal States]")
@@ -294,46 +307,51 @@ class PipelineManager:
         mc_dict = {}
         mc_generated_counts = {}  # Track generator-level counts for signal scaling
 
-        for state in states:
-            print(f"\n  {state}:")
-            mc_dict[state] = {}
-            mc_generated_counts[state] = {}
+        total_mc_datasets = len(states) * len(years) * len(track_types)
+        with tqdm(total=total_mc_datasets, desc="Loading signal MC", unit="dataset") as pbar:
+            for state in states:
+                mc_dict[state] = {}
+                mc_generated_counts[state] = {}
 
-            for year in years:
-                mc_dict[state][year] = {}
-                for track_type in track_types:
-                    print(f"    {year} {track_type}...", end="", flush=True)
+                for year in years:
+                    mc_dict[state][year] = {}
+                    for track_type in track_types:
+                        pbar.set_postfix_str(f"{state} {year} {track_type}")
 
-                    # Map state names: jpsi -> Jpsi, others stay lowercase
-                    state_name = "Jpsi" if state == "jpsi" else state
+                        # Map state names: jpsi -> Jpsi, others stay lowercase
+                        state_name = "Jpsi" if state == "jpsi" else state
 
-                    # Load MC from both magnets using unified method
-                    events = data_manager.load_and_process(
-                        state_name,
-                        year,
-                        track_type,
-                        apply_derived_branches=True,
-                        apply_trigger=False,
-                    )
+                        # Load MC from both magnets using unified method
+                        events = data_manager.load_and_process(
+                            state_name,
+                            year,
+                            track_type,
+                            apply_derived_branches=True,
+                            apply_trigger=False,
+                        )
 
-                    if events is None:
-                        print(f" ❌ Both polarities missing! Skipping {state} {year} {track_type}")
-                        continue
+                        if events is None:
+                            pbar.set_postfix_str(f"❌ {state} {year} {track_type} missing")
+                            pbar.update(1)
+                            continue
 
-                    # Apply Lambda cuts
-                    n_before = len(events)
-                    events_after = lambda_selector.apply_lambda_cuts(events)
-                    n_after = len(events_after)
-                    eff = 100 * n_after / n_before if n_before > 0 else 0
+                        # Apply Lambda cuts
+                        n_before = len(events)
+                        events_after = lambda_selector.apply_lambda_cuts(events)
+                        n_after = len(events_after)
+                        eff = 100 * n_after / n_before if n_before > 0 else 0
 
-                    mc_dict[state][year][track_type] = events_after
+                        mc_dict[state][year][track_type] = events_after
 
-                    # Store generator-level count for signal scaling
-                    if year not in mc_generated_counts[state]:
-                        mc_generated_counts[state][year] = {}
-                    mc_generated_counts[state][year][track_type] = n_before
+                        # Store generator-level count for signal scaling
+                        if year not in mc_generated_counts[state]:
+                            mc_generated_counts[state][year] = {}
+                        mc_generated_counts[state][year][track_type] = n_before
 
-                    print(f" {n_before:,} → {n_after:,} ({eff:.1f}%)")
+                        pbar.set_postfix_str(
+                            f"{state} {year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)"
+                        )
+                        pbar.update(1)
 
         # Cache results with dependencies
         self.cache.save(
@@ -666,89 +684,48 @@ class PipelineManager:
         mc_final = {}
         states = ["jpsi", "etac", "chic0", "chic1"]
 
-        for state in states:
-            print(f"\n[{state}]")
-            mc_final[state] = {}
+        print("\nApplying cuts to MC...")
+        total_mc_cuts = sum(
+            len(mc_dict[state]) * len(mc_dict[state][year])
+            for state in states
+            for year in mc_dict[state]
+        )
 
-            # Get cuts for this state
-            state_cuts = optimized_cuts_df[optimized_cuts_df["state"] == state]
+        with tqdm(total=total_mc_cuts, desc="Applying MC cuts", unit="dataset") as pbar:
+            for state in states:
+                mc_final[state] = {}
 
-            if len(state_cuts) == 0:
-                print(f"  No cuts found for {state}, using Lambda cuts only")
-                mc_final[state] = mc_dict[state]
-                continue
+                # Get cuts for this state
+                state_cuts = optimized_cuts_df[optimized_cuts_df["state"] == state]
 
-            print(f"  Applying {len(state_cuts)} cuts for {state}")
+                if len(state_cuts) == 0:
+                    mc_final[state] = mc_dict[state]
+                    pbar.update(sum(len(mc_dict[state][year]) for year in mc_dict[state]))
+                    continue
 
-            for year in mc_dict[state]:
-                mc_final[state][year] = {}
+                for year in mc_dict[state]:
+                    mc_final[state][year] = {}
 
-                for track_type in mc_dict[state][year]:
-                    events = mc_dict[state][year][track_type]
-                    n_before = len(events)
+                    for track_type in mc_dict[state][year]:
+                        pbar.set_postfix_str(f"{state} {year} {track_type}")
+                        events = mc_dict[state][year][track_type]
 
-                    # Start with all events passing
-                    mask = ak.ones_like(events["Bu_PT"], dtype=bool)
-
-                    # Apply each cut
-                    for _, cut_row in state_cuts.iterrows():
-                        branch = cut_row["branch_name"]
-                        cut_val = cut_row["optimal_cut"]
-                        cut_type = cut_row["cut_type"]
-
-                        if branch not in events.fields:
-                            print(f"    Branch {branch} not found, skipping")
-                            continue
-
-                        branch_data = events[branch]
-
-                        # Flatten jagged arrays if needed
-                        if "var" in str(ak.type(branch_data)):
-                            branch_data = ak.firsts(branch_data)
-
-                        if cut_type == "greater":
-                            mask = mask & (branch_data > cut_val)
-                        elif cut_type == "less":
-                            mask = mask & (branch_data < cut_val)
-
-                    events_after = events[mask]
-                    n_after = len(events_after)
-                    eff = 100 * n_after / n_before if n_before > 0 else 0
-
-                    mc_final[state][year][track_type] = events_after
-                    print(f"    {year} {track_type}: {n_before:,} → {n_after:,} ({eff:.1f}%)")
-
-        # Data: Apply cuts only if requested (for control plots, validation, etc.)
-        # For fitting, we DON'T apply cuts (all states fit to same data)
-        if apply_cuts_to_data:
-            print(f"\n  APPLYING CUTS TO DATA (using {data_cut_state} cuts)")
-            print("    This should ONLY be used for control plots or validation!")
-            print("    For mass fitting, use apply_cuts_to_data=False")
-
-            data_final = {}
-            data_cuts = optimized_cuts_df[optimized_cuts_df["state"] == data_cut_state]
-
-            if len(data_cuts) == 0:
-                print(f"    No cuts found for {data_cut_state}, data unchanged")
-                data_final = data_dict
-            else:
-                for year in data_dict:
-                    data_final[year] = {}
-                    for track_type in data_dict[year]:
-                        events = data_dict[year][track_type]
-                        n_before = len(events)
-
-                        # Apply cuts
+                        # Start with all events passing
                         mask = ak.ones_like(events["Bu_PT"], dtype=bool)
-                        for _, cut_row in data_cuts.iterrows():
+
+                        # Apply each cut
+                        for _, cut_row in state_cuts.iterrows():
                             branch = cut_row["branch_name"]
                             cut_val = cut_row["optimal_cut"]
                             cut_type = cut_row["cut_type"]
 
                             if branch not in events.fields:
+                                print(f"    Branch {branch} not found, skipping")
                                 continue
 
                             branch_data = events[branch]
+
+                            # Flatten jagged arrays if needed
                             if "var" in str(ak.type(branch_data)):
                                 branch_data = ak.firsts(branch_data)
 
@@ -758,13 +735,52 @@ class PipelineManager:
                                 mask = mask & (branch_data < cut_val)
 
                         events_after = events[mask]
-                        n_after = len(events_after)
-                        eff = 100 * n_after / n_before if n_before > 0 else 0
 
-                        data_final[year][track_type] = events_after
-                        print(
-                            f"    Data {year} {track_type}: {n_before:,} → {n_after:,} ({eff:.1f}%)"
-                        )
+                        mc_final[state][year][track_type] = events_after
+                        pbar.update(1)
+
+        # Data: Apply cuts only if requested (for control plots, validation, etc.)
+        # For fitting, we DON'T apply cuts (all states fit to same data)
+        if apply_cuts_to_data:
+            print(f"\nApplying cuts to data (using {data_cut_state} cuts)...")
+
+            data_final = {}
+            data_cuts = optimized_cuts_df[optimized_cuts_df["state"] == data_cut_state]
+
+            if len(data_cuts) == 0:
+                data_final = data_dict
+            else:
+                total_data = sum(len(data_dict[year]) for year in data_dict)
+                with tqdm(total=total_data, desc="Applying data cuts", unit="dataset") as pbar:
+                    for year in data_dict:
+                        data_final[year] = {}
+                        for track_type in data_dict[year]:
+                            pbar.set_postfix_str(f"{year} {track_type}")
+                            events = data_dict[year][track_type]
+
+                            # Apply cuts
+                            mask = ak.ones_like(events["Bu_PT"], dtype=bool)
+                            for _, cut_row in data_cuts.iterrows():
+                                branch = cut_row["branch_name"]
+                                cut_val = cut_row["optimal_cut"]
+                                cut_type = cut_row["cut_type"]
+
+                                if branch not in events.fields:
+                                    continue
+
+                                branch_data = events[branch]
+                                if "var" in str(ak.type(branch_data)):
+                                    branch_data = ak.firsts(branch_data)
+
+                                if cut_type == "greater":
+                                    mask = mask & (branch_data > cut_val)
+                                elif cut_type == "less":
+                                    mask = mask & (branch_data < cut_val)
+
+                            events_after = events[mask]
+
+                            data_final[year][track_type] = events_after
+                            pbar.update(1)
         else:
             # Default: Do NOT apply cuts to data (for fitting)
             data_final = data_dict

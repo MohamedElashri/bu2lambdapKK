@@ -13,6 +13,7 @@ from typing import Any
 import awkward as ak
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from .exceptions import EfficiencyError
 
@@ -199,37 +200,34 @@ class EfficiencyCalculator:
         # Note: etac_2s has no MC, will use chi_c1 efficiency as proxy
         mc_states = ["jpsi", "etac", "chic0", "chic1"]
 
-        for state in mc_states:
-            efficiencies[state] = {}
+        print("\nCalculating efficiencies...")
+        total_calculations = sum(len(mc_by_state[state].keys()) for state in mc_states)
+        with tqdm(total=total_calculations, desc="Computing efficiencies", unit="year") as pbar:
+            for state in mc_states:
+                efficiencies[state] = {}
 
-            print(f"\n[State: {state}]")
+                for year in sorted(mc_by_state[state].keys()):
+                    pbar.set_postfix_str(f"{state} {year}")
+                    mc_events = mc_by_state[state][year]
+                    n_before = len(mc_events)
 
-            for year in sorted(mc_by_state[state].keys()):
-                mc_events = mc_by_state[state][year]
-                n_before = len(mc_events)
+                    # Calculate efficiency
+                    eff_result = self.calculate_selection_efficiency(mc_events, state)
+                    eff = eff_result["eff"]
+                    err = eff_result["err"]
 
-                print(f"  Year {year}: N_after_lambda = {n_before}")
+                    # Get number after cuts for validation
+                    mc_after = self.apply_optimized_cuts(mc_events, state)
+                    n_after = len(mc_after)
 
-                # Calculate efficiency
-                eff_result = self.calculate_selection_efficiency(mc_events, state)
-                eff = eff_result["eff"]
-                err = eff_result["err"]
+                    efficiencies[state][year] = {
+                        "eff": eff,
+                        "err": err,
+                        "n_before": n_before,
+                        "n_after": n_after,
+                    }
 
-                # Get number after cuts for validation
-                mc_after = self.apply_optimized_cuts(mc_events, state)
-                n_after = len(mc_after)
-
-                efficiencies[state][year] = {
-                    "eff": eff,
-                    "err": err,
-                    "n_before": n_before,
-                    "n_after": n_after,
-                }
-
-                print(f"            N_pass_cuts = {n_after}")
-                print(
-                    f"            ε_sel = {n_after}/{n_before} = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%)"
-                )
+                    pbar.update(1)
 
         # Add etac_2s efficiency by copying chi_c1 (no MC available)
         print(f"\n{'='*80}")

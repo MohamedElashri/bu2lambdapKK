@@ -7,6 +7,7 @@ import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from .exceptions import OptimizationError
 
@@ -611,47 +612,49 @@ class SelectionOptimizer:
 
             print(f"  Scanning {total_combinations:,} combinations...")
 
-            # Use itertools.product to generate all combinations
-            for i, cut_combination in enumerate(itertools.product(*grid_axes)):
-                # Show progress every 500 combinations
-                if (i + 1) % 500 == 0 or i == 0:
-                    print(
-                        f"    Progress: {i+1:,}/{total_combinations:,} ({100*(i+1)/total_combinations:.1f}%)"
-                    )
+            # Use tqdm progress bar for grid scan
+            with tqdm(
+                total=total_combinations, desc=f"  Optimizing {state}", unit="combo", ncols=100
+            ) as pbar:
+                for i, cut_combination in enumerate(itertools.product(*grid_axes)):
+                    # Apply this combination of cuts
+                    sig_mask = ak.ones_like(sig_branches[0], dtype=bool)
+                    data_mask = ak.ones_like(data_branches[0], dtype=bool)
 
-                # Apply this combination of cuts
-                sig_mask = ak.ones_like(sig_branches[0], dtype=bool)
-                data_mask = ak.ones_like(data_branches[0], dtype=bool)
+                    for j, (cut_val, var) in enumerate(
+                        zip(cut_combination, all_variables, strict=False)
+                    ):
+                        if var["cut_type"] == "greater":
+                            sig_mask = sig_mask & (sig_branches[j] > cut_val)
+                            data_mask = data_mask & (data_branches[j] > cut_val)
+                        else:
+                            sig_mask = sig_mask & (sig_branches[j] < cut_val)
+                            data_mask = data_mask & (data_branches[j] < cut_val)
 
-                for j, (cut_val, var) in enumerate(
-                    zip(cut_combination, all_variables, strict=False)
-                ):
-                    if var["cut_type"] == "greater":
-                        sig_mask = sig_mask & (sig_branches[j] > cut_val)
-                        data_mask = data_mask & (data_branches[j] > cut_val)
-                    else:
-                        sig_mask = sig_mask & (sig_branches[j] < cut_val)
-                        data_mask = data_mask & (data_branches[j] < cut_val)
+                    # Filter events
+                    sig_pass = sig_mc_combined[sig_mask]
+                    data_pass = data_combined[data_mask]
 
-                # Filter events
-                sig_pass = sig_mc_combined[sig_mask]
-                data_pass = data_combined[data_mask]
+                    # Calculate FOM using scaled signal and real data background
+                    signal_region = self.define_signal_region(state)
+                    n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
+                    n_sig = n_sig_mc * weighted_scale
+                    n_bkg = self.estimate_background_in_signal_region(data_pass, state)
+                    fom = self.compute_fom(n_sig, n_bkg)
 
-                # Calculate FOM using scaled signal and real data background
-                signal_region = self.define_signal_region(state)
-                n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
-                n_sig = n_sig_mc * weighted_scale
-                n_bkg = self.estimate_background_in_signal_region(data_pass, state)
-                fom = self.compute_fom(n_sig, n_bkg)
+                    # Update best if this is better
+                    if fom > best_fom:
+                        best_fom = fom
+                        best_cuts = cut_combination
+                        best_n_sig = n_sig
+                        best_n_bkg = n_bkg
+                        pbar.set_postfix(
+                            FOM=f"{best_fom:.3f}", S=int(best_n_sig), B=int(best_n_bkg)
+                        )
 
-                # Update best if this is better
-                if fom > best_fom:
-                    best_fom = fom
-                    best_cuts = cut_combination
-                    best_n_sig = float(n_sig)
-                    best_n_bkg = float(n_bkg)
+                    pbar.update(1)
 
-            print("\n  ✓ Grid scan complete!")
+            print("  ✓ Grid scan complete!")
             print(f"  Best FOM: {best_fom:.3f}")
             print(f"  n_sig: {best_n_sig:.0f}, n_bkg: {best_n_bkg:.1f}")
 
