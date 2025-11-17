@@ -10,7 +10,7 @@
 #   make pipeline-2018 - Run with 2018 data only
 #   make clean         - Remove cache and output files
 
-.PHONY: help clean pipeline venv test test-unit test-integration test-quick test-coverage test-watch test-failed test-verbose
+.PHONY: help clean clean-cache clean-outputs pipeline venv test test-unit test-integration test-validation test-quick test-coverage test-watch test-failed test-verbose
 
 # Virtual environment detection
 VENV_DIR := $(shell if [ -d ".venv" ]; then echo ".venv"; elif [ -d "../.venv" ]; then echo "../.venv"; else echo ""; fi)
@@ -148,10 +148,8 @@ clean-outputs: ## Remove output files (tables, plots, results)
 	@rm -rf analysis_output
 	@printf "\033[0;32mOutputs cleaned\033[0m\n"
 
-clean-all: clean-cache clean-outputs ## Remove everything (cache + outputs)
+clean: clean-cache clean-outputs ## Remove everything (cache + outputs)
 	@printf "\033[0;32mAll intermediate files removed\033[0m\n"
-
-clean: clean-all ## Alias for clean-all (removes both cache and outputs)
 
 ##@ Development
 
@@ -201,10 +199,13 @@ test-quick: ## Run tests without coverage (faster)
 	@printf "\033[0;34mRunning tests (quick mode)...\033[0m\n"
 	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ -v
 
-test-coverage: ## Run tests and generate HTML coverage report
-	@printf "\033[0;34mGenerating coverage report...\033[0m\n"
-	@cd .. && PYTHONPATH=. .venv/bin/python -m pytest analysis/tests/ --cov=analysis/modules --cov-report=html --cov-report=term
-	@printf "\033[0;32mCoverage report: htmlcov/index.html\033[0m\n"
+test-coverage: ## Open HTML coverage report in browser (run 'make test' first)
+	@if [ -f ../htmlcov/index.html ]; then \
+		printf "\033[0;32mOpening coverage report...\033[0m\n"; \
+		xdg-open ../htmlcov/index.html 2>/dev/null || open ../htmlcov/index.html 2>/dev/null || printf "\033[1;33mReport location: htmlcov/index.html\033[0m\n"; \
+	else \
+		printf "\033[0;31mNo coverage report found. Run 'make test' first.\033[0m\n"; \
+	fi
 
 test-watch: ## Run tests in watch mode (requires pytest-watch)
 	@printf "\033[0;34mWatching for changes...\033[0m\n"
