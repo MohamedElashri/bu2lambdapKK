@@ -547,26 +547,26 @@ class MassFitter:
             ROOT.RooFit.MarkerColor(ROOT.kBlack),
         )
 
-        # Plot total PDF (solid blue)
+        # Plot total PDF (solid dark blue)
         model.plotOn(
             frame,
             ROOT.RooFit.Name("total"),
-            ROOT.RooFit.LineColor(ROOT.kBlue + 2),
-            ROOT.RooFit.LineWidth(3),
+            ROOT.RooFit.LineColor(ROOT.kAzure + 2),
+            ROOT.RooFit.LineWidth(2),
             ROOT.RooFit.LineStyle(ROOT.kSolid),
         )
 
-        # High-contrast colors for charmonium states (avoiding black/dark colors)
+        # Professional LHCb-style color scheme (eye-friendly, distinct colors)
         colors = {
-            "jpsi": ROOT.kRed + 1,  # Bright red
-            "etac": ROOT.kGreen + 2,  # Bright green
-            "chic0": ROOT.kMagenta + 1,  # Bright magenta
-            "chic1": ROOT.kOrange + 1,  # Bright orange
-            "etac_2s": ROOT.kCyan + 1,  # Bright cyan
-            "background": ROOT.kGray + 1,  # Gray for background
+            "jpsi": ROOT.kRed + 1,  # Red for J/psi (most prominent)
+            "etac": ROOT.kBlue + 2,  # Blue for eta_c
+            "chic0": ROOT.kGreen + 2,  # Green for chi_c0
+            "chic1": ROOT.kOrange + 7,  # Orange for chi_c1
+            "etac_2s": ROOT.kMagenta + 2,  # Magenta for eta_c(2S)
+            "background": ROOT.kGray + 2,  # Gray for combinatorial background
         }
 
-        # Plot signal components with DOTTED lines (high contrast)
+        # Plot signal components with dashed lines
         for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             component_name = f"pdf_signal_{state}"
             model.plotOn(
@@ -574,95 +574,128 @@ class MassFitter:
                 ROOT.RooFit.Components(component_name),
                 ROOT.RooFit.Name(state),
                 ROOT.RooFit.LineColor(colors[state]),
-                ROOT.RooFit.LineStyle(ROOT.kDotted),  # Dotted for signals
-                ROOT.RooFit.LineWidth(3),
+                ROOT.RooFit.LineStyle(ROOT.kDashed),  # Dashed for signals
+                ROOT.RooFit.LineWidth(2),
             )
 
-        # Plot background with DASHED line
+        # Plot background with dotted line
         bkg_component_name = f"pdf_bkg_{year}"
         model.plotOn(
             frame,
             ROOT.RooFit.Components(bkg_component_name),
             ROOT.RooFit.Name("background"),
             ROOT.RooFit.LineColor(colors["background"]),
-            ROOT.RooFit.LineStyle(ROOT.kDashed),  # Dashed for background
-            ROOT.RooFit.LineWidth(3),
+            ROOT.RooFit.LineStyle(ROOT.kDotted),  # Dotted for background
+            ROOT.RooFit.LineWidth(2),
         )
 
-        # Create canvas with two pads for fit and pull distribution
-        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 900, 800)
+        # Create canvas with two pads for fit and pull distribution (LHCb standard size)
+        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 800)
 
-        # Upper pad for fit
-        pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.25, 1.0, 1.0)
-        pad1.SetBottomMargin(0.02)
-        pad1.SetLeftMargin(0.12)
+        # Upper pad for fit (70% of canvas)
+        pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.30, 1.0, 1.0)
+        pad1.SetBottomMargin(0.015)
+        pad1.SetLeftMargin(0.14)
         pad1.SetRightMargin(0.05)
-        pad1.SetTopMargin(0.08)
+        pad1.SetTopMargin(0.07)
         pad1.Draw()
 
-        # Lower pad for pulls
-        pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.25)
-        pad2.SetTopMargin(0.02)
+        # Lower pad for pulls (30% of canvas)
+        pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.30)
+        pad2.SetTopMargin(0.015)
         pad2.SetBottomMargin(0.35)
-        pad2.SetLeftMargin(0.12)
+        pad2.SetLeftMargin(0.14)
         pad2.SetRightMargin(0.05)
-        pad2.SetGridy()
+        pad2.SetGridy(1)
         pad2.Draw()
 
         # Draw fit in upper pad
         pad1.cd()
         frame.GetYaxis().SetTitle(f"Candidates / ({self.bin_width:.0f} MeV/#it{{c}}^{{2}})")
-        frame.GetYaxis().SetTitleSize(0.055)
-        frame.GetYaxis().SetLabelSize(0.050)
-        frame.GetYaxis().SetTitleOffset(1.0)
+        frame.GetYaxis().SetTitleSize(0.06)
+        frame.GetYaxis().SetLabelSize(0.05)
+        frame.GetYaxis().SetTitleOffset(1.2)
+        frame.GetYaxis().SetTitleFont(42)
+        frame.GetYaxis().SetLabelFont(42)
         frame.GetXaxis().SetLabelSize(0.0)
         frame.GetXaxis().SetTitleSize(0.0)
+        frame.SetTitle("")  # Remove default title
         frame.Draw()
 
-        # Add compact legend in top right (inside plot area)
-        legend = ROOT.TLegend(0.58, 0.42, 0.92, 0.89)
+        # Add compact legend on the right side with two columns (LHCb style)
+        legend = ROOT.TLegend(0.60, 0.55, 0.94, 0.90)
         legend.SetBorderSize(0)
-        legend.SetFillStyle(0)
-        legend.SetTextSize(0.035)
+        legend.SetFillStyle(0)  # Transparent background
+        legend.SetFillColor(0)
+        legend.SetTextSize(0.032)  # Smaller text to fit more
         legend.SetTextFont(42)
-        legend.SetMargin(0.15)
-        legend.AddEntry("data", "Data: B^{+} #rightarrow #bar{#Lambda}pK^{#minus}K^{+}", "lep")
-        legend.AddEntry("total", "Total fit", "l")
+        legend.SetMargin(0.12)
+        legend.SetNColumns(2)  # Two columns for compactness
+        legend.SetColumnSeparation(0.02)  # Reduce space between columns
+
+        # Add entries in a logical order for two-column layout
+        legend.AddEntry("data", "B^{+} #rightarrow #bar{#Lambda}pK^{#minus}K^{+}", "lep")
+        legend.AddEntry("total", "Fit Model", "l")
+
         state_labels = {
             "jpsi": "J/#psi",
             "etac": "#eta_{c}(1S)",
             "chic0": "#chi_{c0}(1P)",
             "chic1": "#chi_{c1}(1P)",
             "etac_2s": "#eta_{c}(2S)",
-            "background": "Combinatorial bkg.",
+            "background": "Comb. bkg.",
         }
         for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "background"]:
             legend.AddEntry(state, state_labels[state], "l")
         legend.Draw()
 
-        # Create and draw pull distribution in lower pad
+        # Create and draw pull distribution in lower pad (professional style)
         pad2.cd()
-        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))
+        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))  # No title
         pull_hist = frame.pullHist("data", "total")
         pull_frame.addPlotable(pull_hist, "P")
+
+        # Style pull plot axes
         pull_frame.GetYaxis().SetTitle("Pull")
-        pull_frame.GetYaxis().SetTitleSize(0.15)
-        pull_frame.GetYaxis().SetLabelSize(0.12)
-        pull_frame.GetYaxis().SetTitleOffset(0.35)
+        pull_frame.GetYaxis().SetTitleSize(0.13)
+        pull_frame.GetYaxis().SetLabelSize(0.11)
+        pull_frame.GetYaxis().SetTitleOffset(0.45)
+        pull_frame.GetYaxis().SetTitleFont(42)
+        pull_frame.GetYaxis().SetLabelFont(42)
         pull_frame.GetYaxis().SetNdivisions(505)
-        pull_frame.GetYaxis().SetRangeUser(-5.0, 5.0)
+        pull_frame.GetYaxis().SetRangeUser(-4.5, 4.5)
+        pull_frame.GetYaxis().CenterTitle()
+
         pull_frame.GetXaxis().SetTitle("m(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
-        pull_frame.GetXaxis().SetTitleSize(0.15)
-        pull_frame.GetXaxis().SetLabelSize(0.12)
-        pull_frame.GetXaxis().SetTitleOffset(1.0)
+        pull_frame.GetXaxis().SetTitleSize(0.13)
+        pull_frame.GetXaxis().SetLabelSize(0.11)
+        pull_frame.GetXaxis().SetTitleOffset(1.1)
+        pull_frame.GetXaxis().SetTitleFont(42)
+        pull_frame.GetXaxis().SetLabelFont(42)
         pull_frame.Draw()
 
-        # Add horizontal line at zero
-        line = ROOT.TLine(self.fit_range[0], 0.0, self.fit_range[1], 0.0)
-        line.SetLineColor(ROOT.kRed)
-        line.SetLineStyle(2)
-        line.SetLineWidth(2)
-        line.Draw()
+        # Explicitly remove the frame title
+        pull_frame.SetTitle("")
+
+        # Add horizontal reference lines at 0, ±3σ
+        line_zero = ROOT.TLine(self.fit_range[0], 0.0, self.fit_range[1], 0.0)
+        line_zero.SetLineColor(ROOT.kBlack)
+        line_zero.SetLineStyle(1)
+        line_zero.SetLineWidth(1)
+        line_zero.Draw()
+
+        # Add ±3σ reference lines (dashed gray)
+        line_plus3 = ROOT.TLine(self.fit_range[0], 3.0, self.fit_range[1], 3.0)
+        line_plus3.SetLineColor(ROOT.kGray + 1)
+        line_plus3.SetLineStyle(2)
+        line_plus3.SetLineWidth(1)
+        line_plus3.Draw()
+
+        line_minus3 = ROOT.TLine(self.fit_range[0], -3.0, self.fit_range[1], -3.0)
+        line_minus3.SetLineColor(ROOT.kGray + 1)
+        line_minus3.SetLineStyle(2)
+        line_minus3.SetLineWidth(1)
+        line_minus3.Draw()
 
         # Save plot
         canvas.cd()
