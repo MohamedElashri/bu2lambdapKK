@@ -112,6 +112,108 @@ def caleff(nPass, nGen):
     return ufloat(eff, eff_err)
 
 
+def print_table_both_formats(
+    caption, label, headers, row_names, data, track_type, is_breakdown=False
+):
+    """Print table in both LaTeX and Markdown formats
+
+    Args:
+        caption: Table caption text
+        label: LaTeX label for the table
+        headers: List of column headers (e.g., ['2016', '2017', '2018'])
+        row_names: List of row labels
+        data: Dictionary with structure data[track][year] containing efficiency values
+        track_type: Either 'LL' or 'DD'
+        is_breakdown: Boolean indicating if this is a breakdown table (affects OR row formatting)
+    """
+
+    # Print LaTeX version
+    print("\\begin{table}[htbp]")
+    print("\\centering")
+    print(f"\\caption{{{caption}}}")
+    print("\\begin{tabular}{l|ccc}")
+    print("\\hline")
+    print(f"Levels & {' & '.join(headers)} \\\\ \\hline")
+
+    for i, row_name in enumerate(row_names):
+        eff_str = ""
+        for year_idx, year in enumerate(["16", "17", "18"]):
+            if i < len(data[track_type][year]):
+                eff = round(data[track_type][year][i].nominal_value * 100, 2)
+                eff_err = round(data[track_type][year][i].std_dev * 100, 2)
+
+                # Check if this is an OR row or Total row
+                is_or_or_total = (
+                    "OR" in row_name or "Total" in row_name or "\\texttt{Total}" in row_name
+                )
+
+                if is_or_or_total:
+                    if year_idx == 2:  # Last year (2018)
+                        eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
+                    else:
+                        eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
+                else:
+                    if year_idx == 2:  # Last year (2018)
+                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
+                    else:
+                        eff_str += f" & ${eff}\\pm{eff_err}$"
+            else:
+                if year_idx == 2:
+                    eff_str += " & $0.00\\pm0.00$ \\\\"
+                else:
+                    eff_str += " & $0.00\\pm0.00$"
+
+        print(f"{row_name} {eff_str} ")
+
+    print("\\hline")
+    print("\\end{tabular}")
+    print(f"\\label{{{label}}}")
+    print("\\end{table}")
+
+    print("\n")
+
+    # Print Markdown version
+    print(f"**{caption}**\n")
+
+    # Create markdown table header
+    header_row = "| Levels | " + " | ".join(headers) + " |"
+    separator_row = "|" + "|".join(["---"] * (len(headers) + 1)) + "|"
+
+    print(header_row)
+    print(separator_row)
+
+    for i, row_name in enumerate(row_names):
+        # Clean up LaTeX formatting for markdown
+        md_row_name = (
+            row_name.replace("\\texttt{", "")
+            .replace("}", "")
+            .replace("\\bm{", "")
+            .replace("\\", "")
+        )
+        row_values = [md_row_name]
+
+        for year in ["16", "17", "18"]:
+            if i < len(data[track_type][year]):
+                eff = round(data[track_type][year][i].nominal_value * 100, 2)
+                eff_err = round(data[track_type][year][i].std_dev * 100, 2)
+
+                # Check if this is an OR row or Total row for bold formatting
+                is_or_or_total = (
+                    "OR" in row_name or "Total" in row_name or "texttt{Total}" in row_name
+                )
+
+                if is_or_or_total:
+                    row_values.append(f"**{eff}±{eff_err}**")
+                else:
+                    row_values.append(f"{eff}±{eff_err}")
+            else:
+                row_values.append("0.00±0.00")
+
+        print("| " + " | ".join(row_values) + " |")
+
+    print("\n")
+
+
 efficiency = {}
 l0_tis_breakdown = {}  # For storing L0Global_TIS breakdown
 
@@ -249,194 +351,61 @@ l0_tis_component_names.append("\\texttt{Bu\\_L0DiMuonDecision\\_TIS}")
 l0_tis_component_names.append("\\texttt{Bu\\_L0PhotonDecision\\_TIS}")
 l0_tis_component_names.append("\\texttt{Bu\\_L0ElectronDecision\\_TIS}")
 
-print("\\begin{table}[htbp]")
-print("\\centering")
-print(
-    "\\caption{Trigger efficiencies for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)}"
+# Print main trigger efficiency tables
+print_table_both_formats(
+    caption="Trigger efficiencies for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)",
+    label="tab:trigger_eff_LL",
+    headers=["2016", "2017", "2018"],
+    row_names=triggers,
+    data=efficiency,
+    track_type="LL",
 )
-print("\\begin{tabular}{l|ccc}")
-print("\\hline")
-print("Levels & 2016 & 2017 & 2018 \\\\ \\hline")
-
-for i in range(11):
-    eff_str = ""
-    for track in ["LL"]:
-        for year in ["16", "17", "18"]:
-            if i < len(efficiency[track][year]):
-                eff = round(efficiency[track][year][i].nominal_value * 100, 2)
-                eff_err = round(efficiency[track][year][i].std_dev * 100, 2)
-                if "OR" in triggers[i]:
-                    if year == "18":
-                        eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
-                    else:
-                        eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
-                else:
-                    if year == "18":
-                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
-                    else:
-                        eff_str += f" & ${eff}\\pm{eff_err}$"
-            else:
-                if year == "18":
-                    eff_str += " & $0.00\\pm0.00$ \\\\"
-                else:
-                    eff_str += " & $0.00\\pm0.00$"
-
-    print(f"{triggers[i]} {eff_str} ")
-
-print("\\hline")
-print("\\end{tabular}")
-print("\\label{tab:trigger_eff_LL}")
-print("\\end{table}")
 
 print("\n\n")
 
-print("\\begin{table}[htbp]")
-print("\\centering")
-print(
-    "\\caption{Trigger efficiencies for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)}"
+print_table_both_formats(
+    caption="Trigger efficiencies for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)",
+    label="tab:trigger_eff_DD",
+    headers=["2016", "2017", "2018"],
+    row_names=triggers,
+    data=efficiency,
+    track_type="DD",
 )
-print("\\begin{tabular}{l|ccc}")
-print("\\hline")
-print("Levels & 2016 & 2017 & 2018 \\\\ \\hline")
-
-for i in range(11):
-    eff_str = ""
-    for track in ["DD"]:
-        for year in ["16", "17", "18"]:
-            if i < len(efficiency[track][year]):
-                eff = round(efficiency[track][year][i].nominal_value * 100, 2)
-                eff_err = round(efficiency[track][year][i].std_dev * 100, 2)
-                if "OR" in triggers[i]:
-                    if year == "18":
-                        eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
-                    else:
-                        eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
-                else:
-                    if year == "18":
-                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
-                    else:
-                        eff_str += f" & ${eff}\\pm{eff_err}$"
-            else:
-                if year == "18":
-                    eff_str += " & $0.00\\pm0.00$ \\\\"
-                else:
-                    eff_str += " & $0.00\\pm0.00$"
-
-    print(f"{triggers[i]} {eff_str} ")
-
-print("\\hline")
-print("\\end{tabular}")
-print("\\label{tab:trigger_eff_DD}")
-print("\\end{table}")
 
 print("\n\n")
 
 # Print L0 TIS breakdown tables if the option is enabled
 if args.l0_breakdown:
-    # L0 TIS breakdown for LL
-    print("\\begin{table}[htbp]")
-    print("\\centering")
-    print(
-        "\\caption{ $L0$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)}"
-    )
-    print("\\begin{tabular}{l|ccc}")
-    print("\\hline")
-    print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
+    # Add Total row data to breakdown
+    l0_tis_with_total = l0_tis_component_names + ["\\texttt{Total}"]
 
-    for i in range(len(L0_TIS_components)):
-        eff_str = ""
-        for track in ["LL"]:
-            for year in ["16", "17", "18"]:
-                if i < len(l0_tis_breakdown[track][year]):
-                    eff = round(l0_tis_breakdown[track][year][i].nominal_value * 100, 2)
-                    eff_err = round(l0_tis_breakdown[track][year][i].std_dev * 100, 2)
-                    if year == "18":
-                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
-                    else:
-                        eff_str += f" & ${eff}\\pm{eff_err}$"
-                else:
-                    if year == "18":
-                        eff_str += " & $0.00\\pm0.00$ \\\\"
-                    else:
-                        eff_str += " & $0.00\\pm0.00$"
-
-        print(f"{l0_tis_component_names[i]} {eff_str} ")
-
-    # Add OR row (Bu_L0Global_TIS)
-    or_eff_str = ""
-    for track in ["LL"]:
+    # Create a modified breakdown dict that includes the Total row
+    l0_tis_breakdown_with_total = {}
+    for track in ["LL", "DD"]:
+        l0_tis_breakdown_with_total[track] = {}
         for year in ["16", "17", "18"]:
-            # Use the value already calculated for Bu_L0Global_TIS in the main efficiency table
-            if len(efficiency[track][year]) > 0:
-                eff = round(efficiency[track][year][0].nominal_value * 100, 2)
-                eff_err = round(efficiency[track][year][0].std_dev * 100, 2)
-                if year == "18":
-                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
-                else:
-                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
-            else:
-                if year == "18":
-                    or_eff_str += " & $0.00\\pm0.00$ \\\\ \\hline"
-                else:
-                    or_eff_str += " & $0.00\\pm0.00$"
+            l0_tis_breakdown_with_total[track][year] = l0_tis_breakdown[track][year] + [
+                efficiency[track][year][0]
+            ]
 
-    print(f"\\texttt{{Total}} {or_eff_str} ")
-
-    print("\\end{tabular}")
-    print("\\label{tab:l0_tis_breakdown_LL}")
-    print("\\end{table}")
+    print_table_both_formats(
+        caption="$L0$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{LL}} p K^+ K^-$ selection (\\%)",
+        label="tab:l0_tis_breakdown_LL",
+        headers=["2016", "2017", "2018"],
+        row_names=l0_tis_with_total,
+        data=l0_tis_breakdown_with_total,
+        track_type="LL",
+        is_breakdown=True,
+    )
 
     print("\n\n")
 
-    # L0 TIS breakdown for DD
-    print("\\begin{table}[htbp]")
-    print("\\centering")
-    print(
-        "\\caption{$LO$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)}"
+    print_table_both_formats(
+        caption="$L0$ contributions for $B^+ \\to \\bar{\\Lambda}^0_{\\text{DD}} p K^+ K^-$ selection (\\%)",
+        label="tab:l0_tis_breakdown_DD",
+        headers=["2016", "2017", "2018"],
+        row_names=l0_tis_with_total,
+        data=l0_tis_breakdown_with_total,
+        track_type="DD",
+        is_breakdown=True,
     )
-    print("\\begin{tabular}{l|ccc}")
-    print("\\hline")
-    print("L0 TIS Component & 2016 & 2017 & 2018 \\\\ \\hline")
-
-    for i in range(len(L0_TIS_components)):
-        eff_str = ""
-        for track in ["DD"]:
-            for year in ["16", "17", "18"]:
-                if i < len(l0_tis_breakdown[track][year]):
-                    eff = round(l0_tis_breakdown[track][year][i].nominal_value * 100, 2)
-                    eff_err = round(l0_tis_breakdown[track][year][i].std_dev * 100, 2)
-                    if year == "18":
-                        eff_str += f" & ${eff}\\pm{eff_err}$ \\\\"
-                    else:
-                        eff_str += f" & ${eff}\\pm{eff_err}$"
-                else:
-                    if year == "18":
-                        eff_str += " & $0.00\\pm0.00$ \\\\"
-                    else:
-                        eff_str += " & $0.00\\pm0.00$"
-
-        print(f"{l0_tis_component_names[i]} {eff_str} ")
-
-    # Add Total row (Bu_L0Global_TIS)
-    or_eff_str = ""
-    for track in ["DD"]:
-        for year in ["16", "17", "18"]:
-            # Use the value already calculated for Bu_L0Global_TIS in the main efficiency table
-            if len(efficiency[track][year]) > 0:
-                eff = round(efficiency[track][year][0].nominal_value * 100, 2)
-                eff_err = round(efficiency[track][year][0].std_dev * 100, 2)
-                if year == "18":
-                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$ \\\\ \\hline"
-                else:
-                    or_eff_str += f" & $\\bm{{{eff}\\pm{eff_err}}}$"
-            else:
-                if year == "18":
-                    or_eff_str += " & $0.00\\pm0.00$ \\\\ \\hline"
-                else:
-                    or_eff_str += " & $0.00\\pm0.00$"
-
-    print(f"\\texttt{{Total}} {or_eff_str} ")
-
-    print("\\end{tabular}")
-    print("\\label{tab:l0_tis_breakdown_DD}")
-    print("\\end{table}")
