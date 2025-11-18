@@ -215,7 +215,7 @@ class BranchConfig:
         Create mapping from actual branch names to common names
 
         This is useful for renaming branches after loading so that
-        your analysis code can use common names regardless of data/MC
+        our analysis code can use common names regardless of data/MC
 
         Parameters:
         - branches: List of actual branch names from file

@@ -16,7 +16,7 @@ Phases:
   8. Branching fraction ratios
 
 Usage:
-  python run_pipeline.py [--skip-optimization] [--use-cached] [--years 2016,2017]
+  python run_pipeline.py [--years 2016,2017,2018] [--no-cache] [--use-manual-cuts]
 """
 
 from __future__ import annotations
@@ -459,7 +459,7 @@ class PipelineManager:
                 return cached
 
         print("\n  Running full 2D optimization (this may take 30-60 minutes)")
-        print("    You can skip this and use default cuts if needed\n")
+        print("    We can skip this and use default cuts if needed\n")
 
         # Combine track types (LL + DD) for optimizer
         # Optimizer expects: {state: {year: awkward_array}} and {year: awkward_array}

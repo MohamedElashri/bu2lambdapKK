@@ -167,7 +167,7 @@ Bu_DTF_chi2 = {cut_type = "less", value = 30.0}
 Bu_FDCHI2_OWNPV = {cut_type = "greater", value = 100.0}
 Bu_IPCHI2_OWNPV = {cut_type = "less", value = 10.0}
 # Optional: Define manual cuts to SKIP grid scan optimization
-# Useful for testing, validation, or if you want to fix specific cut values
+# Useful for testing, validation, or if we want to fix specific cut values
 # Leave empty to use optimized cuts from Phase 3
 #
 # To use manual cuts, we either:

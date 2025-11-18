@@ -48,7 +48,9 @@ make list-outputs
 # Full pipeline with all years (per-year + combined fits)
 python run_pipeline.py --years 2016,2017,2018
 
-# Single year for testing
+# Single year for testing (default)
+python run_pipeline.py
+# or explicitly:
 python run_pipeline.py --years 2016
 
 # Force reprocessing (no cache)
@@ -83,10 +85,10 @@ make pipeline-no-cache
 # or
 python run_pipeline.py --no-cache --years 2016,2017,2018
 
-# Clear specific cached results
-rm cache/phase5_fit_results.pkl  # Refit masses
-rm cache/phase2_*.pkl            # Reload data
-make clean-cache                 # Clear all cache
+# Clear all cache
+make clean-cache
+# or manually:
+rm cache/data/*.pkl cache/metadata/*.json
 ```
 
 ## Manual Cuts (Skip Optimization)
@@ -154,7 +156,7 @@ p_ProbNNp = { cut_type = "greater", value = 0.25 }
 
 ### Output
 
-Manual cuts create the same `tables/optimized_cuts.csv` format:
+Manual cuts create the same `analysis_output/tables/optimized_cuts.csv` format:
 - Compatible with all downstream phases
 - `max_fom = 0.0` (not optimized)
 - Applies same cuts to **all states** (not state-dependent)
@@ -204,10 +206,11 @@ make pipeline
 
 ## Pipeline Phases
 
-### Phase 0: Branch Discovery (Manual)
-**Status:** Already completed
-- Branch names identified and documented
-- Configuration files updated
+### Phase 0: Configuration Setup
+**Status:** Completed
+- Branch names identified and documented in `modules/branch_config.py`
+- All TOML configuration files in `config/` directory
+- Selection cuts defined in `config/selection.toml`
 
 ### Phase 1: Configuration Validation
 **Status:** Automatic
@@ -230,31 +233,31 @@ make pipeline
   - PID: ProbNNp > 0.2
 - Saves filtered events to cache
 
-**Typical efficiencies:**
-- Data: ~27% (harsh cuts due to background)
-- MC: ~52% (cleaner signal events)
-
 **Output:**
-- `cache/phase2_data_after_lambda.pkl` - Cached data
-- `cache/phase2_mc_after_lambda.pkl` - Cached MC
+- Cached to `cache/data/*.pkl` (hashed filenames for automatic invalidation)
 
 ### Phase 3: Selection Optimization (Optional)
-**Purpose:** Find optimal Bu-level cuts using 2D FOM scans
+**Purpose:** Find optimal Bu-level cuts using 7D grid scan with FOM
 **Time:** 30-60 minutes
 **Caching:** Yes
-**Can Skip:** Yes - use default cuts
+**Can Skip:** Yes - use manual cuts from config
 
 **What it does:**
-- Scans Bu_PT, IPCHI2_OWNPV, and other variables
-- Computes Figure of Merit (FOM) for each cut value
-- Identifies optimal cuts per state
+- Performs exhaustive 7-dimensional grid scan over all cut combinations
+- Variables: Bu_PT, Bu_FDCHI2_OWNPV, Bu_IPCHI2_OWNPV, Bu_DTF_chi2, h1_ProbNNk, h2_ProbNNk, p_ProbNNp
+- Grid size: ~3,888 combinations per state (state-dependent optimization)
+- Computes Figure of Merit (FOM = n_sig/√(n_bkg + n_sig)) for each combination
+- Identifies optimal cuts independently for each charmonium state
 - Creates optimization plots
 
 **Output:**
-- `tables/optimized_cuts.csv` - Optimal cuts
-- `plots/optimization/*.pdf` - FOM scan plots
+- `analysis_output/tables/optimized_cuts.csv` - Main cuts file (used by pipeline)
+- `analysis_output/tables/optimized_cuts_nd.csv` - Detailed ND cuts (all states)
+- `analysis_output/tables/optimized_cuts_nd_{state}.csv` - Per-state cuts
+- `analysis_output/tables/optimized_cuts_summary.csv` - Summary table
+- `analysis_output/plots/optimization/*.pdf` - FOM scan plots (if created)
 
-**Note:** For draft analysis, you can skip this and use simple cuts (e.g., Bu_PT > 2000 MeV)
+**Note:** Use `--use-manual-cuts` flag to skip optimization and use manual cuts from `config/selection.toml`
 
 ### Phase 4: Apply Optimized Cuts
 **Purpose:** Apply Bu-level cuts to data and MC
@@ -289,12 +292,9 @@ make pipeline
 - Creates publication-quality fit plots
 
 **Output:**
-- `tables/phase5_yields.csv` - Yields per state/year + combined
-- `plots/fits/mass_fit_2016.pdf` - Individual year fits
-- `plots/fits/mass_fit_2017.pdf`
-- `plots/fits/mass_fit_2018.pdf`
-- `plots/fits/mass_fit_combined.pdf` - **Combined 2016-2018 fit**
-- `cache/phase5_fit_results.pkl` - Complete fit results
+- `analysis_output/tables/phase5_yields.csv` - Yields per state/year
+- `analysis_output/plots/fits/mass_fit_{year}.pdf` - Individual year fits
+- Cached to `cache/data/*.pkl` (fit results with hashed filename)
 
 **Typical yields (2016-2018 combined):**
 ```
@@ -319,10 +319,10 @@ combined:
 - Propagates errors through ratios
 
 **Output:**
-- `tables/efficiencies.csv` - Efficiencies per state/year
-- `tables/efficiency_ratios.csv` - Ratios ε_J/ψ / ε_state
-- `tables/efficiencies.md` - Human-readable table
-- `cache/phase6_efficiencies.pkl` - Cached results
+- `analysis_output/tables/efficiencies.csv` - Efficiencies per state/year
+- `analysis_output/tables/efficiency_ratios.csv` - Ratios ε_J/ψ / ε_state
+- `analysis_output/tables/efficiencies.md` - Human-readable table
+- Cached to `cache/data/*.pkl` (efficiency results with hashed filename)
 
 **Expected efficiencies:**
 ```
@@ -345,10 +345,10 @@ Ratios: ~0.96-1.11 (close to 1.0)
 - Generates final summary
 
 **Output:**
-- `tables/branching_fraction_ratios.csv` - Final BR ratios
-- `tables/yield_consistency.csv` - Consistency check
-- `plots/yield_consistency_check.pdf` - Consistency plot
-- `results/final_results.md` - Complete summary
+- `analysis_output/tables/branching_fraction_ratios.csv` - Final BR ratios
+- `analysis_output/tables/yield_consistency.csv` - Consistency check
+- `analysis_output/plots/yield_consistency_check.pdf` - Consistency plot
+- `analysis_output/results/final_results.md` - Complete summary
 
 **Actual results (2016-2018):**
 ```
@@ -368,30 +368,33 @@ The pipeline uses intelligent caching to avoid reprocessing:
 All cached results stored in `cache/` directory:
 ```
 cache/
-├── phase2_data_after_lambda.pkl    # Data after Lambda cuts
-├── phase2_mc_after_lambda.pkl      # MC after Lambda cuts
-├── phase3_optimized_cuts.pkl       # Optimized cuts
-├── phase5_fit_results.pkl          # Fit results
-└── phase6_efficiencies.pkl         # Efficiencies
+├── data/
+│   └── *.pkl                       # Cached data (hashed filenames)
+└── metadata/
+    └── *.json                      # Cache metadata (hashed filenames)
 ```
+
+The cache system uses content hashing for automatic invalidation when inputs change.
 
 ### Cache Usage
 ```bash
 # Use cache when available (default)
-python run_pipeline.py --use-cached
+python run_pipeline.py
 
 # Force reprocessing (ignore cache)
-python run_pipeline.py --no-cache
+python run_pipeline.py --no-cache --years 2016,2017,2018
 
 # Clear cache manually
-rm cache/*.pkl
+make clean-cache
+# or
+rm cache/data/*.pkl cache/metadata/*.json
 ```
 
 ### When to Clear Cache
 - After updating configuration files
 - After modifying selection cuts
 - After discovering data issues
-- When you want fresh results
+- When we want fresh results
 
 ## Error Handling
 
@@ -414,9 +417,9 @@ Solution: Process one year at a time: --years 2016
 
 **Issue:** "RooFit segmentation fault"
 ```
-Solution: This is a known ROOT issue. Try:
-  1. Reduce data size (single year)
-  2. Run infrastructure tests instead
+Solution: Try:
+  1. Reduce data size: python run_pipeline.py --years 2016
+  2. Clear cache and retry: make clean-cache
   3. Update ROOT version
 ```
 
@@ -483,19 +486,32 @@ Each ROOT file should contain:
 
 ## Output Files
 
+All output files are located in the `analysis_output/` directory:
+
 ### Tables (CSV format)
+Located in `analysis_output/tables/`:
 - `phase5_yields.csv` - Fitted yields
 - `efficiencies.csv` - Selection efficiencies
 - `efficiency_ratios.csv` - ε_J/ψ / ε_state
 - `branching_fraction_ratios.csv` - Final BR ratios
 - `yield_consistency.csv` - N/(L×ε) per year
-- `optimized_cuts.csv` - Optimal cuts (if optimization run)
+- `optimized_cuts.csv` - Main cuts file (used by pipeline)
+- `optimized_cuts_nd.csv` - Detailed ND cuts (all states)
+- `optimized_cuts_nd_{state}.csv` - Per-state cuts files
+- `optimized_cuts_summary.csv` - Optimization summary
+- `efficiencies.md` - Human-readable efficiency table
+- `phase4_summary.json` - Phase 4 processing summary
 
-### Plots (pdf format)
-- `fit_*.pdf` - Mass fit results
+### Plots (PDF format)
+Located in `analysis_output/plots/`:
+- `fits/mass_fit_{year}.pdf` - Mass fit results per year
 - `yield_consistency_check.pdf` - Consistency across years
+- `optimization/*.pdf` - FOM scan plots (if created)
+- `lambda_mass/*.pdf` - Lambda mass distributions (from scripts)
+- `optimization_variables/*.pdf` - Variable distributions (from scripts)
 
 ### Results (Markdown)
+Located in `analysis_output/results/`:
 - `final_results.md` - Complete analysis summary with:
   - BR ratio results
   - Comparison with theory
@@ -506,10 +522,10 @@ Each ROOT file should contain:
 
 ### First Time Running
 ```bash
-# 1. Test with single year (fast)
+# 1. Test with single year (fast, default is 2016)
 make pipeline-2016
 # or
-python run_pipeline.py --years 2016
+python run_pipeline.py
 
 # 2. View results
 make show-results
@@ -543,15 +559,18 @@ make show-results
 
 ### Production Run
 ```bash
-# Full analysis with all data
-python run_pipeline.py --skip-optimization
+# Full analysis with all data (optimized cuts)
+python run_pipeline.py --years 2016,2017,2018
+
+# Or with manual cuts (faster)
+python run_pipeline.py --use-manual-cuts --years 2016,2017,2018
 ```
 
 ## Performance Tips
 
 1. **Use caching:** Default behavior, saves hours of reprocessing
 2. **Start small:** Test with one year first
-3. **Skip optimization:** Use default cuts for draft analysis
+3. **Skip optimization:** Use `--use-manual-cuts` flag for manual cuts
 4. **Monitor memory:** Large datasets may need subset processing
 5. **Parallel processing:** Not yet implemented, but possible for Phase 3
 
@@ -559,8 +578,8 @@ python run_pipeline.py --skip-optimization
 
 After completing the pipeline:
 
-1. **Review results:** Check `results/final_results.md`
-2. **Validate fits:** Inspect fit plots in `plots/`
+1. **Review results:** Check `analysis_output/results/final_results.md`
+2. **Validate fits:** Inspect fit plots in `analysis_output/plots/fits/`
 3. **Check consistency:** Review yield consistency across years
 4. **Add systematics:** Implement systematic uncertainty studies
 5. **Full analysis:** Add reconstruction, PID, trigger efficiencies
@@ -584,7 +603,7 @@ Scripts for visualization are located in the `scripts/` directory.
 
 **Usage:**
 ```bash
-# From ana/scripts directory
+# From analysis/scripts directory
 cd scripts
 
 # Plot all years (default: 2016, 2017, 2018)
@@ -599,7 +618,7 @@ python plot_lambda_mass.py --mc-state etac
 
 **Output:**
 ```
-plots/lambda_mass/
+analysis_output/plots/lambda_mass/
 ├── lambda_mass_2016_Jpsi.pdf
 ├── lambda_mass_2017_Jpsi.pdf
 ├── lambda_mass_2018_Jpsi.pdf
@@ -608,7 +627,7 @@ plots/lambda_mass/
 
 **Plot features:**
 - MC (left): Shows signal shape across full mass range
-- Data (right): $B^+ \to \bar{\Lambda} p K^+ K^-$ decay
+- Data (right): B⁺ → Λ̄pK⁺K⁻ decay events
 - Red dashed lines: Cut boundaries [1111, 1121] MeV
 - Green shaded region: Signal window used in analysis
 - Full distribution shown to visualize background outside cuts
@@ -643,7 +662,7 @@ plots/lambda_mass/
 
 **Usage:**
 ```bash
-# From ana/scripts directory
+# From analysis/scripts directory
 cd scripts
 
 # Plot all years with optimal cuts from all states (default)
@@ -658,7 +677,7 @@ python plot_optimization_variables.py --mc-state etac
 
 **Output:**
 ```
-plots/optimization_variables/
+analysis_output/plots/optimization_variables/
 ├── 2016/
 │   ├── Bu_PT_2016.pdf
 │   ├── Bu_FDCHI2_OWNPV_2016.pdf
