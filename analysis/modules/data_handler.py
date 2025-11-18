@@ -26,8 +26,9 @@ def _show_loading_messages() -> bool:
         from pathlib import Path as _Path
 
         sys.path.insert(0, str(_Path(__file__).parent.parent))
+        from utils.logging_config import show_data_loading_messages
 
-        return _show_loading_messages()
+        return show_data_loading_messages()
     except Exception:
         # If import fails, default to showing messages
         return True
