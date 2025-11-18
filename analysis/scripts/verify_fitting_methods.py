@@ -13,12 +13,60 @@ Usage:
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
+import awkward as ak
 import numpy as np
 import ROOT
 
+# Add modules directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "modules"))
+from mass_fitter import MassFitter
+
 # Suppress RooFit messages
 ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.ERROR)
+
+
+class MockConfig:
+    """Mock configuration object for testing MassFitter."""
+
+    def __init__(self, use_binned_fit: bool = True):
+        """Initialize mock config with fitting parameters."""
+        self.particles = {
+            "mass_windows": {
+                "charmonium_fit_range": (3000.0, 3200.0),
+            },
+            "pdg_masses": {
+                "jpsi": 3096.9,
+                "etac_1s": 2983.9,
+                "chic0": 3414.75,
+                "chic1": 3510.66,
+                "etac_2s": 3637.0,
+            },
+            "pdg_widths": {
+                "jpsi": 0.093,
+                "etac_1s": 31.9,
+                "chic0": 10.5,
+                "chic1": 0.84,
+                "etac_2s": 11.3,
+            },
+            "fitting": {
+                "use_binned_fit": use_binned_fit,
+                "bin_width": 5.0,
+                "argus_endpoint_offset": 200.0,
+            },
+        }
+        self.selection = {
+            "bu_fixed_selection": {
+                "mass_corrected_min": 5200.0,
+                "mass_corrected_max": 5400.0,
+            },
+        }
+        self.paths = {
+            "output": {
+                "plots_dir": Path(__file__).parent.parent / "analysis_output" / "plots",
+            },
+        }
 
 
 def generate_toy_data(
@@ -29,9 +77,11 @@ def generate_toy_data(
     resolution: float = 5.0,
     fit_range: tuple[float, float] = (3000.0, 3200.0),
     seed: int = 42,
-) -> np.ndarray:
+) -> ak.Array:
     """
     Generate toy Monte Carlo data: Voigtian signal + ARGUS background.
+
+    Returns data in awkward array format compatible with MassFitter.
 
     Args:
         n_signal: Number of signal events
@@ -43,7 +93,7 @@ def generate_toy_data(
         seed: Random seed
 
     Returns:
-        Array of generated masses
+        Awkward array with M_LpKm_h2 and Bu_MM_corrected branches
     """
     ROOT.RooRandom.randomGenerator().SetSeed(seed)
 
@@ -77,116 +127,66 @@ def generate_toy_data(
     np.random.seed(seed)
     np.random.shuffle(masses)
 
-    return masses
+    # Create awkward array with required structure
+    # MassFitter expects M_LpKm_h2 and Bu_MM_corrected branches
+    data = ak.Array(
+        {
+            "M_LpKm_h2": masses,
+            "Bu_MM_corrected": np.full(len(masses), 5279.0),  # Nominal B+ mass
+        }
+    )
+
+    return data
 
 
-def fit_data(
-    masses: np.ndarray,
-    fit_range: tuple[float, float],
-    nbins: int,
+def fit_with_mass_fitter(
+    data: ak.Array,
     use_binned: bool,
     true_signal: int,
-    true_bkg: int,
 ) -> dict:
     """
-    Fit data with either binned or unbinned maximum likelihood.
+    Fit data using MassFitter class.
 
     Args:
-        masses: Array of mass values
-        fit_range: (min, max) fit range
-        nbins: Number of bins for binned fit
+        data: Awkward array with M_LpKm_h2 branch
         use_binned: True for binned fit, False for unbinned
         true_signal: True number of signal events (for pull calculation)
-        true_bkg: True number of background events
 
     Returns:
         Dictionary with fit results
     """
-    # Define observable
-    x = ROOT.RooRealVar("x", "m(mass) [MeV]", fit_range[0], fit_range[1])
-    x.setBins(nbins)
+    # Create mock config
+    config = MockConfig(use_binned_fit=use_binned)
 
-    # Create dataset
-    if use_binned:
-        # Create unbinned first, then convert to binned
-        temp_data = ROOT.RooDataSet("temp_data", "temp_data", ROOT.RooArgSet(x))
-        for m in masses:
-            x.setVal(m)
-            temp_data.add(ROOT.RooArgSet(x))
-        dataset = ROOT.RooDataHist("data", "data", ROOT.RooArgSet(x), temp_data)
-    else:
-        # Unbinned dataset
-        dataset = ROOT.RooDataSet("data", "data", ROOT.RooArgSet(x))
-        for m in masses:
-            x.setVal(m)
-            dataset.add(ROOT.RooArgSet(x))
+    # Create fitter
+    fitter = MassFitter(config)
 
-    # Build model
-    # Signal: Voigtian
-    mean = ROOT.RooRealVar("mean", "mean", 3096.9, 3090.0, 3105.0)
-    sigma = ROOT.RooRealVar("sigma", "sigma", 5.0, 1.0, 20.0)
-    gamma = ROOT.RooRealVar("gamma", "gamma", 0.093)
-    gamma.setConstant(True)
-    signal_pdf = ROOT.RooVoigtian("signal", "signal", x, mean, gamma, sigma)
+    # Prepare data by year (use "test" as year label)
+    data_by_year = {"test": data}
 
-    # Background: ARGUS
-    m0 = ROOT.RooRealVar("m0", "m0", fit_range[1] + 200.0)
-    m0.setConstant(True)
-    c = ROOT.RooRealVar("c", "c", -20.0, -100.0, -0.1)
-    p = ROOT.RooRealVar("p", "p", 0.5)
-    p.setConstant(True)
-    bkg_pdf = ROOT.RooArgusBG("background", "background", x, m0, c, p)
+    # Perform fit (disable combined fit since we only have one dataset)
+    results = fitter.perform_fit(data_by_year, fit_combined=False)
 
-    # Yields
-    n_signal = ROOT.RooRealVar("n_signal", "n_signal", len(masses) * 0.2, 0, len(masses))
-    n_bkg = ROOT.RooRealVar("n_bkg", "n_bkg", len(masses) * 0.8, 0, len(masses) * 2)
+    # Extract results for "test" year
+    test_yields = results["yields"]["test"]
+    fit_result = results["fit_results"]["test"]
 
-    # Combined model
-    model = ROOT.RooAddPdf(
-        "model",
-        "model",
-        ROOT.RooArgList(signal_pdf, bkg_pdf),
-        ROOT.RooArgList(n_signal, n_bkg),
-    )
-
-    # Fit
-    fit_result = model.fitTo(
-        dataset,
-        ROOT.RooFit.Save(),
-        ROOT.RooFit.Extended(True),
-        ROOT.RooFit.PrintLevel(-1),
-        ROOT.RooFit.Strategy(2),
-    )
-
-    # Extract results
-    n_sig_fitted = n_signal.getVal()
-    n_sig_error = n_signal.getError()
-    n_bkg_fitted = n_bkg.getVal()
-    mean_fitted = mean.getVal()
-    sigma_fitted = sigma.getVal()
+    # Get J/psi yield (closest to our signal)
+    n_sig_fitted, n_sig_error = test_yields["jpsi"]
 
     # Calculate pull
     pull = (n_sig_fitted - true_signal) / n_sig_error if n_sig_error > 0 else 0
 
-    # Fit quality
-    status = fit_result.status()
-    nll = fit_result.minNll()
-    edm = fit_result.edm()
-
     return {
         "n_signal": n_sig_fitted,
         "n_signal_error": n_sig_error,
-        "n_background": n_bkg_fitted,
-        "mass": mean_fitted,
-        "resolution": sigma_fitted,
+        "n_background": test_yields["background"][0],
+        "mass": results["masses"]["jpsi"][0],
+        "resolution": results["resolution"][0],
         "pull": pull,
-        "status": status,
-        "nll": nll,
-        "edm": edm,
-        "fit_result": fit_result,
-        "model": model,
-        "dataset": dataset,
-        "x": x,
+        "status": fit_result.status(),
+        "nll": fit_result.minNll(),
+        "edm": fit_result.edm(),
     }
 
 
@@ -194,6 +194,7 @@ def main():
     """Run verification tests."""
     print("=" * 80)
     print("BINNED vs UNBINNED FITTING VERIFICATION")
+    print("Testing our MassFitter implementation")
     print("=" * 80)
 
     # Parameters
@@ -211,7 +212,7 @@ def main():
     print(f"  Binning = {nbins} bins × {(fit_range[1]-fit_range[0])/nbins:.1f} MeV/bin")
 
     # Generate toy data
-    masses = generate_toy_data(
+    data = generate_toy_data(
         n_signal=true_signal,
         n_background=true_background,
         signal_mass=signal_mass,
@@ -219,20 +220,17 @@ def main():
         seed=12345,
     )
 
-    print(f"\nGenerated {len(masses)} events")
+    print(f"\nGenerated {len(data)} events")
 
     # === BINNED FIT ===
     print("\n" + "-" * 80)
-    print("BINNED MAXIMUM LIKELIHOOD FIT")
+    print("BINNED MAXIMUM LIKELIHOOD FIT (using MassFitter)")
     print("-" * 80)
 
-    results_binned = fit_data(
-        masses=masses,
-        fit_range=fit_range,
-        nbins=nbins,
+    results_binned = fit_with_mass_fitter(
+        data=data,
         use_binned=True,
         true_signal=true_signal,
-        true_bkg=true_background,
     )
 
     print("\nFitted parameters:")
@@ -250,16 +248,13 @@ def main():
 
     # === UNBINNED FIT ===
     print("\n" + "-" * 80)
-    print("UNBINNED MAXIMUM LIKELIHOOD FIT")
+    print("UNBINNED MAXIMUM LIKELIHOOD FIT (using MassFitter)")
     print("-" * 80)
 
-    results_unbinned = fit_data(
-        masses=masses,
-        fit_range=fit_range,
-        nbins=nbins,
+    results_unbinned = fit_with_mass_fitter(
+        data=data,
         use_binned=False,
         true_signal=true_signal,
-        true_bkg=true_background,
     )
 
     print("\nFitted parameters:")
@@ -275,17 +270,58 @@ def main():
     print(f"  EDM: {results_unbinned['edm']:.6f}")
     print(f"  Pull: {results_unbinned['pull']:.2f}σ")
 
-    # === COMPARISON ===
+    # === COMPARISON TABLE ===
     print("\n" + "=" * 80)
-    print("COMPARISON & VERIFICATION")
+    print("RESULTS COMPARISON TABLE")
+    print("=" * 80)
+
+    # Calculate derived quantities
+    binned_ok = abs(results_binned["pull"]) < 3
+    unbinned_ok = abs(results_unbinned["pull"]) < 3
+    error_ratio = results_unbinned["n_signal_error"] / results_binned["n_signal_error"]
+    nll_diff = abs(results_binned["nll"] - results_unbinned["nll"])
+
+    # Print comparison table
+    print("\n┌─────────────────────────┬──────────────────┬──────────────────┬──────────────────┐")
+    print("│ Parameter               │ True Value       │ Binned Fit       │ Unbinned Fit     │")
+    print("├─────────────────────────┼──────────────────┼──────────────────┼──────────────────┤")
+    print(
+        f"│ N(signal)               │ {true_signal:16.0f} │ {results_binned['n_signal']:16.0f} │ {results_unbinned['n_signal']:16.0f} │"
+    )
+    print(
+        f"│ N(signal) error         │ {'—':>16s} │ {results_binned['n_signal_error']:16.1f} │ {results_unbinned['n_signal_error']:16.1f} │"
+    )
+    print(
+        f"│ N(background)           │ {true_background:16.0f} │ {results_binned['n_background']:16.0f} │ {results_unbinned['n_background']:16.0f} │"
+    )
+    print(
+        f"│ Mass [MeV]              │ {signal_mass:16.2f} │ {results_binned['mass']:16.2f} │ {results_unbinned['mass']:16.2f} │"
+    )
+    print(
+        f"│ Resolution [MeV]        │ {'5.00 (input)':>16s} │ {results_binned['resolution']:16.2f} │ {results_unbinned['resolution']:16.2f} │"
+    )
+    print("├─────────────────────────┼──────────────────┼──────────────────┼──────────────────┤")
+    print(
+        f"│ Pull [σ]                │ {'—':>16s} │ {results_binned['pull']:16.2f} │ {results_unbinned['pull']:16.2f} │"
+    )
+    print(
+        f"│ Fit status              │ {'—':>16s} │ {results_binned['status']:16d} │ {results_unbinned['status']:16d} │"
+    )
+    print(
+        f"│ Min NLL                 │ {'—':>16s} │ {results_binned['nll']:16.1f} │ {results_unbinned['nll']:16.1f} │"
+    )
+    print(
+        f"│ EDM                     │ {'—':>16s} │ {results_binned['edm']:16.6f} │ {results_unbinned['edm']:16.6f} │"
+    )
+    print("└─────────────────────────┴──────────────────┴──────────────────┴──────────────────┘")
+
+    # Verification checks
+    print("\n" + "=" * 80)
+    print("VERIFICATION CHECKS")
     print("=" * 80)
 
     print("\n1. PARAMETER RECOVERY:")
     print(f"   Both methods should recover true N(signal) = {true_signal}")
-
-    binned_ok = abs(results_binned["pull"]) < 3
-    unbinned_ok = abs(results_unbinned["pull"]) < 3
-
     print(
         f"   Binned:   {results_binned['n_signal']:.0f} ± {results_binned['n_signal_error']:.0f} "
         f"(pull = {results_binned['pull']:.2f}σ) {'✓' if binned_ok else '✗'}"
@@ -297,13 +333,11 @@ def main():
 
     print("\n2. ERROR COMPARISON:")
     print("   Unbinned should have equal or smaller errors")
-    error_ratio = results_unbinned["n_signal_error"] / results_binned["n_signal_error"]
     print(f"   Error(unbinned) / Error(binned) = {error_ratio:.3f}")
     print(f"   Expected: ≤ 1.0  {'✓' if error_ratio <= 1.05 else '✗'}")
 
     print("\n3. NLL DIFFERENCE:")
     print("   NLL values should be DIFFERENT (not the same method)")
-    nll_diff = abs(results_binned["nll"] - results_unbinned["nll"])
     print(f"   |NLL(binned) - NLL(unbinned)| = {nll_diff:.1f}")
     print(f"   Expected: > 1.0  {'✓' if nll_diff > 1.0 else '✗ WARNING'}")
 
