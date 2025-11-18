@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Reconstruction and Stripping Efficiency Calculator
-===================================================
+Reconstruction Efficiency Calculator
+=====================================
 
-This script calculates the reconstruction and stripping efficiencies for
-B⁺ → Λ̄⁰ p K⁺ K⁻ decay with various charmonium resonances in the pΛ̄⁰ system.
+This script calculates the reconstruction efficiency for B⁺ → Λ̄⁰ p K⁺ K⁻
+decay with various charmonium resonances in the pΛ̄⁰ system.
 
 Purpose:
 --------
@@ -16,14 +16,13 @@ channels have the same final state particles), we calculate them to:
 
 Physical Interpretation:
 ------------------------
-- **Reconstruction Efficiency**: Fraction of generated events where all final
-  state particles (p, Λ̄⁰ daughters, K⁺, K⁻) are successfully reconstructed
-  as tracks with proper track types:
+**Reconstruction Efficiency**: Fraction of generated events where all final
+state particles (p, Λ̄⁰ daughters, K⁺, K⁻) are successfully reconstructed
+and correctly truth-matched:
+  * All particles correctly identified (PDG IDs match)
+  * Proper mother-daughter relationships preserved
   * Λ̄⁰ daughters: Long (LL) or Downstream (DD) tracks
   * Bachelor p, K⁺, K⁻: Long tracks
-
-- **Stripping Efficiency**: Fraction of reconstructed events that pass the
-  stripping selection criteria. This is applied on top of reconstruction.
 
 Truth Matching Criteria:
 ------------------------
@@ -41,13 +40,13 @@ For B⁺ → Λ̄⁰ p K⁺ K⁻ (with charmonium resonances):
 
 Expected Results:
 -----------------
-- Reconstruction efficiency: ~60-70% (depends on Λ̄⁰ category LL/DD)
-- Stripping efficiency: ~80-90% (depends on stripping cuts)
+- Reconstruction efficiency: ~40% (LL), ~55% (DD)
 - **Important**: Ratios between channels should be ~1.0 ± small corrections
+- Exception: ηc(1S) shows ~22% lower efficiency due to kinematic differences
 
 Usage:
 ------
-    python reco_stripping_eff.py [options]
+    python reco_eff.py [options]
 
     Options:
         -v, --verbose          : Enable verbose debugging output
@@ -58,16 +57,16 @@ Usage:
 Examples:
 ---------
     # Calculate for all states
-    python reco_stripping_eff.py
+    python reco_eff.py
 
     # Calculate for J/ψ only with verbose output
-    python reco_stripping_eff.py -s Jpsi -v
+    python reco_eff.py -s Jpsi -v
 
     # Calculate and save to file
-    python reco_stripping_eff.py -o reco_strip_eff_results.txt
+    python reco_eff.py -o reco_eff_results.txt
 
     # Show residual differences for systematic uncertainties
-    python reco_stripping_eff.py --show-residuals
+    python reco_eff.py --show-residuals
 """
 
 import argparse
@@ -196,41 +195,6 @@ def get_truth_matching_mask(events: ak.Array) -> ak.Array:
     return mask
 
 
-def get_stripping_mask(events: ak.Array) -> ak.Array:
-    """
-    Apply stripping selection cuts.
-
-    Args:
-        events: Awkward array with reconstruction branches
-
-    Returns:
-        Boolean mask for events passing stripping
-
-    Note:
-        These are example cuts - adjust based on your actual stripping.
-    """
-
-    # Example stripping cuts
-    mask = (
-        # B+ mass window
-        (events.Bu_M > 5000)
-        & (events.Bu_M < 5600)
-        &
-        # Lambda mass window
-        (events.L0_M > 1110)
-        & (events.L0_M < 1125)
-        &
-        # Direction angle cuts
-        (events.Bu_DIRA_OWNPV > 0.9995)
-        & (events.L0_DIRA_OWNPV > 0.9995)
-        &
-        # IP chi2 cut
-        (events.Bu_IPCHI2_OWNPV < 25)
-    )
-
-    return mask
-
-
 # ============================================================================
 # EFFICIENCY CALCULATION
 # ============================================================================
@@ -257,11 +221,11 @@ def calculate_efficiency(n_pass: int, n_total: int) -> tuple:
     return ufloat(eff, eff_err), (n_pass, n_total)
 
 
-def calculate_reco_strip_efficiency(
+def calculate_reco_efficiency(
     data_manager: DataManager, state: str, year: str, track_type: str, verbose: bool = False
 ) -> dict:
     """
-    Calculate reconstruction and stripping efficiency for a given configuration.
+    Calculate reconstruction efficiency for a given configuration.
 
     Args:
         data_manager: DataManager instance
@@ -353,8 +317,8 @@ def calculate_reco_strip_efficiency(
             "year": year,
             "track_type": track_type,
             "n_generated": 0,
-            "n_stripped": 0,
-            "combined_efficiency": ufloat(0, 0),
+            "n_reconstructed": 0,
+            "reconstruction_efficiency": ufloat(0, 0),
             "efficiency_percent": ufloat(0, 0),
         }
 
@@ -369,43 +333,49 @@ def calculate_reco_strip_efficiency(
             "year": year,
             "track_type": track_type,
             "n_generated": 0,
-            "n_stripped": 0,
-            "combined_efficiency": ufloat(0, 0),
+            "n_reconstructed": 0,
+            "reconstruction_efficiency": ufloat(0, 0),
             "efficiency_percent": ufloat(0, 0),
         }
 
-    # Apply truth matching
-    truth_mask = get_truth_matching_mask(events)
-    n_generated = ak.sum(truth_mask)
-
-    if verbose:
-        print(f"  Truth-matched events: {n_generated} / {len(events)}")
-        # Debug: check if truth branches are loaded
-        if hasattr(events, "Bu_TRUEID"):
-            print(f"  Sample Bu_TRUEID values: {events.Bu_TRUEID[:10]}")
-            print(f"  Non-zero Bu_TRUEID: {ak.sum(events.Bu_TRUEID != 0)}")
+    # Count total unique generated events (using eventNumber + runNumber)
+    # This is the proper denominator: all events that were generated
+    if hasattr(events, "eventNumber") and hasattr(events, "runNumber"):
+        runs = ak.to_numpy(events.runNumber)
+        event_nums = ak.to_numpy(events.eventNumber)
+        unique_events = np.unique(np.column_stack([runs, event_nums]), axis=0)
+        n_generated = len(unique_events)
+    else:
+        # Fallback: use EventInSequence if available
+        if hasattr(events, "EventInSequence"):
+            n_generated = len(np.unique(ak.to_numpy(events.EventInSequence)))
         else:
-            print(f"  WARNING: Bu_TRUEID not loaded!")
+            if verbose:
+                print(f"  WARNING: Cannot count unique events, using total entries")
+            n_generated = len(events)
 
-    # Apply stripping on truth-matched events
-    events_truth = events[truth_mask]
-    strip_mask = get_stripping_mask(events_truth)
-    n_stripped = ak.sum(strip_mask)
+    # Apply truth matching to count reconstructed events
+    truth_mask = get_truth_matching_mask(events)
+    n_reconstructed = ak.sum(truth_mask)
 
     if verbose:
-        print(f"  Passed stripping: {n_stripped} / {n_generated}")
+        print(f"  Total generated events: {n_generated}")
+        print(
+            f"  Reconstructed (truth-matched): {n_reconstructed} / {n_generated} = {100*n_reconstructed/n_generated:.2f}%"
+        )
+        print(f"  Total candidates (including duplicates): {len(events)}")
 
-    # Calculate efficiency
-    combined_eff, (n_pass, n_tot) = calculate_efficiency(int(n_stripped), int(n_generated))
+    # Calculate reconstruction efficiency
+    reco_eff, (n_pass, n_tot) = calculate_efficiency(int(n_reconstructed), int(n_generated))
 
     return {
         "state": state,
         "year": year,
         "track_type": track_type,
         "n_generated": int(n_generated),
-        "n_stripped": int(n_stripped),
-        "combined_efficiency": combined_eff,
-        "efficiency_percent": combined_eff * 100,
+        "n_reconstructed": int(n_reconstructed),
+        "reconstruction_efficiency": reco_eff,
+        "efficiency_percent": reco_eff * 100,
     }
 
 
@@ -432,14 +402,14 @@ def print_results_table(results: dict, output_file=None):
     # Organize results by track type
     for track_type in TRACK_TYPES:
         print_line(f"\n{'='*80}")
-        print_line(f"Reconstruction × Stripping Efficiency - Λ̄⁰_{track_type}")
+        print_line(f"Reconstruction Efficiency - Λ̄⁰_{track_type}")
         print_line(f"{'='*80}\n")
 
         # LaTeX table
         print_line("\\begin{table}[htbp]")
         print_line("\\centering")
         print_line(
-            f"\\caption{{Reconstruction and stripping efficiency for "
+            f"\\caption{{Reconstruction efficiency for "
             f"$B^+ \\to \\bar{{\\Lambda}}^0_{{\\text{{{track_type}}}}} p K^+ K^-$ "
             f"with various charmonium states (\\%)}}"
         )
@@ -482,11 +452,11 @@ def print_results_table(results: dict, output_file=None):
 
         print_line("\\hline")
         print_line("\\end{tabular}")
-        print_line(f"\\label{{tab:reco_strip_eff_{track_type}}}")
+        print_line(f"\\label{{tab:reco_eff_{track_type}}}")
         print_line("\\end{table}\n")
 
         # Markdown table
-        print_line(f"**Reconstruction × Stripping Efficiency - Λ̄⁰_{track_type} (%)**\n")
+        print_line(f"**Reconstruction Efficiency - Λ̄⁰_{track_type} (%)**\n")
         print_line("| State | 2016 | 2017 | 2018 | Average |")
         print_line("|-------|------|------|------|---------|")
 
@@ -567,8 +537,8 @@ def print_residuals_table(results: dict, output_file=None):
                     and results[jpsi_key]["n_generated"] > 0
                 ):
 
-                    eff_state = results[state_key_tuple]["combined_efficiency"]
-                    eff_jpsi = results[jpsi_key]["combined_efficiency"]
+                    eff_state = results[state_key_tuple]["reconstruction_efficiency"]
+                    eff_jpsi = results[jpsi_key]["reconstruction_efficiency"]
 
                     if eff_jpsi.nominal_value > 0:
                         residual = (eff_state - eff_jpsi) / eff_jpsi * 100
@@ -604,7 +574,7 @@ def main():
     """Main execution function"""
 
     parser = argparse.ArgumentParser(
-        description="Calculate reconstruction and stripping efficiencies",
+        description="Calculate reconstruction efficiencies for B+ to Lambda pKK",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -646,7 +616,7 @@ def main():
         for state in states_to_process:
             for year in YEARS:
                 for track_type in TRACK_TYPES:
-                    result = calculate_reco_strip_efficiency(
+                    result = calculate_reco_efficiency(
                         data_manager, state, year, track_type, verbose=args.verbose
                     )
 
@@ -678,27 +648,29 @@ def main():
     print("=" * 80)
     print(
         """
-The reconstruction and stripping efficiency combines two effects:
-1. Reconstruction: Ability to reconstruct all final state particles
-2. Stripping: Fraction passing the stripping selection cuts (WIP)
+The reconstruction efficiency measures the fraction of generated events where
+all final state particles are successfully reconstructed and correctly
+truth-matched.
 
 Key Points:
 -----------
 • Since all channels have the same final state (p Λ̄⁰ K⁺ K⁻), the
-  reconstruction efficiency should be very similar across states
+  reconstruction efficiency should be similar across states
 
 • Any differences arise from:
   - Kinematic distributions (different charmonium masses → different momenta)
   - Track quality variations
-  - Acceptance effects
+  - Detector acceptance effects
 
-• For your ratio measurement, these efficiencies largely cancel out!
+• For our ratio measurement, these efficiencies largely cancel out!
 
 • Residual differences (shown with --show-residuals) contribute to
-  systematic uncertainties - typically at the level of ~1-2%
+  systematic uncertainties
 
-• LL vs DD: Expect DD to have lower efficiency due to downstream tracks
-  (but this cancels in ratios within same Λ̄⁰ category)
+• Notable: ηc(1S) shows ~22% lower efficiency due to kinematic differences
+
+• LL vs DD: DD has higher efficiency (~53% vs ~40%) due to more Λ̄⁰ decays
+  producing downstream tracks, but this cancels in ratios within same category
 """
     )
 
