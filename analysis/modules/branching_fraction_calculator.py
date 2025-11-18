@@ -218,7 +218,7 @@ class BranchingFractionCalculator:
                 # Check if efficiency exists for this year
                 if year not in self.efficiencies.get(state, {}):
                     print(
-                        f"  ⚠️  Warning: No efficiency data for {state} in {year}, skipping yield consistency check"
+                        f"  Warning: No efficiency data for {state} in {year}, skipping yield consistency check"
                     )
                     continue
 
@@ -251,7 +251,7 @@ class BranchingFractionCalculator:
 
         # Check if we have any data to plot
         if df.empty:
-            print("\n⚠️  Warning: No efficiency data available for any year/state combination")
+            print("\n Warning: No efficiency data available for any year/state combination")
             print("   Skipping yield consistency check plots")
             return df
 
@@ -275,7 +275,7 @@ class BranchingFractionCalculator:
                     transform=ax.transAxes,
                 )
                 ax.set_xlabel("Year", fontsize=12)
-                ax.set_ylabel("N / (L × ε)", fontsize=12)
+                ax.set_ylabel("N / (L * ε)", fontsize=12)
                 ax.set_title(f"{state}", fontsize=14)
                 continue
 
