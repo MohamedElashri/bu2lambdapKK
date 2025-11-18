@@ -140,6 +140,7 @@ Bu = [
   "Bu_TRUEP_Y",
   "Bu_TRUEP_Z",
   "Bu_TRUEID",
+  "Bu_MC_MOTHER_ID",
   "Bu_TRUETAU",
   "Bu_TRUEORIGINVERTEX_X",
   "Bu_TRUEORIGINVERTEX_Y",
@@ -155,15 +156,16 @@ L0 = [
   "L0_TRUEP_Y",
   "L0_TRUEP_Z",
   "L0_TRUEID",
+  "L0_MC_MOTHER_ID",
   "L0_TRUETAU"
 ]
-Lp = ["Lp_TRUEPT", "Lp_TRUEP_E", "Lp_TRUEID"]
-Lpi = ["Lpi_TRUEPT", "Lpi_TRUEP_E", "Lpi_TRUEID"]
+Lp = ["Lp_TRUEPT", "Lp_TRUEP_E", "Lp_TRUEID", "Lp_MC_MOTHER_ID"]
+Lpi = ["Lpi_TRUEPT", "Lpi_TRUEP_E", "Lpi_TRUEID", "Lpi_MC_MOTHER_ID"]
 description = "MC truth information (only in MC)"
-h1 = ["h1_TRUEPT", "h1_TRUEP_E", "h1_TRUEID"]
-h2 = ["h2_TRUEPT", "h2_TRUEP_E", "h2_TRUEID"]
+h1 = ["h1_TRUEPT", "h1_TRUEP_E", "h1_TRUEID", "h1_MC_MOTHER_ID"]
+h2 = ["h2_TRUEPT", "h2_TRUEP_E", "h2_TRUEID", "h2_MC_MOTHER_ID"]
 mc_only = true  # Flag to indicate these are MC-only branches
-p = ["p_TRUEPT", "p_TRUEP_E", "p_TRUEID"]
+p = ["p_TRUEPT", "p_TRUEP_E", "p_TRUEID", "p_MC_MOTHER_ID"]
 
 # ============================================================================
 # PARTICLE IDENTIFICATION (PID) BRANCHES
