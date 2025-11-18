@@ -986,8 +986,12 @@ class PipelineManager:
 
         # Check cache
         if use_cached:
+            # Include both states and years in dependencies for proper cache invalidation
+            years_list = (
+                list(mc_final["jpsi"].keys()) if "jpsi" in mc_final and mc_final["jpsi"] else []
+            )
             dependencies = self._compute_phase_dependencies(
-                phase="6", extra_params={"states": list(mc_final.keys())}
+                phase="6", extra_params={"states": list(mc_final.keys()), "years": years_list}
             )
             cached = self.cache.load("phase6_efficiencies", dependencies=dependencies)
             if cached is not None:
@@ -1045,9 +1049,9 @@ class PipelineManager:
         # Calculate efficiency ratios (returns DataFrame)
         eff_calculator.calculate_efficiency_ratios(efficiencies)
 
-        # Cache results
+        # Cache results with years included in dependencies
         dependencies = self._compute_phase_dependencies(
-            phase="6", extra_params={"states": list(mc_final.keys())}
+            phase="6", extra_params={"states": list(mc_final.keys()), "years": years}
         )
         self.cache.save(
             "phase6_efficiencies",

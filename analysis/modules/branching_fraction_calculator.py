@@ -77,6 +77,11 @@ class BranchingFractionCalculator:
             if year == "combined":
                 continue
 
+            # Check if efficiency exists for this year
+            if year not in self.efficiencies.get(state, {}):
+                print(f"  ⚠️  Warning: No efficiency data for {state} in {year}, skipping")
+                continue
+
             n_year, n_err = self.yields[year][state]
             eps_year = self.efficiencies[state][year]["eff"]
             eps_err = self.efficiencies[state][year]["err"]
@@ -210,6 +215,13 @@ class BranchingFractionCalculator:
                 if year == "combined":
                     continue
 
+                # Check if efficiency exists for this year
+                if year not in self.efficiencies.get(state, {}):
+                    print(
+                        f"  ⚠️  Warning: No efficiency data for {state} in {year}, skipping yield consistency check"
+                    )
+                    continue
+
                 n_year, n_err = self.yields[year][state]
                 eps_year = self.efficiencies[state][year]["eff"]
                 eps_err = self.efficiencies[state][year]["err"]
@@ -237,6 +249,12 @@ class BranchingFractionCalculator:
 
         df = pd.DataFrame(results)
 
+        # Check if we have any data to plot
+        if df.empty:
+            print("\n⚠️  Warning: No efficiency data available for any year/state combination")
+            print("   Skipping yield consistency check plots")
+            return df
+
         # Plot (2x3 grid for 5 states)
         fig, axes = plt.subplots(2, 3, figsize=(18, 10))
         axes = axes.flatten()
@@ -245,6 +263,21 @@ class BranchingFractionCalculator:
         for i, state in enumerate(states_to_plot):
             ax = axes[i]
             data_state = df[df["state"] == state]
+
+            if data_state.empty:
+                # No data for this state
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"No data for {state}",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                )
+                ax.set_xlabel("Year", fontsize=12)
+                ax.set_ylabel("N / (L × ε)", fontsize=12)
+                ax.set_title(f"{state}", fontsize=14)
+                continue
 
             years = [int(y) for y in data_state["year"]]
             values = data_state["N_over_L_eps"].values
