@@ -14,6 +14,25 @@ from .exceptions import ConfigurationError, DataLoadError
 vector.register_awkward()
 
 
+def _show_loading_messages() -> bool:
+    """
+    Lazy import wrapper for show_data_loading_messages to avoid circular imports.
+
+    Returns:
+        True if loading messages should be shown, False otherwise.
+    """
+    try:
+        import sys
+        from pathlib import Path as _Path
+
+        sys.path.insert(0, str(_Path(__file__).parent.parent))
+
+        return _show_loading_messages()
+    except Exception:
+        # If import fails, default to showing messages
+        return True
+
+
 class TOMLConfig:
     """
     Load and manage all TOML configuration files
@@ -249,7 +268,8 @@ class DataManager:
         if not filepath.exists():
             # For MC files, return None to allow graceful handling of missing polarities
             if is_mc:
-                print(f"⚠️  MC file not found (will skip): {filepath}")
+                if _show_loading_messages():
+                    print(f"⚠️  MC file not found (will skip): {filepath}")
                 return None
             # For data files, this is critical - raise custom error
             raise DataLoadError(
@@ -290,7 +310,16 @@ class DataManager:
                 )
 
                 if validation["missing"]:
-                    print(f"⚠️  Missing {len(validation['missing'])} branches in {channel_path}")
+                    if _show_loading_messages():
+                        print(f"⚠️  Missing {len(validation['missing'])} branches in {channel_path}")
+                        if len(validation["missing"]) <= 5:
+                            print(
+                                f"Missing {len(validation['missing'])} requested branches: {validation['missing']}"
+                            )
+                        else:
+                            print(
+                                f"Missing {len(validation['missing'])} requested branches: {validation['missing'][:5]} ..."
+                            )
 
                 # Load valid branches
                 events = tree.arrays(validation["valid"], library="ak")
@@ -315,7 +344,8 @@ class DataManager:
         if apply_trigger:
             events = self.apply_trigger_selection(events)
 
-        print(f"✓ Loaded {particle_type} {year}_{magnet}_{track_type}: {len(events)} events")
+        if _show_loading_messages():
+            print(f"✓ Loaded {particle_type} {year}_{magnet}_{track_type}: {len(events)} events")
         return events
 
     def compute_derived_branches(self, events: ak.Array) -> ak.Array:
@@ -526,7 +556,8 @@ class DataManager:
                 available_events.append(events)
 
         if not available_events:
-            print(f"⚠️  No files found for {particle_type} {year} {track_type}")
+            if _show_loading_messages():
+                print(f"⚠️  No files found for {particle_type} {year} {track_type}")
             return None
 
         # Concatenate all available events
@@ -572,6 +603,7 @@ class DataManager:
             if year_events:
                 combined = ak.concatenate(year_events)
                 data_by_year[str(year)] = combined
-                print(f"✓ Combined {particle_type} {year}: {len(combined)} events\n")
+                if _show_loading_messages():
+                    print(f"✓ Combined {particle_type} {year}: {len(combined)} events\n")
 
         return data_by_year

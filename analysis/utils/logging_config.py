@@ -16,6 +16,10 @@ Usage:
     # Via environment variable:
     export ANALYSIS_WARNINGS=on  # Show warnings
     export ANALYSIS_WARNINGS=off  # Suppress warnings (default)
+
+    # Control data loading messages:
+    export ANALYSIS_DATA_LOADING=off  # Hide loading messages
+    export ANALYSIS_DATA_LOADING=on   # Show loading messages (default)
 """
 
 import os
@@ -126,6 +130,49 @@ def enable_progress_bars() -> bool:
     """
     env_progress = os.environ.get("ANALYSIS_PROGRESS", "on").lower()
     return env_progress in ["on", "yes", "true", "1"]
+
+
+def show_data_loading_messages() -> bool:
+    """
+    Check if data loading messages should be shown.
+
+    Returns:
+        True if loading messages should be shown, False otherwise.
+
+    Reads from config/data.toml [verbosity] section by default.
+    Can be overridden via ANALYSIS_DATA_LOADING environment variable.
+
+    Config setting: verbosity.show_data_loading_messages = true/false
+    Environment override: ANALYSIS_DATA_LOADING=on/off
+
+    Suppresses loading messages like:
+    - "Missing N branches in X"
+    - "Loaded data X: N events"
+    - "MC file not found (will skip)"
+    """
+    # Environment variable takes precedence
+    env_loading = os.environ.get("ANALYSIS_DATA_LOADING", "").lower()
+    if env_loading in ["on", "yes", "true", "1"]:
+        return True
+    elif env_loading in ["off", "no", "false", "0"]:
+        return False
+
+    # Otherwise read from config file
+    try:
+        from pathlib import Path
+
+        import tomli
+
+        config_path = Path(__file__).parent.parent / "config" / "data.toml"
+        if config_path.exists():
+            with open(config_path, "rb") as f:
+                config = tomli.load(f)
+                return config.get("verbosity", {}).get("show_data_loading_messages", True)
+    except Exception:
+        pass
+
+    # Default: show messages
+    return True
 
 
 def get_tqdm_kwargs(desc: str = "", **kwargs) -> dict:
