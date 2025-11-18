@@ -140,12 +140,12 @@ list-outputs: ## List all output files
 
 clean-cache: ## Remove cached intermediate results
 	@printf "\033[0;34mRemoving cache files...\033[0m\n"
-	@rm -rf cache/*.pkl
+	@rm -rfv cache/data/*.pkl cache/metadata/*.json
 	@printf "\033[0;32mCache cleaned\033[0m\n"
 
 clean-outputs: ## Remove output files (tables, plots, results)
 	@printf "\033[0;34mRemoving output files...\033[0m\n"
-	@rm -rf analysis_output
+	@rm -rfv analysis_output
 	@printf "\033[0;32mOutputs cleaned\033[0m\n"
 
 clean: clean-cache clean-outputs ## Remove everything (cache + outputs)
