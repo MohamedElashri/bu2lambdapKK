@@ -1,6 +1,6 @@
-# B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis
+# B⁺ → lambdapKK Charmonium Analysis
 
-Analysis of B⁺ decays to Λ̄pK⁻K⁺ (ΛpK⁺K⁺) with charmonium resonances (J/ψ, ηc, χc0, χc1, ηc(2S)) at LHCb.
+Analysis of B⁺ decays to Λ̄pK⁻K⁺ (ΛpK⁺K⁺) with charmonium resonances (J/ψ, ηc, χc0, χc1, ηc(2S)) at LHCb. The goal is to measure the relative branching ratios of the charmonium resonances.
 
 ---
 
@@ -37,7 +37,7 @@ Options:
 
 If we run `make` or `make help` we get this
 
-```
+``` bash
 Targets:
 
 General
@@ -50,9 +50,11 @@ Pipeline Execution
   pipeline-2017         Run pipeline with 2017 data only
   pipeline-2018         Run pipeline with 2018 data only
   pipeline-no-cache     Run pipeline forcing reprocessing (no cache)
-
-Workflow Examples
-  workflow-production   Production workflow: full pipeline with all data
+  pipeline-manual       Run pipeline with manual cuts (skips grid scan optimization)
+  pipeline-manual-2016  Run pipeline with manual cuts (2016 only, fast!)
+  pipeline-manual-2017  Run pipeline with manual cuts (2017 only)
+  pipeline-manual-2018  Run pipeline with manual cuts (2018 only)
+  pipeline-manual-test  Quick test with manual cuts (2016, no cache)
 
 Output Management
   show-results          Show final results table
@@ -63,13 +65,32 @@ Output Management
 Cleanup
   clean-cache           Remove cached intermediate results
   clean-outputs         Remove output files (tables, plots, results)
-  clean-all             Remove everything (cache + outputs)
-  clean                 Alias for clean-all (removes both cache and outputs)
+  clean                 Remove everything (cache + outputs)
 
 Development
   validate-config       Validate TOML configuration files
   check-dependencies    Check if all required packages are installed
   setup-dirs            Create necessary directories
+
+Testing
+  test                  Run all tests with coverage
+  test-unit             Run only unit tests
+  test-integration      Run only integration tests
+  test-validation       Run only validation tests
+  test-quick            Run tests without coverage (faster)
+  test-coverage         Open HTML coverage report in browser (run 'make test' first)
+  test-watch            Run tests in watch mode (requires pytest-watch)
+  test-failed           Re-run only failed tests
+  test-verbose          Run tests with extra verbosity
+
+Code Quality
+  pre-commit-install    Install pre-commit hooks
+  pre-commit-run        Run all pre-commit hooks manually
+  pre-commit-update     Update pre-commit hook versions
+  format                Format code with black and isort
+  lint                  Lint code with ruff
+  typecheck             Run type checking with mypy
+  quality               Run all code quality checks
 
 Information
   info                  Show pipeline information
