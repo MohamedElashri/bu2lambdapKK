@@ -4,11 +4,26 @@ mirror_to_github:
     - branches
     - tags
   script:
+    # Setup SSH
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - cp $GITHUB_DEPLOY_KEY ~/.ssh/id_ed25519
     - chmod 600 ~/.ssh/id_ed25519
     - ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+    # Configure git
+    - git config --global user.email "gitlab-ci@cern.ch"
+    - git config --global user.name "GitLab CI"
+
+    # Fetch all branches and tags
+    - git fetch origin --prune --unshallow || git fetch origin --prune
+    - git fetch origin '+refs/heads/*:refs/remotes/origin/*'
+
+    # Add GitHub remote
     - git remote add github git@github.com:MohamedElashri/bu2lambdapKK.git || true
-    - git push github --all --force
+
+    # Push all branches
+    - git push github '+refs/remotes/origin/*:refs/heads/*' --force
+
+    # Push all tags
     - git push github --tags --force
