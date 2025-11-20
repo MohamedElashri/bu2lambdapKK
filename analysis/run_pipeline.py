@@ -250,25 +250,27 @@ class PipelineManager:
                 for track_type in track_types:
                     pbar.set_postfix_str(f"{year} {track_type}")
 
-                # Load data from both magnets using unified method
-                events = data_manager.load_and_process(
-                    "data", year, track_type, apply_derived_branches=True, apply_trigger=False
-                )
+                    # Load data from both magnets using unified method
+                    events = data_manager.load_and_process(
+                        "data", year, track_type, apply_derived_branches=True, apply_trigger=False
+                    )
 
-                if events is None:
-                    pbar.set_postfix_str(f"❌ {year} {track_type} missing")
+                    if events is None:
+                        pbar.set_postfix_str(f"❌ {year} {track_type} missing")
+                        pbar.update(1)
+                        continue
+
+                    # Apply Lambda cuts
+                    n_before = len(events)
+                    events_after = lambda_selector.apply_lambda_cuts(events)
+                    n_after = len(events_after)
+                    eff = 100 * n_after / n_before if n_before > 0 else 0
+
+                    data_dict[year][track_type] = events_after
+                    pbar.set_postfix_str(
+                        f"{year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)"
+                    )
                     pbar.update(1)
-                    continue
-
-                # Apply Lambda cuts
-                n_before = len(events)
-                events_after = lambda_selector.apply_lambda_cuts(events)
-                n_after = len(events_after)
-                eff = 100 * n_after / n_before if n_before > 0 else 0
-
-                data_dict[year][track_type] = events_after
-                pbar.set_postfix_str(f"{year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)")
-                pbar.update(1)
 
         # Load and process PHASE-SPACE MC (KpKm - for background estimation)
         print("\n[Loading Phase-Space MC - KpKm for Background]")
@@ -281,25 +283,27 @@ class PipelineManager:
                 for track_type in track_types:
                     pbar.set_postfix_str(f"{year} {track_type}")
 
-                # Load KpKm MC from both magnets using unified method
-                events = data_manager.load_and_process(
-                    "KpKm", year, track_type, apply_derived_branches=True, apply_trigger=False
-                )
+                    # Load KpKm MC from both magnets using unified method
+                    events = data_manager.load_and_process(
+                        "KpKm", year, track_type, apply_derived_branches=True, apply_trigger=False
+                    )
 
-                if events is None:
-                    pbar.set_postfix_str(f"❌ KpKm {year} {track_type} missing")
+                    if events is None:
+                        pbar.set_postfix_str(f"❌ KpKm {year} {track_type} missing")
+                        pbar.update(1)
+                        continue
+
+                    # Apply Lambda cuts
+                    n_before = len(events)
+                    events_after = lambda_selector.apply_lambda_cuts(events)
+                    n_after = len(events_after)
+                    eff = 100 * n_after / n_before if n_before > 0 else 0
+
+                    phase_space_dict[year][track_type] = events_after
+                    pbar.set_postfix_str(
+                        f"{year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)"
+                    )
                     pbar.update(1)
-                    continue
-
-                # Apply Lambda cuts
-                n_before = len(events)
-                events_after = lambda_selector.apply_lambda_cuts(events)
-                n_after = len(events_after)
-                eff = 100 * n_after / n_before if n_before > 0 else 0
-
-                phase_space_dict[year][track_type] = events_after
-                pbar.set_postfix_str(f"{year} {track_type}: {n_before:,}→{n_after:,} ({eff:.1f}%)")
-                pbar.update(1)
 
         # Load and process MC (all 4 signal states)
         print("\n[Loading MC - Signal States]")
