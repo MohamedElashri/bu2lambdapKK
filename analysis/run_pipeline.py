@@ -427,11 +427,11 @@ class PipelineManager:
         tables_dir = Path(self.config.paths["output"]["tables_dir"])
         cuts_file = tables_dir / "optimized_cuts.csv"
 
-        # Check if manual cuts are specified in config
-        manual_cuts_config = self.config.selection.get("manual_cuts", {})
-        has_manual_cuts = any(k for k in manual_cuts_config.keys() if k != "notes")
+        # Check if manual cuts are requested via flag
+        if use_manual_cuts:
+            manual_cuts_config = self.config.selection.get("manual_cuts", {})
+            has_manual_cuts = any(k for k in manual_cuts_config.keys() if k != "notes")
 
-        if use_manual_cuts or has_manual_cuts:
             if not has_manual_cuts:
                 raise AnalysisError(
                     "--use-manual-cuts flag set but no manual cuts defined in config/selection.toml!\n"
@@ -521,17 +521,19 @@ class PipelineManager:
         print("    Where ε = n_mc_after_cuts / n_mc_generated (full selection efficiency)")
         print("    This properly estimates signal efficiency and background level!")
 
+        # NEW: Unbiased optimization using data proxies only
         optimizer = SelectionOptimizer(
-            signal_mc=mc_combined,
-            phase_space_mc=phase_space_combined,  # Kept for reference, not used
-            data=data_combined,  # Real data for background estimation!
-            mc_generated_counts=mc_generated_combined,  # Generator-level counts
+            data=data_combined,  # Real data only!
             config=self.config,
         )
 
-        # Run N-D grid scan optimization
-        print("\n  Running N-D GRID SCAN: exhaustive search over 7 variables")
-        print("    Testing all combinations in 7D space ")
+        # Validate data regions before optimization
+        optimizer.validate_data_regions()
+
+        # Run N-D grid scan optimization with UNBIASED method
+        print("\n  Running UNBIASED N-D GRID SCAN")
+        print("    Signal proxy: no-charmonium data (M(Λ̄pK⁻) > 4 GeV)")
+        print("    Background proxy: B⁺ mass sidebands")
         print("    Lambda cuts are FIXED (already applied in Phase 2)")
         optimized_cuts_df = optimizer.optimize_nd_grid_scan()
 
@@ -540,7 +542,7 @@ class PipelineManager:
             "phase3_optimized_cuts",
             optimized_cuts_df,
             dependencies=dependencies,
-            description="Optimized selection cuts",
+            description="Optimized selection cuts (unbiased method)",
         )
         optimized_cuts_df.to_csv(cuts_file, index=False)
 
@@ -967,6 +969,7 @@ class PipelineManager:
         self,
         mc_final: dict[str, dict[str, dict[str, ak.Array]]],
         optimized_cuts_df: pd.DataFrame,
+        mc_generated_counts: dict[str, dict[str, int]],
         use_cached: bool = False,
     ) -> dict[str, Any]:
         """
@@ -975,6 +978,7 @@ class PipelineManager:
         Args:
             mc_final: MC after Lambda cuts (before Bu cuts)
             optimized_cuts_df: Optimized cuts to apply
+            mc_generated_counts: Generated MC event counts {state: {year: count}}
             use_cached: Use cached efficiency results if available
 
         Returns:
@@ -998,8 +1002,17 @@ class PipelineManager:
                 print("✓ Loaded cached efficiencies")
                 return cached
 
-        # Initialize efficiency calculator
-        eff_calculator = EfficiencyCalculator(self.config, optimized_cuts_df)
+        # Combine generated counts across track types (LL + DD)
+        mc_gen_combined = {}
+        for state in mc_generated_counts:
+            mc_gen_combined[state] = {}
+            for year in mc_generated_counts[state]:
+                # Sum LL and DD counts
+                total = sum(mc_generated_counts[state][year].values())
+                mc_gen_combined[state][year] = total
+
+        # Initialize efficiency calculator with generated counts
+        eff_calculator = EfficiencyCalculator(self.config, optimized_cuts_df, mc_gen_combined)
 
         # Calculate efficiencies
         print("\nCalculating selection efficiencies from MC...")
@@ -1026,7 +1039,7 @@ class PipelineManager:
                     mc_combined = mc_final[state][year][track_type]
 
                 # Calculate efficiency
-                eff_result = eff_calculator.calculate_selection_efficiency(mc_combined, state)
+                eff_result = eff_calculator.calculate_selection_efficiency(mc_combined, state, year)
 
                 efficiencies[state][year] = eff_result
 
@@ -1186,7 +1199,7 @@ class PipelineManager:
 
         # Phase 6: Efficiency calculation
         efficiencies = self.phase6_efficiency_calculation(
-            mc_final, optimized_cuts_df, use_cached=use_cached
+            mc_final, optimized_cuts_df, mc_generated_counts, use_cached=use_cached
         )
 
         # Phase 7: Branching fraction ratios

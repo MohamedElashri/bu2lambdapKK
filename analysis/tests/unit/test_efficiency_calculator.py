@@ -58,6 +58,17 @@ def mock_mc_events() -> ak.Array:
     )
 
 
+@pytest.fixture
+def mock_generated_counts() -> dict:
+    """Create mock generated MC counts."""
+    return {
+        "jpsi": {"2016": 1000, "2017": 1200, "2018": 1500},
+        "etac": {"2016": 800, "2017": 900, "2018": 1100},
+        "chic0": {"2016": 900, "2017": 1000, "2018": 1200},
+        "chic1": {"2016": 850, "2017": 950, "2018": 1150},
+    }
+
+
 @pytest.mark.unit
 class TestEfficiencyCalculatorInitialization:
     """Test EfficiencyCalculator initialization."""
@@ -197,14 +208,15 @@ class TestSelectionEfficiency:
             }
         )
 
-        calc = EfficiencyCalculator(mock_config, cuts_df)
+        gen_counts = {"jpsi": {"2016": 10}}
+        calc = EfficiencyCalculator(mock_config, cuts_df, gen_counts)
 
         events = ak.Array({"Bu_PT": np.array([5000.0, 6000.0, 7000.0])})
 
-        result = calc.calculate_selection_efficiency(events, "jpsi")
+        result = calc.calculate_selection_efficiency(events, "jpsi", "2016")
 
-        assert result["eff"] == 1.0
-        assert result["n_before"] == 3
+        assert result["eff"] == 0.3  # 3 pass / 10 generated
+        assert result["n_before"] == 10  # Generated
         assert result["n_after"] == 3
         assert result["err"] >= 0.0
 
@@ -219,41 +231,43 @@ class TestSelectionEfficiency:
             }
         )
 
-        calc = EfficiencyCalculator(mock_config, cuts_df)
+        gen_counts = {"jpsi": {"2016": 10}}
+        calc = EfficiencyCalculator(mock_config, cuts_df, gen_counts)
 
         events = ak.Array({"Bu_PT": np.array([5000.0, 6000.0, 7000.0])})
 
-        result = calc.calculate_selection_efficiency(events, "jpsi")
+        result = calc.calculate_selection_efficiency(events, "jpsi", "2016")
 
         assert result["eff"] == 0.0
-        assert result["n_before"] == 3
+        assert result["n_before"] == 10  # Generated
         assert result["n_after"] == 0
 
     def test_calculate_efficiency_partial(
-        self, mock_config, sample_optimized_cuts, mock_mc_events
+        self, mock_config, sample_optimized_cuts, mock_mc_events, mock_generated_counts
     ) -> None:
         """Test efficiency with partial acceptance."""
-        calc = EfficiencyCalculator(mock_config, sample_optimized_cuts)
+        calc = EfficiencyCalculator(mock_config, sample_optimized_cuts, mock_generated_counts)
 
-        result = calc.calculate_selection_efficiency(mock_mc_events, "jpsi")
+        result = calc.calculate_selection_efficiency(mock_mc_events, "jpsi", "2016")
 
-        # 2 out of 4 events pass
-        assert result["eff"] == 0.5
-        assert result["n_before"] == 4
-        assert result["n_after"] == 2
+        # 2 out of 4 events pass cuts, but efficiency is relative to 1000 generated
+        assert 0.0 < result["eff"] < 1.0
+        assert result["n_before"] == 1000  # Generated (from mock_generated_counts)
+        assert result["n_after"] == 2  # Events passing cuts
         assert 0.0 < result["err"] < 1.0
 
-    def test_efficiency_zero_events(self, mock_config, sample_optimized_cuts) -> None:
-        """Test efficiency with zero input events."""
-        calc = EfficiencyCalculator(mock_config, sample_optimized_cuts)
+    def test_efficiency_zero_events(
+        self, mock_config, sample_optimized_cuts, mock_generated_counts
+    ) -> None:
+        """Test efficiency with zero events after Lambda cuts but nonzero generated."""
+        calc = EfficiencyCalculator(mock_config, sample_optimized_cuts, mock_generated_counts)
 
         empty_events = ak.Array({"Bu_PT": np.array([]), "h1_IPCHI2": np.array([])})
 
-        result = calc.calculate_selection_efficiency(empty_events, "jpsi")
+        result = calc.calculate_selection_efficiency(empty_events, "jpsi", "2016")
 
         assert result["eff"] == 0.0
-        assert result["err"] == 0.0
-        assert result["n_before"] == 0
+        assert result["n_before"] == 1000  # Generated
         assert result["n_after"] == 0
 
 
@@ -272,19 +286,22 @@ class TestEfficiencyErrorPropagation:
             }
         )
 
-        calc = EfficiencyCalculator(mock_config, cuts_df)
+        # 50 events pass, 50 fail after Lambda cuts, 200 generated
+        gen_counts = {"jpsi": {"2016": 200}}
+        calc = EfficiencyCalculator(mock_config, cuts_df, gen_counts)
 
         # Create events where exactly half pass
-        events = ak.Array({"Bu_PT": np.array([6000.0, 4000.0, 7000.0, 3000.0])})
+        events = ak.Array({"Bu_PT": np.concatenate([np.full(50, 6000.0), np.full(50, 4000.0)])})
 
-        result = calc.calculate_selection_efficiency(events, "jpsi")
+        result = calc.calculate_selection_efficiency(events, "jpsi", "2016")
 
-        # For eff=0.5, N=4: error = sqrt(0.5 * 0.5 / 4) = sqrt(0.0625) = 0.25
-        expected_error = np.sqrt(0.5 * 0.5 / 4)
+        assert result["eff"] == 0.25  # 50 pass / 200 generated
+        # σ = sqrt(ε(1-ε)/N_gen) = sqrt(0.25*0.75/200)
+        expected_error = np.sqrt(0.25 * 0.75 / 200)
         assert result["err"] == pytest.approx(expected_error, rel=1e-6)
 
     def test_error_small_for_large_n(self, mock_config) -> None:
-        """Test that error decreases with larger sample size."""
+        """Test that error decreases with larger generated sample size."""
         cuts_df = pd.DataFrame(
             {
                 "state": ["jpsi"],
@@ -294,18 +311,20 @@ class TestEfficiencyErrorPropagation:
             }
         )
 
-        calc = EfficiencyCalculator(mock_config, cuts_df)
-
-        # Small sample
+        # Small generated sample
+        gen_counts_small = {"jpsi": {"2016": 20}}
+        calc_small = EfficiencyCalculator(mock_config, cuts_df, gen_counts_small)
         events_small = ak.Array({"Bu_PT": np.array([6000.0, 4000.0, 6000.0, 4000.0])})
-        result_small = calc.calculate_selection_efficiency(events_small, "jpsi")
+        result_small = calc_small.calculate_selection_efficiency(events_small, "jpsi", "2016")
 
-        # Large sample (100 events, half pass)
+        # Large generated sample
+        gen_counts_large = {"jpsi": {"2016": 2000}}
+        calc_large = EfficiencyCalculator(mock_config, cuts_df, gen_counts_large)
         pt_values = np.array([6000.0 if i % 2 == 0 else 4000.0 for i in range(100)])
         events_large = ak.Array({"Bu_PT": pt_values})
-        result_large = calc.calculate_selection_efficiency(events_large, "jpsi")
+        result_large = calc_large.calculate_selection_efficiency(events_large, "jpsi", "2016")
 
-        # Larger sample should have smaller error
+        # Larger generated sample should have smaller error
         assert result_large["err"] < result_small["err"]
 
 
@@ -386,9 +405,11 @@ class TestEfficiencyRatios:
 
 
 @pytest.mark.unit
-def test_efficiency_calculator_workflow(mock_config, sample_optimized_cuts, mock_mc_events) -> None:
+def test_efficiency_calculator_workflow(
+    mock_config, sample_optimized_cuts, mock_mc_events, mock_generated_counts
+) -> None:
     """Test complete efficiency calculation workflow."""
-    calc = EfficiencyCalculator(mock_config, sample_optimized_cuts)
+    calc = EfficiencyCalculator(mock_config, sample_optimized_cuts, mock_generated_counts)
 
     # Step 1: Get cuts for a state
     cuts = calc.get_cuts_for_state("jpsi")
@@ -399,6 +420,6 @@ def test_efficiency_calculator_workflow(mock_config, sample_optimized_cuts, mock
     assert len(events_after) <= len(mock_mc_events)
 
     # Step 3: Calculate efficiency
-    eff_result = calc.calculate_selection_efficiency(mock_mc_events, "jpsi")
+    eff_result = calc.calculate_selection_efficiency(mock_mc_events, "jpsi", "2016")
     assert 0.0 <= eff_result["eff"] <= 1.0
     assert eff_result["err"] >= 0.0

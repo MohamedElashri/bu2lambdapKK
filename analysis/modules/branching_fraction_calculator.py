@@ -366,15 +366,13 @@ class BranchingFractionCalculator:
         md += "\n## Comparison with Theory\n\n"
         md += "For χc states, NRQCD predicts (Colour Octet dominance):\n"
         md += "- Br(χc1)/Br(χc0) ≈ 3\n"
-        md += "- Br(χc2)/Br(χc0) ≈ 5\n\n"
 
         md += f"Our result: Br(χc1)/Br(χc0) = {ratios_df[ratios_df['numerator']=='chic1']['ratio'].values[0]:.3f}\n\n"
-        md += "**Note**: These predictions were not observed in B⁺→φφ analysis either.\n\n"
 
         md += "## Systematic Uncertainties\n\n"
         md += "### Current status: Statistical uncertainties ONLY\n\n"
         md += "### Efficiency-related systematics (to be studied later):\n\n"
-        md += "**Cancellation in ratios** (per supervisor guidance):\n"
+        md += "**Cancellation in ratios**:\n"
         md += "- ✓ ε_reco: CANCELS (identical tracks)\n"
         md += "- ✓ ε_strip: CANCELS (identical final state)\n"
         md += "- ✓ ε_trig: CANCELS (same trigger line)\n"

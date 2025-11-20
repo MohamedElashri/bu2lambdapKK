@@ -163,20 +163,10 @@ Applied before FOM optimization.
 """
 
 [manual_cuts]
+# Unoptimized manual cuts:
 Bu_DTF_chi2 = {cut_type = "less", value = 30.0}
 Bu_FDCHI2_OWNPV = {cut_type = "greater", value = 100.0}
 Bu_IPCHI2_OWNPV = {cut_type = "less", value = 10.0}
-# Optional: Define manual cuts to SKIP grid scan optimization
-# Useful for testing, validation, or if we want to fix specific cut values
-# Leave empty to use optimized cuts from Phase 3
-#
-# To use manual cuts, we either:
-# 1. Uncomment the example cuts below, OR
-# 2. Add cuts here and run with: python run_pipeline.py --use-manual-cuts
-#
-# Format: branch_name = { cut_type = "greater"|"less", value = float }
-#
-# Example (uncomment to use):
 Bu_PT = {cut_type = "greater", value = 3000.0}
 h1_ProbNNk = {cut_type = "greater", value = 0.1}
 h2_ProbNNk = {cut_type = "greater", value = 0.1}
@@ -192,7 +182,7 @@ USAGE:
 OR: Pipeline will automatically detect manual cuts in config
 
 Use cases:
-  - Testing specific cut values quickly (skip 10-20 min optimization)
+  - Testing specific cut values quickly (skip 5-10 min optimization)
   - Fixing cuts based on physics knowledge
   - Validation studies
   - Quick iterations during analysis development
@@ -287,40 +277,72 @@ end = 0.3
 step = 0.1
 
 [optimization_strategy]
+b_high_sideband_max = 5410.0  # MeV
+b_high_sideband_min = 5330.0  # MeV (far sideband above signal)
+b_low_sideband_max = 5230.0  # MeV
+b_low_sideband_min = 5150.0  # MeV (far sideband below signal)
+b_signal_region_max = 5305.0  # MeV (don't use during optimization!)
+# Background proxy: B+ far sidebands (events in charmonium region but wrong B+ mass)
+b_signal_region_min = 5255.0  # MeV (don't use during optimization!)
+charmonium_region_max = 3800.0  # MeV (above χc1)
+# Charmonium region definition (all states combined)
+charmonium_region_min = 2900.0  # MeV (below ηc)
 description = """
-OPTIMIZATION METHOD - N-D Grid Scan:
-  - Full N-D grid search over all 7 variables simultaneously
-  - Finds globally optimal cuts considering all correlations
-  - Tests 3,888 combinations per state (3x3x3x2x4x6x3)
-  - Fast enough for this problem size (~10-20 minutes)
-  - Results are reproducible and optimal
+UNBIASED OPTIMIZATION STRATEGY FOR SELECTION CUTS
+==========================================================
 
-SIDEBAND REGIONS for background estimation:
-  - Signal region: center ± window (from particles.toml)
-  - Low sideband: (center - 4*window) to (center - 1*window)
-  - High sideband: (center + 1*window) to (center + 4*window)
+KEY PRINCIPLE: Never look at signal region during optimization!
 
-  These multipliers define how many signal windows away the sidebands extend.
-  Wider sidebands give better background statistics but may include other resonances.
+SIGNAL PROXY: "No-charmonium" events
+  - Real data: B+ → Λ̄pK-K+ with M(Λ̄pK-) > 4.0 GeV
+  - Same final state, similar kinematics
+  - UNBIASED: not the signal we want to measure
+  - No MC needed, no branching fraction assumptions
 
-SIGNAL SCALE FACTOR:
-  - Used to scale MC signal to data-equivalent for realistic FOM calculation
-  - Normalization factor ensures S/B ratios are realistic during optimization
-  - Exact value doesn't affect which cuts are optimal (comparing relative FOM)
-  - Value calibrated to match typical LHCb yields
+BACKGROUND PROXY: B+ mass far sidebands
+  - M(Λ̄pK-) in charmonium region [2.9-3.8 GeV]
+  - M(B+) in sidebands [5150-5230] or [5330-5410] MeV
+  - Real combinatorial background
+  - Same selections except B+ mass
 
-STATE-DEPENDENT OPTIMIZATION:
-  ⚠️ Different states may need different cuts!
-  - ηc: Lowest mass, softer particles → may need softer cuts
-  - J/ψ: Highest statistics → can use tighter cuts
-  - χc states: Medium requirements
+OPTIMIZATION METHODS:
+---------------------
+Option A (state_dependent=false): UNIVERSAL CUTS
+  - Optimize once using all data
+  - Same cuts for all states (J/ψ, ηc, χc0, χc1, ηc(2S))
+  - Simpler, more robust
+  - Recommended for draft analysis
 
-  The optimization is STATE-DEPENDENT, producing separate cut values for each state.
+Option B (state_dependent=true): STATE-SPECIFIC CUTS
+  - Optimize separately for each state
+  - Uses no-charmonium data + B+ sidebands for each state's mass window
+  - More flexible but may overfit
+  - Can revisit later if needed
+
+BENEFITS:
+  ✓ Unbiased: never uses signal region
+  ✓ Data-driven: no MC modeling uncertainties
+  ✓ Model-independent: no branching fraction assumptions
+  ✓ Robust: optimized on real data kinematic properties
+
+N-D GRID SCAN:
+  - Full exhaustive search over all 7 variables
+  - Tests 3,888 combinations (3x3x3x2x4x6x3)
+  - Finds globally optimal cuts
+  - Fast: ~5-10 minutes
 """
-sideband_high_multiplier = 4.0  # High sideband ends at (center + 4*window)
-sideband_high_start_multiplier = 1.0  # High sideband starts at (center + 1*window)
-sideband_low_end_multiplier = 1.0  # Low sideband ends at (center - 1*window)
-# Sideband definition for background estimation in FOM calculation
-sideband_low_multiplier = 4.0  # Low sideband starts at (center - 4*window)
-# N-D grid scan: Full exhaustive search over all variables simultaneously
+# ═══════════════════════════════════════════════════════════════
+# UNBIASED DATA-DRIVEN OPTIMIZATION STRATEGY
+# ═══════════════════════════════════════════════════════════════
+method = "unbiased_data_driven"
+no_charmonium_mass_max = 6000.0  # MeV (limited by phase space)
+# Signal proxy: no-charmonium events (B+ → Λ̄pK-K+ with M(Λ̄pK-) > charmonium limit)
+no_charmonium_mass_min = 4000.0  # MeV (above all charmonium states)
+# Legacy parameters (kept for backward compatibility, not used in new method)
+sideband_high_multiplier = 4.0
+sideband_high_start_multiplier = 1.0
+sideband_low_end_multiplier = 1.0
+sideband_low_multiplier = 4.0
 signal_scale_factor = 10000.0
+# State-dependent cuts: Option A (false) or Option B (true)
+state_dependent = false  # false: universal cuts, true: optimize per state

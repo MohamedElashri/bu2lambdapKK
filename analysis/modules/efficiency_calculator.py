@@ -57,16 +57,23 @@ class EfficiencyCalculator:
         optimized_cuts: DataFrame containing optimized cuts per state
     """
 
-    def __init__(self, config: Any, optimized_cuts_df: pd.DataFrame | None = None) -> None:
+    def __init__(
+        self,
+        config: Any,
+        optimized_cuts_df: pd.DataFrame | None = None,
+        mc_generated_counts: dict | None = None,
+    ) -> None:
         """
         Initialize efficiency calculator.
 
         Args:
             config: TOMLConfig with paths and parameters
-            optimized_cuts_df: DataFrame from Phase 4 with optimal cuts per state
+            optimized_cuts_df: DataFrame from Phase 3 with optimal cuts per state
+            mc_generated_counts: Dict of generator-level MC counts {state: {year: count}}
         """
         self.config: Any = config
         self.optimized_cuts: pd.DataFrame | None = optimized_cuts_df
+        self.mc_generated_counts: dict | None = mc_generated_counts
 
     def get_cuts_for_state(self, state: str) -> pd.DataFrame:
         """
@@ -142,44 +149,51 @@ class EfficiencyCalculator:
 
         return mc_events[mask]
 
-    def calculate_selection_efficiency(self, mc_events: ak.Array, state: str) -> dict[str, Any]:
+    def calculate_selection_efficiency(
+        self, mc_events: ak.Array, state: str, year: str
+    ) -> dict[str, Any]:
         """
-        Calculate SELECTION EFFICIENCY ONLY (Phase 6 simplified approach).
+        Calculate TOTAL SELECTION EFFICIENCY (Lambda + optimized cuts).
 
-        ε_sel = N_pass_all_cuts / N_after_lambda_cuts
+        ε_total = N_pass_all_cuts / N_generated
 
-        This is the key quantity for draft analysis.
-        Other efficiency components assumed to cancel in ratios.
+        This is the efficiency that enters the branching ratio formula.
+        Includes both Lambda pre-selection AND optimized B+/kaon cuts.
 
         Args:
             mc_events: Awkward array with MC events after Lambda pre-selection
             state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
+            year: Year string ("2016", "2017", "2018")
 
         Returns:
             Dictionary with keys:
                 - 'eff': Efficiency value (float)
                 - 'err': Statistical error (float)
-                - 'n_before': Events before cuts (int)
-                - 'n_after': Events after cuts (int)
+                - 'n_before': Events generated (int)
+                - 'n_after': Events passing all cuts (int)
         """
 
-        n_before = len(mc_events)
-
-        # Apply optimized cuts
+        # Apply optimized cuts to MC after Lambda cuts
         mc_after = self.apply_optimized_cuts(mc_events, state)
         n_after = len(mc_after)
 
-        # Calculate efficiency
-        eff = n_after / n_before if n_before > 0 else 0.0
+        # Get generated counts (before any cuts)
+        if self.mc_generated_counts is None:
+            raise EfficiencyError("Generated MC counts not provided. Cannot calculate efficiency.")
+
+        n_generated = self.mc_generated_counts.get(state, {}).get(year, 0)
+
+        if n_generated == 0:
+            raise EfficiencyError(f"No generated events found for {state} in {year}")
+
+        # Calculate TOTAL efficiency (includes Lambda cuts + optimized cuts)
+        eff = n_after / n_generated
 
         # Statistical error from binomial distribution
-        # For large N: σ_eff ≈ sqrt(eff × (1-eff) / N)
-        if n_before > 0:
-            error = np.sqrt(eff * (1 - eff) / n_before)
-        else:
-            error = 0.0
+        # For large N: σ_eff ≈ sqrt(eff × (1-eff) / N_generated)
+        error = np.sqrt(eff * (1 - eff) / n_generated)
 
-        return {"eff": eff, "err": error, "n_before": n_before, "n_after": n_after}
+        return {"eff": eff, "err": error, "n_before": n_generated, "n_after": n_after}
 
     def calculate_all_efficiencies(
         self, mc_by_state: dict[str, dict[str, ak.Array]]
@@ -202,7 +216,7 @@ class EfficiencyCalculator:
         print("\n" + "=" * 80)
         print("PHASE 6: EFFICIENCY CALCULATION")
         print("=" * 80)
-        print("\nEFFICIENCY CANCELLATION STRATEGY (per supervisor):")
+        print("\nEFFICIENCY CANCELLATION STRATEGY:")
         print("  ✓ ALL states have IDENTICAL final state: Λ̄pK⁻K⁺")
         print("  ✓ ε_reco, ε_strip, ε_trig, ε_PID → CANCEL in ratios")
         print("  ✓ Calculate ONLY ε_sel (captures kinematic differences)")
@@ -223,16 +237,13 @@ class EfficiencyCalculator:
                 for year in sorted(mc_by_state[state].keys()):
                     pbar.set_postfix_str(f"{state} {year}")
                     mc_events = mc_by_state[state][year]
-                    n_before = len(mc_events)
 
-                    # Calculate efficiency
-                    eff_result = self.calculate_selection_efficiency(mc_events, state)
+                    # Calculate efficiency (includes generated counts)
+                    eff_result = self.calculate_selection_efficiency(mc_events, state, year)
                     eff = eff_result["eff"]
                     err = eff_result["err"]
-
-                    # Get number after cuts for validation
-                    mc_after = self.apply_optimized_cuts(mc_events, state)
-                    n_after = len(mc_after)
+                    n_before = eff_result["n_before"]  # Generated events
+                    n_after = eff_result["n_after"]  # Events passing all cuts
 
                     efficiencies[state][year] = {
                         "eff": eff,

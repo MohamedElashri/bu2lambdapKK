@@ -95,7 +95,7 @@ rm cache/data/*.pkl cache/metadata/*.json
 
 ### Overview
 
-Use manual cuts to **skip the 10-20 minute grid scan optimization** (Phase 3). Perfect for:
+Use manual cuts to **skip the 5-10 minute grid scan optimization** (Phase 3). Perfect for:
 - **Quick testing**: Rapid iteration during development
 - **Fixed cuts**: Physics-motivated values
 - **Validation**: Compare manual vs. optimized cuts
@@ -151,7 +151,7 @@ p_ProbNNp = { cut_type = "greater", value = 0.25 }
 | Phase | With Manual Cuts | With Grid Scan |
 |-------|------------------|----------------|
 | Phase 2 | Load data  | Load data  |
-| Phase 3 | Use manual cuts ⚡ **(skips 10-20 min!)** | Run optimization  |
+| Phase 3 | Use manual cuts ⚡ **(skips 5-10 min!)** | Run optimization  |
 | Phases 4-7 | Continue normally  | Continue normally  |
 
 ### Output

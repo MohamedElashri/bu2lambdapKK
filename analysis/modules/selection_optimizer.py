@@ -14,84 +14,142 @@ from .exceptions import OptimizationError
 
 class SelectionOptimizer:
     """
-    Optimize cuts on B+, bachelor p̄, K+, K- using Figure of Merit.
+    Optimize cuts using UNBIASED data-driven method.
+    NEW STRATEGY (Phase 3 revision):
+    - Signal proxy: "no-charmonium" data (M(Λ̄pK⁻) > 4 GeV)
+    - Background proxy: B⁺ mass sidebands
+    - NO MC USED in optimization → unbiased!
 
-    Perform 2D optimization: (variable * charmonium_state)
-    Lambda cuts are already applied (pre-selection).
+    Supports two modes:
+    - Option A (universal): Same cuts for all states
+    - Option B (state-specific): Different cuts per state
 
     Attributes:
-        signal_mc: Signal MC events by state and year
-        phase_space_mc: Phase-space MC events by year
-        data: Real data events by year
-        mc_generated_counts: Generator-level event counts
+        data: Real data events by year (after Lambda cuts)
         config: Configuration object
     """
 
     def __init__(
         self,
-        signal_mc: dict[str, dict[str, ak.Array]],
-        phase_space_mc: dict[str, ak.Array],
         data: dict[str, ak.Array],
-        mc_generated_counts: dict[str, dict[str, int]],
         config: Any,
     ) -> None:
         """
-        Initialize selection optimizer.
+        Initialize selection optimizer with data-driven approach.
 
         Args:
-            signal_mc: {state: {year: events_after_lambda_cuts}}
-            phase_space_mc: {year: events_after_lambda_cuts} (KpKm non-resonant)
-            data: {year: events_after_lambda_cuts}
-            mc_generated_counts: {state: {year: n_generated}} (generator level, before cuts)
+            data: {year: events_after_lambda_cuts} - Real data only!
             config: Configuration object
         """
-        self.signal_mc: dict[str, dict[str, ak.Array]] = signal_mc
-        self.phase_space_mc: dict[str, ak.Array] = phase_space_mc
         self.data: dict[str, ak.Array] = data
-        self.mc_generated_counts: dict[str, dict[str, int]] = mc_generated_counts
         self.config: Any = config
 
-    def scale_signal_to_expected_events(self, n_mc_after_cuts: int, state: str, year: str) -> float:
+        # Get optimization strategy from config
+        self.opt_config = self.config.selection.get("optimization_strategy", {})
+        self.state_dependent = self.opt_config.get("state_dependent", False)
+
+        # Print optimization mode
+        print("\n" + "=" * 80)
+        print("SELECTION OPTIMIZER - UNBIASED DATA-DRIVEN METHOD")
+        print("=" * 80)
+        if self.state_dependent:
+            print("Mode: Option B (STATE-SPECIFIC cuts)")
+            print("  → Each state gets its own optimized cuts")
+        else:
+            print("Mode: Option A (UNIVERSAL cuts)")
+            print("  → Same cuts applied to all states")
+        print("=" * 80)
+
+    def get_no_charmonium_data(self, data: ak.Array) -> ak.Array:
         """
-        Scale MC to data-equivalent for realistic FOM optimization
+        Get "no-charmonium" events as signal proxy.
 
-        For FOM to work correctly, n_sig and n_bkg must be on the same scale
-        (both representing expected events in data).
-
-        We scale MC by: (n_mc_after_cuts / n_mc_generated) * scale_factor
-
-        Where scale_factor is chosen to give realistic S/B ratios without
-        needing unknown state-specific branching fractions. We use a
-        data-driven estimate based on the size of the MC sample relative
-        to the data sample.
+        These are real B⁺ → Λ̄pK⁻K⁺ events with M(Λ̄pK⁻) above charmonium limit.
+        Same final state and similar kinematics as signal, but UNBIASED.
 
         Args:
-            n_mc_after_cuts: Number of MC events passing cuts and in signal region
-            state: Charmonium state ("jpsi", "etac", "chic0", "chic1") - Note: etac_2s uses chi_c1 cuts
-            year: Data-taking year ("2016", "2017", "2018")
+            data: Awkward array of events
 
         Returns:
-            float: Data-scaled MC count for FOM calculation
+            Filtered array with M(Λ̄pK⁻) > charmonium_limit
         """
-        # Get n_mc_generated for this state and year (generator level)
-        n_mc_generated = self.mc_generated_counts.get(state, {}).get(year, 1)
+        mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in data.fields else "M_LpKm"
+        no_cc_min = self.opt_config.get("no_charmonium_mass_min", 4000.0)
+        no_cc_max = self.opt_config.get("no_charmonium_mass_max", 6000.0)
 
-        if n_mc_generated == 0:
-            return 0.0
+        mask = (data[mass_branch] > no_cc_min) & (data[mass_branch] < no_cc_max)
+        return data[mask]
 
-        # Calculate efficiency
-        efficiency = n_mc_after_cuts / n_mc_generated
+    def get_b_mass_sideband_data(self, data: ak.Array) -> ak.Array:
+        """
+        Get B⁺ mass sideband events as background proxy.
 
-        # Scale factor from configuration
-        # This is calibrated to match typical signal yields in similar LHCb analyses
-        # The exact value doesn't matter for optimization (we're comparing cuts),
-        # but realistic S/B ratios help FOM converge properly
-        scale_factor = self.config.selection.get("optimization_strategy", {}).get(
-            "signal_scale_factor", 10000.0
-        )
+        Events with:
+        - M(Λ̄pK⁻) in charmonium region [2.9-3.8 GeV]
+        - M(B⁺) in far sidebands (below or above signal window)
 
-        # Return scaled signal estimate
-        return efficiency * scale_factor
+        Args:
+            data: Awkward array of events
+
+        Returns:
+            Filtered array in B⁺ mass sidebands
+        """
+        mass_LpKm = data["M_LpKm_h2"] if "M_LpKm_h2" in data.fields else data["M_LpKm"]
+        mass_Bu = data["Bu_MM_corrected"] if "Bu_MM_corrected" in data.fields else data["Bu_M"]
+
+        # Charmonium region
+        cc_min = self.opt_config.get("charmonium_region_min", 2900.0)
+        cc_max = self.opt_config.get("charmonium_region_max", 3800.0)
+        in_charmonium = (mass_LpKm > cc_min) & (mass_LpKm < cc_max)
+
+        # B+ sidebands
+        b_low_sb_min = self.opt_config.get("b_low_sideband_min", 5150.0)
+        b_low_sb_max = self.opt_config.get("b_low_sideband_max", 5230.0)
+        b_high_sb_min = self.opt_config.get("b_high_sideband_min", 5330.0)
+        b_high_sb_max = self.opt_config.get("b_high_sideband_max", 5410.0)
+
+        in_low_sb = (mass_Bu > b_low_sb_min) & (mass_Bu < b_low_sb_max)
+        in_high_sb = (mass_Bu > b_high_sb_min) & (mass_Bu < b_high_sb_max)
+        in_sidebands = in_low_sb | in_high_sb
+
+        return data[in_charmonium & in_sidebands]
+
+    def validate_data_regions(self) -> dict[str, int]:
+        """
+        Validate that data regions have sufficient statistics.
+
+        Returns:
+            Dictionary with event counts in each region
+        """
+        # Combine all years
+        data_arrays = [self.data[year] for year in self.data.keys()]
+        data_combined = ak.concatenate(data_arrays, axis=0)
+
+        # Count events in each region
+        no_cc_data = self.get_no_charmonium_data(data_combined)
+        bkg_data = self.get_b_mass_sideband_data(data_combined)
+
+        counts = {
+            "total": len(data_combined),
+            "no_charmonium": len(no_cc_data),
+            "b_sidebands": len(bkg_data),
+        }
+
+        print("\n" + "=" * 80)
+        print("DATA REGION VALIDATION")
+        print("=" * 80)
+        print(f"Total events (after Lambda cuts): {counts['total']:,}")
+        print(f"No-charmonium region (signal proxy): {counts['no_charmonium']:,}")
+        print(f"B+ sidebands (background proxy): {counts['b_sidebands']:,}")
+
+        if counts["no_charmonium"] < 100:
+            print("⚠️  WARNING: Low statistics in no-charmonium region!")
+        if counts["b_sidebands"] < 100:
+            print("⚠️  WARNING: Low statistics in B+ sidebands!")
+
+        print("=" * 80)
+
+        return counts
 
     def compute_fom(self, n_sig: float, n_bkg: float) -> float:
         """
@@ -221,224 +279,6 @@ class SelectionOptimizer:
 
         return n_bkg_estimate
 
-    def scan_single_variable(
-        self, state: str, variable_name: str, branch_name: str, scan_config: dict
-    ) -> pd.DataFrame:
-        """
-        Scan a single variable and compute FOM at each cut value
-
-        Args:
-            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 cuts
-            variable_name: Logical name (e.g., "bu_pt")
-            branch_name: Actual branch name in tree
-            scan_config: {begin, end, step, cut_type, description}
-
-        Returns:
-            DataFrame: [cut_value, n_sig, n_bkg, fom]
-        """
-        # Generate scan points
-        cut_values = np.arange(
-            scan_config["begin"], scan_config["end"] + scan_config["step"], scan_config["step"]
-        )
-
-        # Combine all years for this state
-        sig_mc_arrays = [self.signal_mc[state][year] for year in self.signal_mc[state].keys()]
-        sig_mc_combined = ak.concatenate(sig_mc_arrays, axis=0)
-
-        # Filter data to state-specific mass region
-        data_arrays = [self.data[year] for year in self.data.keys()]
-        data_combined_all = ak.concatenate(data_arrays, axis=0)
-        opt_mass_region = self.define_optimization_mass_region(state)
-        mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in data_combined_all.fields else "M_LpKm"
-        mass_filter = (data_combined_all[mass_branch] > opt_mass_region[0]) & (
-            data_combined_all[mass_branch] < opt_mass_region[1]
-        )
-        data_combined = data_combined_all[mass_filter]
-
-        # Compute weighted average scale factor across all years
-        total_mc_events = len(sig_mc_combined)
-        weighted_scale = 0.0
-        for year in self.signal_mc[state].keys():
-            year_mc_events = len(self.signal_mc[state][year])
-            year_weight = year_mc_events / total_mc_events if total_mc_events > 0 else 0
-            year_scale = self.scale_signal_to_expected_events(1, state, year)
-            weighted_scale += year_weight * year_scale
-
-        results = []
-
-        # Check if branch is jagged (multiple values per event) and flatten if needed
-        sig_branch_data = sig_mc_combined[branch_name]
-        data_branch_data = data_combined[branch_name]
-
-        # If jagged (nested list structure), take first element
-        # Check by looking at the type - if it has 'var' in type string, it's jagged
-        sig_is_jagged = "var" in str(ak.type(sig_branch_data))
-        data_is_jagged = "var" in str(ak.type(data_branch_data))
-
-        if sig_is_jagged or data_is_jagged:
-            print(
-                f"    Warning: {branch_name} is jagged (sig:{sig_is_jagged}, data:{data_is_jagged}), taking first element per event"
-            )
-            if sig_is_jagged:
-                sig_branch_data = ak.firsts(sig_branch_data)
-            if data_is_jagged:
-                data_branch_data = ak.firsts(data_branch_data)
-
-        for cut_val in cut_values:
-            # Apply cut
-            if scan_config["cut_type"] == "greater":
-                sig_mask = sig_branch_data > cut_val
-                data_mask = data_branch_data > cut_val
-            else:  # "less"
-                sig_mask = sig_branch_data < cut_val
-                data_mask = data_branch_data < cut_val
-
-            # Filter events
-            sig_pass = sig_mc_combined[sig_mask]
-            data_pass = data_combined[data_mask]
-
-            # Count signal in signal region (raw MC count)
-            signal_region = self.define_signal_region(state)
-            n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
-
-            # Scale signal to expected observed events
-            n_sig = n_sig_mc * weighted_scale
-
-            # Estimate background from real data
-            n_bkg = self.estimate_background_in_signal_region(data_pass, state)
-
-            # Compute FOM
-            fom = self.compute_fom(n_sig, n_bkg)
-
-            results.append({"cut_value": cut_val, "n_sig": n_sig, "n_bkg": n_bkg, "fom": fom})
-
-        return pd.DataFrame(results)
-
-    def scan_2d_variable_pair(
-        self, state: str, var1: dict[str, Any], var2: dict[str, Any]
-    ) -> pd.DataFrame:
-        """
-        Perform 2D scan of two variables simultaneously
-
-        Args:
-            state: Charmonium state ("jpsi", "etac", "chic0", "chic1") - Note: etac_2s uses chi_c1 cuts
-            var1: {category, var_name, branch_name, config}
-            var2: {category, var_name, branch_name, config}
-
-        Returns:
-            DataFrame with columns: [cut1, cut2, n_sig, n_bkg, fom]
-        """
-        # Generate scan points for both variables
-        cut1_values = np.arange(
-            var1["config"]["begin"],
-            var1["config"]["end"] + var1["config"]["step"],
-            var1["config"]["step"],
-        )
-
-        cut2_values = np.arange(
-            var2["config"]["begin"],
-            var2["config"]["end"] + var2["config"]["step"],
-            var2["config"]["step"],
-        )
-
-        # Combine all years for this state
-        sig_mc_arrays = [self.signal_mc[state][year] for year in self.signal_mc[state].keys()]
-        sig_mc_combined = ak.concatenate(sig_mc_arrays, axis=0)
-
-        # Filter data to state-specific mass region
-        data_arrays = [self.data[year] for year in self.data.keys()]
-        data_combined_all = ak.concatenate(data_arrays, axis=0)
-        opt_mass_region = self.define_optimization_mass_region(state)
-        mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in data_combined_all.fields else "M_LpKm"
-        mass_filter = (data_combined_all[mass_branch] > opt_mass_region[0]) & (
-            data_combined_all[mass_branch] < opt_mass_region[1]
-        )
-        data_combined = data_combined_all[mass_filter]
-
-        # Compute weighted average scale factor across all years
-        total_mc_events = len(sig_mc_combined)
-        weighted_scale = 0.0
-        for year in self.signal_mc[state].keys():
-            year_mc_events = len(self.signal_mc[state][year])
-            year_weight = year_mc_events / total_mc_events if total_mc_events > 0 else 0
-            year_scale = self.scale_signal_to_expected_events(1, state, year)
-            weighted_scale += year_weight * year_scale
-
-        # Handle jagged arrays for both variables
-        sig_branch1 = sig_mc_combined[var1["branch_name"]]
-        sig_branch2 = sig_mc_combined[var2["branch_name"]]
-        data_branch1 = data_combined[var1["branch_name"]]
-        data_branch2 = data_combined[var2["branch_name"]]
-
-        # Flatten jagged arrays if needed
-        if "var" in str(ak.type(sig_branch1)):
-            sig_branch1 = ak.firsts(sig_branch1)
-        if "var" in str(ak.type(sig_branch2)):
-            sig_branch2 = ak.firsts(sig_branch2)
-        if "var" in str(ak.type(data_branch1)):
-            data_branch1 = ak.firsts(data_branch1)
-        if "var" in str(ak.type(data_branch2)):
-            data_branch2 = ak.firsts(data_branch2)
-
-        results = []
-        total_scans = len(cut1_values) * len(cut2_values)
-        scan_count = 0
-
-        # Scan all combinations of (cut1, cut2)
-        for cut1 in cut1_values:
-            for cut2 in cut2_values:
-                scan_count += 1
-                if scan_count % 50 == 0:
-                    print(
-                        f"    Progress: {scan_count}/{total_scans} ({100*scan_count/total_scans:.1f}%)",
-                        end="\r",
-                    )
-
-                # Apply both cuts simultaneously
-                # Variable 1 mask
-                if var1["config"]["cut_type"] == "greater":
-                    sig_mask1 = sig_branch1 > cut1
-                    data_mask1 = data_branch1 > cut1
-                else:
-                    sig_mask1 = sig_branch1 < cut1
-                    data_mask1 = data_branch1 < cut1
-
-                # Variable 2 mask
-                if var2["config"]["cut_type"] == "greater":
-                    sig_mask2 = sig_branch2 > cut2
-                    data_mask2 = data_branch2 > cut2
-                else:
-                    sig_mask2 = sig_branch2 < cut2
-                    data_mask2 = data_branch2 < cut2
-
-                # Combine masks (AND operation)
-                sig_mask = sig_mask1 & sig_mask2
-                data_mask = data_mask1 & data_mask2
-
-                # Apply masks
-                sig_pass = sig_mc_combined[sig_mask]
-                data_pass = data_combined[data_mask]
-
-                # Count signal in signal region (raw MC count)
-                signal_region = self.define_signal_region(state)
-                n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
-
-                # Scale signal to expected observed events
-                n_sig = n_sig_mc * weighted_scale
-
-                # Estimate background from real data
-                n_bkg = self.estimate_background_in_signal_region(data_pass, state)
-
-                # Compute FOM
-                fom = self.compute_fom(n_sig, n_bkg)
-
-                results.append(
-                    {"cut1": cut1, "cut2": cut2, "n_sig": n_sig, "n_bkg": n_bkg, "fom": fom}
-                )
-
-        print()  # New line after progress
-        return pd.DataFrame(results)
-
     def _get_branch_name_for_variable(self, category: str, var_name: str) -> str:
         """
         Map (category, variable) to actual branch name in normalized data.
@@ -475,248 +315,6 @@ class SelectionOptimizer:
             return branch_map[category][var_name]
         # Fallback: construct from category_var_name
         return f"{category}_{var_name}"
-
-    def optimize_nd_grid_scan(self) -> pd.DataFrame:
-        """
-        Perform N-dimensional GRID scan: exhaustive search over all cut combinations
-
-        Uses only 7 variables from nd_optimizable_selection config:
-        - h1_ProbNNk, h2_ProbNNk, p_ProbNNp (PID)
-        - Bu_PT, Bu_FDCHI2, Bu_IPCHI2, Bu_DTF_chi2 (B+ kinematics)
-
-        Lambda cuts are already FIXED and applied in Phase 2.
-
-        Grid size: 3×3×3×2×4×6×3 = 3,888 combinations per state
-
-        Returns:
-            DataFrame with optimal cuts for each state
-        """
-        import itertools
-
-        import numpy as np
-
-        # States with MC available for optimization
-        # Note: etac_2s has no MC, will use chi_c1 cuts as proxy
-        states = ["jpsi", "etac", "chic0", "chic1"]
-
-        # Get N-D grid scan variables from config
-        nd_config = self.config.selection.get("nd_optimizable_selection", {})
-
-        if not nd_config:
-            raise OptimizationError(
-                "No 'nd_optimizable_selection' section found in config/selection.toml!\n"
-                "N-D grid scan requires this section to define variables and ranges to optimize."
-            )
-
-        # Build variable list and grid points
-        all_variables = []
-        grid_axes = []  # Each element is a list of values to scan
-
-        for var_name, var_config in nd_config.items():
-            if var_name == "notes":
-                continue
-
-            # Generate grid points for this variable
-            begin = var_config["begin"]
-            end = var_config["end"]
-            step = var_config["step"]
-            grid_points = np.arange(begin, end + step / 2, step)  # Include endpoint
-
-            all_variables.append(
-                {
-                    "var_name": var_name,
-                    "branch_name": var_config["branch_name"],
-                    "cut_type": var_config["cut_type"],
-                    "description": var_config.get("description", ""),
-                }
-            )
-            grid_axes.append(grid_points)
-
-        n_vars = len(all_variables)
-        total_combinations = np.prod([len(axis) for axis in grid_axes])
-
-        print(f"\n{'='*80}")
-        print(f"N-DIMENSIONAL GRID SCAN: {n_vars} variables, {total_combinations:,} combinations")
-        print(f"{'='*80}")
-        for i, var in enumerate(all_variables):
-            n_points = len(grid_axes[i])
-            print(
-                f"  {var['var_name']:20s} ({var['cut_type']:>7s}): {n_points} points {list(grid_axes[i])}"
-            )
-        print(f"{'='*80}\n")
-
-        all_results = []
-
-        # Optimize for each state
-        for state in states:
-            print(f"\n{'='*60}")
-            print(f"Scanning grid for state: {state}")
-            print(f"{'='*60}")
-
-            # Prepare MC for this state
-            sig_mc_arrays = [self.signal_mc[state][year] for year in self.signal_mc[state].keys()]
-            sig_mc_combined = ak.concatenate(sig_mc_arrays, axis=0)
-
-            # Prepare real data for background estimation
-            # CRITICAL: Filter data to only this state's mass region!
-            # This ensures each state optimizes against its own relevant background
-            data_arrays = [self.data[year] for year in self.data.keys()]
-            data_combined_all = ak.concatenate(data_arrays, axis=0)
-
-            # Get state-specific mass region for optimization
-            opt_mass_region = self.define_optimization_mass_region(state)
-            mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in data_combined_all.fields else "M_LpKm"
-            mass_filter = (data_combined_all[mass_branch] > opt_mass_region[0]) & (
-                data_combined_all[mass_branch] < opt_mass_region[1]
-            )
-            data_combined = data_combined_all[mass_filter]
-
-            print(
-                f"  Data filtered to mass region [{opt_mass_region[0]:.0f}, {opt_mass_region[1]:.0f}] MeV"
-            )
-            print(
-                f"  Total data events: {len(data_combined_all):,} → {len(data_combined):,} (in mass region)"
-            )
-
-            # Compute weighted average scale factor across all years
-            total_mc_events = len(sig_mc_combined)
-            weighted_scale = 0.0
-            for year in self.signal_mc[state].keys():
-                year_mc_events = len(self.signal_mc[state][year])
-                year_weight = year_mc_events / total_mc_events if total_mc_events > 0 else 0
-                year_scale = self.scale_signal_to_expected_events(1, state, year)
-                weighted_scale += year_weight * year_scale
-
-            # Extract branch data (once, before loop)
-            sig_branches = []
-            data_branches = []  # Real data for background
-
-            for var in all_variables:
-                sig_branch = sig_mc_combined[var["branch_name"]]
-                data_branch = data_combined[var["branch_name"]]
-
-                # Flatten jagged arrays
-                if "var" in str(ak.type(sig_branch)):
-                    sig_branch = ak.firsts(sig_branch)
-                if "var" in str(ak.type(data_branch)):
-                    data_branch = ak.firsts(data_branch)
-
-                sig_branches.append(sig_branch)
-                data_branches.append(data_branch)
-
-            # Grid scan: test all combinations
-            best_fom = -np.inf
-            best_cuts = None
-            best_n_sig = 0.0
-            best_n_bkg = 0.0
-
-            print(f"  Scanning {total_combinations:,} combinations...")
-
-            # Use tqdm progress bar for grid scan
-            with tqdm(
-                total=total_combinations, desc=f"  Optimizing {state}", unit="combo", ncols=100
-            ) as pbar:
-                for i, cut_combination in enumerate(itertools.product(*grid_axes)):
-                    # Apply this combination of cuts
-                    sig_mask = ak.ones_like(sig_branches[0], dtype=bool)
-                    data_mask = ak.ones_like(data_branches[0], dtype=bool)
-
-                    for j, (cut_val, var) in enumerate(
-                        zip(cut_combination, all_variables, strict=False)
-                    ):
-                        if var["cut_type"] == "greater":
-                            sig_mask = sig_mask & (sig_branches[j] > cut_val)
-                            data_mask = data_mask & (data_branches[j] > cut_val)
-                        else:
-                            sig_mask = sig_mask & (sig_branches[j] < cut_val)
-                            data_mask = data_mask & (data_branches[j] < cut_val)
-
-                    # Filter events
-                    sig_pass = sig_mc_combined[sig_mask]
-                    data_pass = data_combined[data_mask]
-
-                    # Calculate FOM using scaled signal and real data background
-                    signal_region = self.define_signal_region(state)
-                    n_sig_mc = self.count_events_in_region(sig_pass, signal_region)
-                    n_sig = n_sig_mc * weighted_scale
-                    n_bkg = self.estimate_background_in_signal_region(data_pass, state)
-                    fom = self.compute_fom(n_sig, n_bkg)
-
-                    # Update best if this is better
-                    if fom > best_fom:
-                        best_fom = fom
-                        best_cuts = cut_combination
-                        best_n_sig = n_sig
-                        best_n_bkg = n_bkg
-                        pbar.set_postfix(
-                            FOM=f"{best_fom:.3f}", S=int(best_n_sig), B=int(best_n_bkg)
-                        )
-
-                    pbar.update(1)
-
-            print("  ✓ Grid scan complete!")
-            print(f"  Best FOM: {best_fom:.3f}")
-            print(f"  n_sig: {best_n_sig:.0f}, n_bkg: {best_n_bkg:.1f}")
-
-            # Store results
-            if best_cuts is None:
-                print("  WARNING: No valid cuts found!")
-                continue
-
-            print("\n  Optimal cuts:")
-            for j, var in enumerate(all_variables):
-                cut_val = best_cuts[j]
-                print(f"    {var['var_name']:20s} {var['cut_type']:>7s} {cut_val:8.3f}")
-
-                all_results.append(
-                    {
-                        "state": state,
-                        "variable": var["var_name"],
-                        "branch_name": var["branch_name"],
-                        "optimal_cut": cut_val,
-                        "cut_type": var["cut_type"],
-                        "max_fom": best_fom,
-                        "n_sig_at_optimal": best_n_sig,
-                        "n_bkg_at_optimal": best_n_bkg,
-                        "description": var["description"],
-                    }
-                )
-
-        results_df = pd.DataFrame(all_results)
-
-        # Add etac_2s cuts by copying chi_c1 (no MC available for etac_2s)
-        print(f"\n{'='*80}")
-        print("ADDING ETA_C(2S) CUTS")
-        print(f"{'='*80}")
-        print("Note: No MC available for eta_c(2S)")
-        print("      Using chi_c1 cuts as proxy (similar mass and width)")
-
-        chic1_cuts = results_df[results_df["state"] == "chic1"].copy()
-        if len(chic1_cuts) > 0:
-            etac2s_cuts = chic1_cuts.copy()
-            etac2s_cuts["state"] = "etac_2s"
-            results_df = pd.concat([results_df, etac2s_cuts], ignore_index=True)
-            print("✓ Copied chi_c1 cuts to etac_2s")
-        else:
-            print("⚠️  Warning: No chi_c1 cuts found to copy")
-
-        # Save results
-        output_dir = Path(self.config.paths["output"]["tables_dir"])
-        output_dir.mkdir(exist_ok=True, parents=True)
-
-        results_df.to_csv(output_dir / "optimized_cuts_nd.csv", index=False)
-
-        # Save per-state tables (including etac_2s)
-        all_states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
-        for state in all_states:
-            state_df = results_df[results_df["state"] == state].copy()
-            if len(state_df) > 0:
-                state_df.to_csv(output_dir / f"optimized_cuts_nd_{state}.csv", index=False)
-                print(f"✓ Saved N-D optimized cuts for {state}")
-
-        print("\n✓ N-D optimization complete!")
-
-        return results_df
 
     def _plot_fom_scan(
         self, scan_results: pd.DataFrame, category: str, var_name: str, state: str, var_config: dict
@@ -872,3 +470,226 @@ class SelectionOptimizer:
         print("=" * 80)
         print(summary.to_string())
         print("\n✓ Saved to:", output_dir)
+
+    def optimize_nd_grid_scan(self) -> pd.DataFrame:
+        """
+        Perform N-dimensional GRID scan using unbiased data-driven method.
+
+        APPROACH:
+        - Signal proxy: "no-charmonium" data (M(Λ̄pK⁻) > 4 GeV)
+        - Background proxy: B⁺ mass sidebands
+        - NO MC used → completely unbiased!
+
+        Supports two modes:
+        - Option A (universal): Optimize once, apply to all states
+        - Option B (state-specific): Optimize per state
+
+        Uses only 7 variables from nd_optimizable_selection config:
+        - h1_ProbNNk, h2_ProbNNk, p_ProbNNp (PID)
+        - Bu_PT, Bu_FDCHI2, Bu_IPCHI2, Bu_DTF_chi2 (B+ kinematics)
+
+        Lambda cuts are already FIXED and applied in Phase 2.
+
+        Grid size: 3×3×3×2×4×6×3 = 3,888 combinations
+
+        Returns:
+            DataFrame with optimal cuts (universal or per state)
+        """
+        import itertools
+
+        # Get N-D grid scan variables from config
+        nd_config = self.config.selection.get("nd_optimizable_selection", {})
+
+        if not nd_config:
+            raise OptimizationError(
+                "No 'nd_optimizable_selection' section found in config/selection.toml!\n"
+                "N-D grid scan requires this section to define variables and ranges to optimize."
+            )
+
+        # Build variable list and grid points
+        all_variables = []
+        grid_axes = []  # Each element is a list of values to scan
+
+        for var_name, var_config in nd_config.items():
+            if var_name == "notes":
+                continue
+
+            # Generate grid points for this variable
+            begin = var_config["begin"]
+            end = var_config["end"]
+            step = var_config["step"]
+            grid_points = np.arange(begin, end + step / 2, step)  # Include endpoint
+
+            all_variables.append(
+                {
+                    "var_name": var_name,
+                    "branch_name": var_config["branch_name"],
+                    "cut_type": var_config["cut_type"],
+                    "description": var_config.get("description", ""),
+                }
+            )
+            grid_axes.append(grid_points)
+
+        n_vars = len(all_variables)
+        total_combinations = int(np.prod([len(axis) for axis in grid_axes]))
+
+        print(f"\n{'='*80}")
+        print(f"N-D GRID SCAN (UNBIASED): {n_vars} variables, {total_combinations:,} combinations")
+        print(f"{'='*80}")
+        for i, var in enumerate(all_variables):
+            n_points = len(grid_axes[i])
+            print(f"  {var['var_name']:20s} ({var['cut_type']:>7s}): {n_points} points")
+        print(f"{'='*80}\n")
+
+        # Combine all years
+        data_arrays = [self.data[year] for year in self.data.keys()]
+        data_combined = ak.concatenate(data_arrays, axis=0)
+
+        # Get signal and background proxies
+        sig_data = self.get_no_charmonium_data(data_combined)
+        bkg_data = self.get_b_mass_sideband_data(data_combined)
+
+        print(f"Signal proxy (no-charmonium): {len(sig_data):,} events")
+        print(f"Background proxy (B+ sidebands): {len(bkg_data):,} events\n")
+
+        all_results = []
+
+        if self.state_dependent:
+            # Option B: State-specific cuts (NOT YET IMPLEMENTED - needs discussion)
+            print("⚠️  State-specific optimization not yet implemented!")
+            print("    Using universal cuts instead.\n")
+            states = ["universal"]
+        else:
+            # Option A: Universal cuts
+            states = ["universal"]
+            print("Running Option A: UNIVERSAL optimization\n")
+
+        for state in states:
+            print(f"\n{'='*60}")
+            if state == "universal":
+                print("Optimizing UNIVERSAL cuts for all states")
+            else:
+                print(f"Optimizing cuts for state: {state}")
+            print(f"{'='*60}")
+
+            # Extract branch data (once, before loop)
+            sig_branches = []
+            bkg_branches = []
+
+            for var in all_variables:
+                sig_branch = sig_data[var["branch_name"]]
+                bkg_branch = bkg_data[var["branch_name"]]
+
+                # Flatten jagged arrays
+                if "var" in str(ak.type(sig_branch)):
+                    sig_branch = ak.firsts(sig_branch)
+                if "var" in str(ak.type(bkg_branch)):
+                    bkg_branch = ak.firsts(bkg_branch)
+
+                sig_branches.append(sig_branch)
+                bkg_branches.append(bkg_branch)
+
+            # Grid scan: test all combinations
+            best_fom = -np.inf
+            best_cuts = None
+            best_n_sig = 0.0
+            best_n_bkg = 0.0
+
+            print(f"  Scanning {total_combinations:,} combinations...")
+
+            # Use tqdm progress bar for grid scan
+            desc = f"  {state:8s}" if state != "universal" else "  Universal"
+            with tqdm(total=total_combinations, desc=desc, unit="combo", ncols=100) as pbar:
+                for i, cut_combination in enumerate(itertools.product(*grid_axes)):
+                    # Apply this combination of cuts
+                    sig_mask = ak.ones_like(sig_branches[0], dtype=bool)
+                    bkg_mask = ak.ones_like(bkg_branches[0], dtype=bool)
+
+                    for j, (cut_val, var) in enumerate(
+                        zip(cut_combination, all_variables, strict=False)
+                    ):
+                        if var["cut_type"] == "greater":
+                            sig_mask = sig_mask & (sig_branches[j] > cut_val)
+                            bkg_mask = bkg_mask & (bkg_branches[j] > cut_val)
+                        else:
+                            sig_mask = sig_mask & (sig_branches[j] < cut_val)
+                            bkg_mask = bkg_mask & (bkg_branches[j] < cut_val)
+
+                    # Count events passing cuts
+                    n_sig = ak.sum(sig_mask)
+                    n_bkg = ak.sum(bkg_mask)
+
+                    # Calculate FOM
+                    fom = self.compute_fom(n_sig, n_bkg)
+
+                    # Update best if this is better
+                    if fom > best_fom:
+                        best_fom = fom
+                        best_cuts = cut_combination
+                        best_n_sig = float(n_sig)
+                        best_n_bkg = float(n_bkg)
+                        pbar.set_postfix(
+                            FOM=f"{best_fom:.3f}", S=int(best_n_sig), B=int(best_n_bkg)
+                        )
+
+                    pbar.update(1)
+
+            print("  ✓ Grid scan complete!")
+            print(f"  Best FOM: {best_fom:.3f}")
+            print(f"  n_sig: {best_n_sig:.0f}, n_bkg: {best_n_bkg:.1f}")
+
+            # Store results
+            if best_cuts is None:
+                print("  WARNING: No valid cuts found!")
+                continue
+
+            print("\n  Optimal cuts:")
+            for j, var in enumerate(all_variables):
+                cut_val = best_cuts[j]
+                print(f"    {var['var_name']:20s} {var['cut_type']:>7s} {cut_val:8.3f}")
+
+                # For universal cuts, apply to all states
+                if state == "universal":
+                    for actual_state in ["jpsi", "etac", "chic0", "chic1"]:
+                        all_results.append(
+                            {
+                                "state": actual_state,
+                                "variable": var["var_name"],
+                                "branch_name": var["branch_name"],
+                                "optimal_cut": cut_val,
+                                "cut_type": var["cut_type"],
+                                "fom": best_fom,
+                            }
+                        )
+                else:
+                    # State-specific
+                    all_results.append(
+                        {
+                            "state": state,
+                            "variable": var["var_name"],
+                            "branch_name": var["branch_name"],
+                            "optimal_cut": cut_val,
+                            "cut_type": var["cut_type"],
+                            "fom": best_fom,
+                        }
+                    )
+
+        # Convert to DataFrame
+        df_results = pd.DataFrame(all_results)
+
+        # Add etac_2s by copying chi_c1 (no MC available)
+        if "chic1" in df_results["state"].values:
+            etac_2s_cuts = df_results[df_results["state"] == "chic1"].copy()
+            etac_2s_cuts["state"] = "etac_2s"
+            df_results = pd.concat([df_results, etac_2s_cuts], ignore_index=True)
+            print("\n✓ Added etac_2s cuts (copied from chi_c1)")
+
+        print(f"\n{'='*80}")
+        print("OPTIMIZATION COMPLETE")
+        print(f"{'='*80}")
+        print(f"Method: {'State-specific' if self.state_dependent else 'Universal'}")
+        print(f"Total states: {df_results['state'].nunique()}")
+        print(f"Variables optimized: {df_results['variable'].nunique()}")
+        print(f"{'='*80}\n")
+
+        return df_results

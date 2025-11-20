@@ -128,8 +128,7 @@ ignore = [
   "RET504",  # Unnecessary variable assignment before return
   "C414",  # Unnecessary list call within sorted
   "SIM101",  # Multiple isinstance calls
-  "SIM118",  # Use key in dict instead of key in dict.keys()
-  "UP038"  # Use X | Y in isinstance call
+  "SIM118"  # Use key in dict instead of key in dict.keys()
 ]
 # Enable pycodestyle (E, W), Pyflakes (F), and isort (I)
 select = ["E", "F", "W", "I"]

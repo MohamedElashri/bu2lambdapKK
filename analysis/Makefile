@@ -82,7 +82,7 @@ pipeline-manual: ## Run pipeline with manual cuts (skips grid scan optimization)
 
 pipeline-manual-2016: ## Run pipeline with manual cuts (2016 only, fast!)
 	@printf "\033[0;34m═══ Pipeline (Manual Cuts): 2016 Only ═══\033[0m\n"
-	@printf "\033[1;33m⚡ Skipping optimization (saves 10-20 minutes)\033[0m\n"
+	@printf "\033[1;33m⚡ Skipping optimization (saves 5-10 minutes)\033[0m\n"
 	@$(PYTHON) run_pipeline.py --use-manual-cuts --years 2016
 
 pipeline-manual-2017: ## Run pipeline with manual cuts (2017 only)
