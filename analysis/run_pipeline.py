@@ -1171,14 +1171,25 @@ class PipelineManager:
 
         # Phase 3: Selection optimization (ALWAYS RUN - critical for per-state analysis!)
         print("\n" + "=" * 80)
-        print("PHASE 3: SELECTION OPTIMIZATION (Per-State)")
+        print("PHASE 3: SELECTION OPTIMIZATION")
         print("=" * 80)
-        print("This phase optimizes cuts independently for each charmonium state:")
-        print("  - J/ψ (highest stats) → can use tighter cuts")
-        print("  - ηc (lowest mass) → may need softer cuts")
-        print("  - χc0, χc1 (intermediate) → state-specific optimization")
-        print("")
-        print("Each variable (Bu_PT, IPCHI2, etc.) is optimized per-state using FOM.")
+        opt_strategy = self.config.selection.get("optimization_strategy", {})
+        state_dependent = opt_strategy.get("state_dependent", False)
+
+        if state_dependent:
+            print("Mode: Option B (STATE-SPECIFIC cuts)")
+            print("Optimizes cuts independently for each charmonium state:")
+            print("  - J/ψ (highest stats) → can use tighter cuts")
+            print("  - ηc (lowest mass) → may need softer cuts")
+            print("  - χc0, χc1 (intermediate) → state-specific optimization")
+            print("")
+            print("Each variable (Bu_PT, IPCHI2, etc.) is optimized per-state using FOM.")
+        else:
+            print("Mode: Option A (UNIVERSAL cuts)")
+            print("Optimizes cuts once using all data, applying the same cuts to all states.")
+            print("  - Simpler and more robust than state-specific optimization")
+            print("  - Uses combined statistics from all charmonium states")
+            print("  - Recommended for standard analysis")
         print("=" * 80)
 
         # Run optimization (will use cache unless force_reoptimize is set)

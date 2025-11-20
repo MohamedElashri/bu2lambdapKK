@@ -79,11 +79,11 @@ step = 500.0
 apply_cuts_to_data = false
 comment = """
 apply_cuts_to_data: Controls cut application in Phase 4
-  - false (DEFAULT): Data unchanged, all states fit to same data (CORRECT for fitting)
-  - true: Apply cuts to data (for control plots, validation, debugging only)
+  - false (DEFAULT): Data unchanged, all states fit to same data
+  - true: Apply cuts to data
 
 data_cut_state: Which state's cuts to use when apply_cuts_to_data=true
-  - Options: "jpsi", "etac", "chic0", "chic1"
+  - Options: "jpsi", "etac", "chic0", "chic1", "etac2s"
   - Default: "jpsi" (tightest/most conservative cuts)
 
 ⚠️  WARNING: apply_cuts_to_data=true should ONLY be used for:
