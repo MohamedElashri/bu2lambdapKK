@@ -2,7 +2,6 @@
 Mass Fitting Module for B+ -> Lambda pK-K+ Analysis
 
 Implements RooFit-based simultaneous mass fitting for charmonium states.
-Following plan.md Phase 5 specification.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ class MassFitter:
 
     Fits M(Λ̄pK⁻) invariant mass distribution to extract charmonium yields.
 
-    Strategy (following plan.md Phase 5):
+    Strategy:
     - Fit each YEAR separately (MagDown + MagUp already combined)
     - Share physical parameters (masses, widths, resolution) across years
     - Extract separate yields per year (needed for efficiency correction)

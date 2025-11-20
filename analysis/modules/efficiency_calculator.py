@@ -1,8 +1,7 @@
 """
 Efficiency Calculation Module for B+ -> Lambda pK-K+ Analysis
 
-Implements Phase 6 efficiency calculation (simplified approach).
-Following plan.md specification.
+Implements Phase 6 efficiency calculation
 """
 
 from __future__ import annotations

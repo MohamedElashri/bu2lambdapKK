@@ -286,8 +286,6 @@ info: ## Show pipeline information
 	@printf "  Verbosity settings: config/data.toml [verbosity] section\n"
 	@printf "  Override with: ANALYSIS_DATA_LOADING=on/off\n\n"
 	@printf "\033[0;32mDocumentation:\033[0m\n"
-	@printf "  README.md   - Complete usage guide\n"
-	@printf "  plan.md     - Detailed phase specifications\n\n"
 	@printf "\033[0;34m═══════════════════════════════════════════════════════════════\033[0m\n"
 
 version: ## Show pipeline version info
