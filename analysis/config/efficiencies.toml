@@ -1,8 +1,6 @@
 # ═══════════════════════════════════════════════════════════════
 # EFFICIENCY CONFIGURATION
 # ═══════════════════════════════════════════════════════════════
-# Based on supervisor guidance: Efficiency cancellation in ratios
-#
 # KEY PRINCIPLE: All channels have IDENTICAL final state (Λ̄pK⁻K⁺)
 # Therefore many efficiencies CANCEL when calculating BR ratios
 # ═══════════════════════════════════════════════════════════════
