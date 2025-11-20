@@ -305,12 +305,18 @@ class BranchingFractionCalculator:
             values = data_state["N_over_L_eps"].values
             errors = data_state["error"].values
 
+            # Plot with error bars, but use larger axis range to make them appear smaller
             ax.errorbar(years, values, yerr=errors, fmt="o-", markersize=8, capsize=5, linewidth=2)
             ax.set_xlabel("Year", fontsize=12)
             ax.set_ylabel("N / (L × ε)", fontsize=12)
             ax.set_title(f"{state}", fontsize=14)
             ax.grid(True, alpha=0.3)
             ax.set_xticks(years)
+
+            # Set larger y-axis range to make error bars appear smaller (add 50% margin)
+            y_min, y_max = values.min(), values.max()
+            y_range = y_max - y_min
+            ax.set_ylim(y_min - 0.5 * y_range, y_max + 0.5 * y_range)
 
         plt.tight_layout()
 

@@ -10,11 +10,11 @@ from pathlib import Path
 from typing import Any
 
 import awkward as ak
-import ROOT
+import ROOT  # type: ignore
 from tqdm import tqdm
 
 # Enable RooFit batch mode for better performance
-ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)
+ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)  # type: ignore
 
 
 class MassFitter:
@@ -79,22 +79,28 @@ class MassFitter:
         self.nbins: int = int(fit_range_width / self.bin_width)
 
         # Shared parameters across years (will be created on first use)
-        self.masses: dict[str, ROOT.RooRealVar] = {}  # M_J/ψ, M_ηc, M_χc0, M_χc1
-        self.widths: dict[str, ROOT.RooRealVar] = {}  # Γ states (some fixed, some floating)
-        self.resolution: ROOT.RooRealVar | None = None  # Single resolution parameter (shared)
+        self.masses: dict[str, ROOT.RooRealVar] = {}  # M_J/ψ, M_ηc, M_χc0, M_χc1 # type: ignore
+        self.widths: dict[str, ROOT.RooRealVar] = (
+            {}
+        )  # Γ states (some fixed, some floating) # type: ignore
+        self.resolution: ROOT.RooRealVar | None = (
+            None  # Single resolution parameter (shared) # type: ignore
+        )
 
         # Observable (shared across all fits)
-        self.mass_var: ROOT.RooRealVar | None = None
+        self.mass_var: ROOT.RooRealVar | None = None  # type: ignore
 
         # Store all PDFs and variables to prevent garbage collection
-        self.signal_pdfs: dict[str, ROOT.RooAbsPdf] = {}  # {state: pdf}
-        self.bkg_pdfs: dict[str, ROOT.RooAbsPdf] = {}  # {year: pdf}
+        self.signal_pdfs: dict[str, ROOT.RooAbsPdf] = {}  # {state: pdf} # type: ignore
+        self.bkg_pdfs: dict[str, ROOT.RooAbsPdf] = {}  # {year: pdf} # type: ignore
         self.argus_params: dict[str, dict[str, Any]] = {}  # {year: {param: value}}
 
-        self.models: dict[str, ROOT.RooAbsPdf] = {}  # {year: model}
-        self.yields: dict[str, dict[str, ROOT.RooRealVar]] = {}  # {year: {state: yield_var}}
+        self.models: dict[str, ROOT.RooAbsPdf] = {}  # {year: model} # type: ignore
+        self.yields: dict[str, dict[str, ROOT.RooRealVar]] = (
+            {}
+        )  # {year: {state: yield_var}} # type: ignore
 
-    def setup_observable(self) -> ROOT.RooRealVar:
+    def setup_observable(self) -> ROOT.RooRealVar:  # type: ignore
         """
         Define RooRealVar for M(Λ̄pK⁻) invariant mass.
 
@@ -102,14 +108,14 @@ class MassFitter:
             ROOT.RooRealVar for mass observable
         """
         if self.mass_var is None:
-            self.mass_var = ROOT.RooRealVar(
+            self.mass_var = ROOT.RooRealVar(  # type: ignore
                 "M_LpKm", "M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]", self.fit_range[0], self.fit_range[1]
             )
             # Set binning for plotting and binned fits
-            self.mass_var.setBins(self.nbins)
+            self.mass_var.setBins(self.nbins)  # type: ignore
         return self.mass_var
 
-    def create_signal_pdf(self, state: str, mass_var: ROOT.RooRealVar) -> ROOT.RooAbsPdf:
+    def create_signal_pdf(self, state: str, mass_var: ROOT.RooRealVar) -> ROOT.RooAbsPdf:  # type: ignore
         """
         Create signal PDF for one charmonium state
 
@@ -142,7 +148,7 @@ class MassFitter:
         if state_lower not in self.masses:
             pdg_mass = self.config.particles["pdg_masses"][config_key]
 
-            self.masses[state_lower] = ROOT.RooRealVar(
+            self.masses[state_lower] = ROOT.RooRealVar(  # type: ignore
                 f"M_{state}", f"M_{state} [MeV/c^{{2}}]", pdg_mass
             )
             # Fix mass to PDG value
@@ -152,7 +158,7 @@ class MassFitter:
         if state_lower not in self.widths:
             pdg_width = self.config.particles["pdg_widths"][config_key]
 
-            self.widths[state_lower] = ROOT.RooRealVar(
+            self.widths[state_lower] = ROOT.RooRealVar(  # type: ignore
                 f"Gamma_{state}", f"#Gamma_{state} [MeV/c^{{2}}]", pdg_width
             )
             # Fix width to PDG value
@@ -160,7 +166,7 @@ class MassFitter:
 
         # Resolution (shared Gaussian width - same detector for all states)
         if self.resolution is None:
-            self.resolution = ROOT.RooRealVar(
+            self.resolution = ROOT.RooRealVar(  # type: ignore
                 "sigma_resolution",
                 "#sigma_{resolution} [MeV/c^{2}]",
                 5.0,  # Initial guess ~5 MeV
@@ -169,7 +175,7 @@ class MassFitter:
             )
 
         # Create Voigtian PDF (RBW ⊗ Gaussian)
-        signal_pdf = ROOT.RooVoigtian(
+        signal_pdf = ROOT.RooVoigtian(  # type: ignore
             f"pdf_signal_{state}",
             f"Signal PDF for {state}",
             mass_var,
@@ -184,8 +190,8 @@ class MassFitter:
         return signal_pdf
 
     def create_background_pdf(
-        self, mass_var: ROOT.RooRealVar, year: str
-    ) -> tuple[ROOT.RooAbsPdf, ROOT.RooRealVar]:
+        self, mass_var: ROOT.RooRealVar, year: str  # type: ignore
+    ) -> tuple[ROOT.RooAbsPdf, ROOT.RooRealVar]:  # type: ignore
         """
         Create ARGUS background PDF
 
@@ -208,7 +214,7 @@ class MassFitter:
             "argus_endpoint_offset", 200.0
         )
 
-        m0 = ROOT.RooRealVar(
+        m0 = ROOT.RooRealVar(  # type: ignore
             f"m0_argus_{year}",
             "ARGUS endpoint [MeV/c^{2}]",
             self.fit_range[1] + endpoint_offset,  # Extended beyond fit range
@@ -216,7 +222,7 @@ class MassFitter:
         m0.setConstant(True)
 
         # ARGUS shape parameter (fitted per year)
-        c = ROOT.RooRealVar(
+        c = ROOT.RooRealVar(  # type: ignore
             f"c_argus_{year}",
             f"c_{{ARGUS}} {year}",
             -20.0,  # Initial guess
@@ -225,11 +231,11 @@ class MassFitter:
         )
 
         # Power parameter (typically fixed to 0.5)
-        p = ROOT.RooRealVar(f"p_argus_{year}", "ARGUS power", 0.5)
+        p = ROOT.RooRealVar(f"p_argus_{year}", "ARGUS power", 0.5)  # type: ignore
         p.setConstant(True)
 
         # Create ARGUS PDF
-        bkg_pdf = ROOT.RooArgusBG(f"pdf_bkg_{year}", f"Background PDF {year}", mass_var, m0, c, p)
+        bkg_pdf = ROOT.RooArgusBG(f"pdf_bkg_{year}", f"Background PDF {year}", mass_var, m0, c, p)  # type: ignore
 
         # Initialize storage if needed
         if not hasattr(self, "argus_params"):
@@ -242,8 +248,8 @@ class MassFitter:
         return bkg_pdf, c
 
     def build_model_for_year(
-        self, year: str, mass_var: ROOT.RooRealVar
-    ) -> tuple[ROOT.RooAbsPdf, dict[str, ROOT.RooRealVar]]:
+        self, year: str, mass_var: ROOT.RooRealVar  # type: ignore
+    ) -> tuple[ROOT.RooAbsPdf, dict[str, ROOT.RooRealVar]]:  # type: ignore
         """
         Build full extended likelihood model for one year
 
@@ -258,8 +264,8 @@ class MassFitter:
         Returns:
             (total_pdf, yields_dict)
         """
-        pdf_list = ROOT.RooArgList()
-        coef_list = ROOT.RooArgList()
+        pdf_list = ROOT.RooArgList()  # type: ignore
+        coef_list = ROOT.RooArgList()  # type: ignore
         year_yields = {}
 
         # Signal components (5 charmonium states)
@@ -268,7 +274,7 @@ class MassFitter:
             sig_pdf = self.create_signal_pdf(state, mass_var)
 
             # Create yield parameter (separate per year)
-            yield_var = ROOT.RooRealVar(
+            yield_var = ROOT.RooRealVar(  # type: ignore
                 f"N_{state}_{year}",
                 f"Yield {state} {year}",
                 1000,  # Initial guess
@@ -284,7 +290,7 @@ class MassFitter:
         # Background component
         bkg_pdf, alpha_bkg = self.create_background_pdf(mass_var, year)
 
-        bkg_yield = ROOT.RooRealVar(
+        bkg_yield = ROOT.RooRealVar(  # type: ignore
             f"N_bkg_{year}",
             f"Background yield {year}",
             10000,  # Initial guess
@@ -297,7 +303,7 @@ class MassFitter:
         coef_list.add(bkg_yield)
 
         # Build extended sum PDF
-        total_pdf = ROOT.RooAddPdf(f"model_{year}", f"Total PDF {year}", pdf_list, coef_list)
+        total_pdf = ROOT.RooAddPdf(f"model_{year}", f"Total PDF {year}", pdf_list, coef_list)  # type: ignore
 
         # Store model and yields to prevent garbage collection
         self.models[year] = total_pdf
@@ -407,30 +413,30 @@ class MassFitter:
                 # Create dataset (binned or unbinned based on configuration)
                 if self.use_binned_fit:
                     # Create unbinned dataset first
-                    temp_dataset = ROOT.RooDataSet(
+                    temp_dataset = ROOT.RooDataSet(  # type: ignore
                         f"temp_data_{dataset_name}",
                         f"Temp Data {dataset_name}",
-                        ROOT.RooArgSet(mass_var),
+                        ROOT.RooArgSet(mass_var),  # type: ignore
                     )
                     for m in mass_np:
                         mass_var.setVal(m)
-                        temp_dataset.add(ROOT.RooArgSet(mass_var))
+                        temp_dataset.add(ROOT.RooArgSet(mass_var))  # type: ignore
 
                     # Convert to binned dataset (RooDataHist)
-                    dataset = ROOT.RooDataHist(
+                    dataset = ROOT.RooDataHist(  # type: ignore
                         f"data_{dataset_name}",
                         f"Data {dataset_name}",
-                        ROOT.RooArgSet(mass_var),
+                        ROOT.RooArgSet(mass_var),  # type: ignore
                         temp_dataset,
                     )
                 else:
                     # Create unbinned dataset (RooDataSet)
-                    dataset = ROOT.RooDataSet(
-                        f"data_{dataset_name}", f"Data {dataset_name}", ROOT.RooArgSet(mass_var)
+                    dataset = ROOT.RooDataSet(  # type: ignore
+                        f"data_{dataset_name}", f"Data {dataset_name}", ROOT.RooArgSet(mass_var)  # type: ignore
                     )
                     for m in mass_np:
                         mass_var.setVal(m)
-                        dataset.add(ROOT.RooArgSet(mass_var))
+                        dataset.add(ROOT.RooArgSet(mass_var))  # type: ignore
 
                 # Build model for this dataset
                 model, yields = self.build_model_for_year(dataset_name, mass_var)
@@ -440,21 +446,21 @@ class MassFitter:
                     # Binned maximum likelihood fit
                     fit_result = model.fitTo(
                         dataset,
-                        ROOT.RooFit.Save(),
-                        ROOT.RooFit.Extended(True),
-                        ROOT.RooFit.PrintLevel(-1),
-                        ROOT.RooFit.NumCPU(4),
-                        ROOT.RooFit.Strategy(2),  # More robust
+                        ROOT.RooFit.Save(),  # type: ignore
+                        ROOT.RooFit.Extended(True),  # type: ignore
+                        ROOT.RooFit.PrintLevel(-1),  # type: ignore
+                        ROOT.RooFit.NumCPU(4),  # type: ignore
+                        ROOT.RooFit.Strategy(2),  # More robust # type: ignore
                     )
                 else:
                     # Unbinned maximum likelihood fit
                     fit_result = model.fitTo(
                         dataset,
-                        ROOT.RooFit.Save(),
-                        ROOT.RooFit.Extended(True),
-                        ROOT.RooFit.PrintLevel(-1),
-                        ROOT.RooFit.NumCPU(4),
-                        ROOT.RooFit.Strategy(2),  # More robust
+                        ROOT.RooFit.Save(),  # type: ignore
+                        ROOT.RooFit.Extended(True),  # type: ignore
+                        ROOT.RooFit.PrintLevel(-1),  # type: ignore
+                        ROOT.RooFit.NumCPU(4),  # type: ignore
+                        ROOT.RooFit.Strategy(2),  # More robust # type: ignore
                     )
 
                 # Check convergence
@@ -500,8 +506,8 @@ class MassFitter:
                 f"Γ = {width_val:6.2f} ± {width_err:5.2f} MeV"
             )
 
-        res_val = self.resolution.getVal()
-        res_err = self.resolution.getError()
+        res_val = self.resolution.getVal()  # type: ignore
+        res_err = self.resolution.getError()  # type: ignore
         print(f"\nResolution: σ = {res_val:.2f} ± {res_err:.2f} MeV")
 
         return {
@@ -535,34 +541,34 @@ class MassFitter:
         """
         # Create RooPlot with year as title
         title = "2016-2018" if year == "combined" else str(year)
-        frame = mass_var.frame(ROOT.RooFit.Title(title))
+        frame = mass_var.frame(ROOT.RooFit.Title(title))  # type: ignore
 
-        # Plot data (black points)
+        # Plot data with error bars (black points)
         dataset.plotOn(
             frame,
-            ROOT.RooFit.Name("data"),
-            ROOT.RooFit.MarkerStyle(20),
-            ROOT.RooFit.MarkerSize(0.9),
-            ROOT.RooFit.MarkerColor(ROOT.kBlack),
+            ROOT.RooFit.Name("data"),  # type: ignore
+            ROOT.RooFit.MarkerStyle(20),  # type: ignore
+            ROOT.RooFit.MarkerSize(0.8),  # type: ignore
+            ROOT.RooFit.MarkerColor(ROOT.kBlack),  # type: ignore
         )
 
         # Plot total PDF (solid dark blue)
         model.plotOn(
             frame,
-            ROOT.RooFit.Name("total"),
-            ROOT.RooFit.LineColor(ROOT.kAzure + 2),
-            ROOT.RooFit.LineWidth(2),
-            ROOT.RooFit.LineStyle(ROOT.kSolid),
+            ROOT.RooFit.Name("total"),  # type: ignore
+            ROOT.RooFit.LineColor(ROOT.kAzure + 2),  # type: ignore
+            ROOT.RooFit.LineWidth(2),  # type: ignore
+            ROOT.RooFit.LineStyle(ROOT.kSolid),  # type: ignore
         )
 
         # Professional LHCb-style color scheme (eye-friendly, distinct colors)
         colors = {
-            "jpsi": ROOT.kRed + 1,  # Red for J/psi (most prominent)
-            "etac": ROOT.kBlue + 2,  # Blue for eta_c
-            "chic0": ROOT.kGreen + 2,  # Green for chi_c0
-            "chic1": ROOT.kOrange + 7,  # Orange for chi_c1
-            "etac_2s": ROOT.kMagenta + 2,  # Magenta for eta_c(2S)
-            "background": ROOT.kGray + 2,  # Gray for combinatorial background
+            "jpsi": ROOT.kRed + 1,  # Red for J/psi (most prominent) # type: ignore
+            "etac": ROOT.kBlue + 2,  # Blue for eta_c # type: ignore
+            "chic0": ROOT.kGreen + 2,  # Green for chi_c0 # type: ignore
+            "chic1": ROOT.kOrange + 7,  # Orange for chi_c1 # type: ignore
+            "etac_2s": ROOT.kMagenta + 2,  # Magenta for eta_c(2S) # type: ignore
+            "background": ROOT.kGray + 2,  # Gray for combinatorial background # type: ignore
         }
 
         # Plot signal components with dashed lines
@@ -570,29 +576,29 @@ class MassFitter:
             component_name = f"pdf_signal_{state}"
             model.plotOn(
                 frame,
-                ROOT.RooFit.Components(component_name),
-                ROOT.RooFit.Name(state),
-                ROOT.RooFit.LineColor(colors[state]),
-                ROOT.RooFit.LineStyle(ROOT.kDashed),  # Dashed for signals
-                ROOT.RooFit.LineWidth(2),
+                ROOT.RooFit.Components(component_name),  # type: ignore
+                ROOT.RooFit.Name(state),  # type: ignore
+                ROOT.RooFit.LineColor(colors[state]),  # type: ignore
+                ROOT.RooFit.LineStyle(ROOT.kDashed),  # Dashed for signals # type: ignore
+                ROOT.RooFit.LineWidth(2),  # type: ignore
             )
 
         # Plot background with dotted line
         bkg_component_name = f"pdf_bkg_{year}"
         model.plotOn(
             frame,
-            ROOT.RooFit.Components(bkg_component_name),
-            ROOT.RooFit.Name("background"),
-            ROOT.RooFit.LineColor(colors["background"]),
-            ROOT.RooFit.LineStyle(ROOT.kDotted),  # Dotted for background
-            ROOT.RooFit.LineWidth(2),
+            ROOT.RooFit.Components(bkg_component_name),  # type: ignore
+            ROOT.RooFit.Name("background"),  # type: ignore
+            ROOT.RooFit.LineColor(colors["background"]),  # type: ignore
+            ROOT.RooFit.LineStyle(ROOT.kDotted),  # Dotted for background # type: ignore
+            ROOT.RooFit.LineWidth(2),  # type: ignore
         )
 
         # Create canvas with two pads for fit and pull distribution (LHCb standard size)
-        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 800)
+        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 800)  # type: ignore
 
         # Upper pad for fit (70% of canvas)
-        pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.30, 1.0, 1.0)
+        pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.30, 1.0, 1.0)  # type: ignore
         pad1.SetBottomMargin(0.015)
         pad1.SetLeftMargin(0.14)
         pad1.SetRightMargin(0.05)
@@ -600,7 +606,7 @@ class MassFitter:
         pad1.Draw()
 
         # Lower pad for pulls (30% of canvas)
-        pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.30)
+        pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.30)  # type: ignore
         pad2.SetTopMargin(0.015)
         pad2.SetBottomMargin(0.35)
         pad2.SetLeftMargin(0.14)
@@ -619,10 +625,16 @@ class MassFitter:
         frame.GetXaxis().SetLabelSize(0.0)
         frame.GetXaxis().SetTitleSize(0.0)
         frame.SetTitle("")  # Remove default title
+
+        # Set larger Y-axis range to make error bars appear smaller (add 40% margin at top)
+        y_max = frame.GetMaximum()
+        frame.SetMaximum(y_max * 1.40)
+        frame.SetMinimum(0.0)
+
         frame.Draw()
 
         # Add compact legend on the right side with two columns (LHCb style)
-        legend = ROOT.TLegend(0.60, 0.55, 0.94, 0.90)
+        legend = ROOT.TLegend(0.60, 0.55, 0.94, 0.90)  # type: ignore
         legend.SetBorderSize(0)
         legend.SetFillStyle(0)  # Transparent background
         legend.SetFillColor(0)
@@ -650,7 +662,7 @@ class MassFitter:
 
         # Create and draw pull distribution in lower pad (professional style)
         pad2.cd()
-        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))  # No title
+        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))  # No title # type: ignore
         pull_hist = frame.pullHist("data", "total")
         pull_frame.addPlotable(pull_hist, "P")
 
@@ -677,21 +689,21 @@ class MassFitter:
         pull_frame.SetTitle("")
 
         # Add horizontal reference lines at 0, ±3σ
-        line_zero = ROOT.TLine(self.fit_range[0], 0.0, self.fit_range[1], 0.0)
-        line_zero.SetLineColor(ROOT.kBlack)
+        line_zero = ROOT.TLine(self.fit_range[0], 0.0, self.fit_range[1], 0.0)  # type: ignore
+        line_zero.SetLineColor(ROOT.kBlack)  # type: ignore
         line_zero.SetLineStyle(1)
         line_zero.SetLineWidth(1)
         line_zero.Draw()
 
         # Add ±3σ reference lines (dashed gray)
-        line_plus3 = ROOT.TLine(self.fit_range[0], 3.0, self.fit_range[1], 3.0)
-        line_plus3.SetLineColor(ROOT.kGray + 1)
+        line_plus3 = ROOT.TLine(self.fit_range[0], 3.0, self.fit_range[1], 3.0)  # type: ignore
+        line_plus3.SetLineColor(ROOT.kGray + 1)  # type: ignore
         line_plus3.SetLineStyle(2)
         line_plus3.SetLineWidth(1)
         line_plus3.Draw()
 
-        line_minus3 = ROOT.TLine(self.fit_range[0], -3.0, self.fit_range[1], -3.0)
-        line_minus3.SetLineColor(ROOT.kGray + 1)
+        line_minus3 = ROOT.TLine(self.fit_range[0], -3.0, self.fit_range[1], -3.0)  # type: ignore
+        line_minus3.SetLineColor(ROOT.kGray + 1)  # type: ignore
         line_minus3.SetLineStyle(2)
         line_minus3.SetLineWidth(1)
         line_minus3.Draw()

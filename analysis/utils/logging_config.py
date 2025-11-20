@@ -28,9 +28,9 @@ from typing import Literal
 
 # ROOT-specific suppression
 try:
-    import ROOT
+    import ROOT  # type: ignore
 
-    ROOT.gErrorIgnoreLevel = ROOT.kError  # Suppress ROOT Info messages
+    ROOT.gErrorIgnoreLevel = ROOT.kError  # Suppress ROOT Info messages # type: ignore
 except ImportError:
     pass
 
@@ -103,12 +103,12 @@ def _suppress_library_warnings(level: str) -> None:
 
         # ROOT warnings
         try:
-            import ROOT
+            import ROOT  # type: ignore
 
             if level == "off":
-                ROOT.gErrorIgnoreLevel = ROOT.kError
+                ROOT.gErrorIgnoreLevel = ROOT.kError  # type: ignore
             elif level in ["error", "default"]:
-                ROOT.gErrorIgnoreLevel = ROOT.kWarning
+                ROOT.gErrorIgnoreLevel = ROOT.kWarning  # type: ignore
         except ImportError:
             pass
 

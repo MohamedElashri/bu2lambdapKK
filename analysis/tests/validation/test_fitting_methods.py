@@ -25,7 +25,7 @@ from typing import Any
 import awkward as ak
 import numpy as np
 import pytest
-import ROOT
+import ROOT  # type: ignore
 
 # Add modules directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "modules"))
@@ -91,7 +91,7 @@ class ToyDataGenerator:
         """
         self.fit_range = fit_range
         self.rng = np.random.RandomState(seed)
-        ROOT.RooRandom.randomGenerator().SetSeed(seed)
+        ROOT.RooRandom.randomGenerator().SetSeed(seed)  # type: ignore
 
     def generate_signal(
         self, n_events: int, mass: float, width: float, resolution: float
@@ -109,16 +109,16 @@ class ToyDataGenerator:
             Array of generated masses
         """
         # Create RooFit variables
-        x = ROOT.RooRealVar("x", "x", self.fit_range[0], self.fit_range[1])
-        mean = ROOT.RooRealVar("mean", "mean", mass)
-        sigma = ROOT.RooRealVar("sigma", "sigma", resolution)
-        gamma = ROOT.RooRealVar("gamma", "gamma", width)
+        x = ROOT.RooRealVar("x", "x", self.fit_range[0], self.fit_range[1])  # type: ignore
+        mean = ROOT.RooRealVar("mean", "mean", mass)  # type: ignore
+        sigma = ROOT.RooRealVar("sigma", "sigma", resolution)  # type: ignore
+        gamma = ROOT.RooRealVar("gamma", "gamma", width)  # type: ignore
 
         # Create Voigtian PDF
-        voigt = ROOT.RooVoigtian("voigt", "voigt", x, mean, gamma, sigma)
+        voigt = ROOT.RooVoigtian("voigt", "voigt", x, mean, gamma, sigma)  # type: ignore
 
         # Generate data
-        data = voigt.generate(ROOT.RooArgSet(x), n_events)
+        data = voigt.generate(ROOT.RooArgSet(x), n_events)  # type: ignore
 
         # Extract values
         values = []
@@ -139,16 +139,16 @@ class ToyDataGenerator:
             Array of generated masses
         """
         # Create RooFit variables
-        x = ROOT.RooRealVar("x", "x", self.fit_range[0], self.fit_range[1])
-        m0 = ROOT.RooRealVar("m0", "m0", self.fit_range[1] + 200.0)
-        c = ROOT.RooRealVar("c", "c", c_param)
-        p = ROOT.RooRealVar("p", "p", 0.5)
+        x = ROOT.RooRealVar("x", "x", self.fit_range[0], self.fit_range[1])  # type: ignore
+        m0 = ROOT.RooRealVar("m0", "m0", self.fit_range[1] + 200.0)  # type: ignore
+        c = ROOT.RooRealVar("c", "c", c_param)  # type: ignore
+        p = ROOT.RooRealVar("p", "p", 0.5)  # type: ignore
 
         # Create ARGUS PDF
-        argus = ROOT.RooArgusBG("argus", "argus", x, m0, c, p)
+        argus = ROOT.RooArgusBG("argus", "argus", x, m0, c, p)  # type: ignore
 
         # Generate data
-        data = argus.generate(ROOT.RooArgSet(x), n_events)
+        data = argus.generate(ROOT.RooArgSet(x), n_events)  # type: ignore
 
         # Extract values
         values = []

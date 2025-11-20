@@ -207,3 +207,6 @@ analysis_output/
 ## cache
 cache/
 # Test
+
+## root typying shim package
+root_typing

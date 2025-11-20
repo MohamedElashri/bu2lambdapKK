@@ -17,14 +17,14 @@ from pathlib import Path
 
 import awkward as ak
 import numpy as np
-import ROOT
+import ROOT  # type: ignore
 
 # Add modules directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "modules"))
 from mass_fitter import MassFitter
 
 # Suppress RooFit messages
-ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.ERROR)
+ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.ERROR)  # type: ignore
 
 
 class MockConfig:
@@ -95,26 +95,26 @@ def generate_toy_data(
     Returns:
         Awkward array with M_LpKm_h2 and Bu_MM_corrected branches
     """
-    ROOT.RooRandom.randomGenerator().SetSeed(seed)
+    ROOT.RooRandom.randomGenerator().SetSeed(seed)  # type: ignore
 
     # Define observable
-    x = ROOT.RooRealVar("x", "x", fit_range[0], fit_range[1])
+    x = ROOT.RooRealVar("x", "x", fit_range[0], fit_range[1])  # type: ignore
 
     # Signal: Voigtian (Breit-Wigner ⊗ Gaussian)
-    mean = ROOT.RooRealVar("mean", "mean", signal_mass)
-    sigma = ROOT.RooRealVar("sigma", "sigma", resolution)
-    gamma = ROOT.RooRealVar("gamma", "gamma", signal_width)
-    signal_pdf = ROOT.RooVoigtian("signal", "signal", x, mean, gamma, sigma)
+    mean = ROOT.RooRealVar("mean", "mean", signal_mass)  # type: ignore
+    sigma = ROOT.RooRealVar("sigma", "sigma", resolution)  # type: ignore
+    gamma = ROOT.RooRealVar("gamma", "gamma", signal_width)  # type: ignore
+    signal_pdf = ROOT.RooVoigtian("signal", "signal", x, mean, gamma, sigma)  # type: ignore
 
     # Background: ARGUS
-    m0 = ROOT.RooRealVar("m0", "m0", fit_range[1] + 200.0)
-    c = ROOT.RooRealVar("c", "c", -20.0)
-    p = ROOT.RooRealVar("p", "p", 0.5)
-    bkg_pdf = ROOT.RooArgusBG("background", "background", x, m0, c, p)
+    m0 = ROOT.RooRealVar("m0", "m0", fit_range[1] + 200.0)  # type: ignore
+    c = ROOT.RooRealVar("c", "c", -20.0)  # type: ignore
+    p = ROOT.RooRealVar("p", "p", 0.5)  # type: ignore
+    bkg_pdf = ROOT.RooArgusBG("background", "background", x, m0, c, p)  # type: ignore
 
     # Generate data
-    signal_data = signal_pdf.generate(ROOT.RooArgSet(x), n_signal)
-    bkg_data = bkg_pdf.generate(ROOT.RooArgSet(x), n_background)
+    signal_data = signal_pdf.generate(ROOT.RooArgSet(x), n_signal)  # type: ignore
+    bkg_data = bkg_pdf.generate(ROOT.RooArgSet(x), n_background)  # type: ignore
 
     # Combine and shuffle
     all_masses = []

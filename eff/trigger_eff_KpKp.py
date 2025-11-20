@@ -1,7 +1,7 @@
 import argparse
 
 import numpy as np
-import ROOT as rt
+import ROOT as rt  # type: ignore
 from tqdm import tqdm
 from uncertainties import ufloat
 
@@ -76,7 +76,7 @@ def debug_print(*print_args, **kwargs):
 
 
 def getEntries(tuples, tree, cutstr):
-    chain = rt.TChain(tree)
+    chain = rt.TChain(tree)  # type: ignore
 
     for _tuple in tuples:
         try:
