@@ -66,7 +66,7 @@ optimization = "./analysis_output/plots/optimization"  # FOM scan plots
 
 [verbosity]
 # Control output verbosity and logging
-show_data_loading_messages = true  # Show "Missing N branches", "Loaded data X: N events"
+show_data_loading_messages = false  # Show "Missing N branches", "Loaded data X: N events"
 show_progress_bars = true  # Show tqdm progress bars
 show_warnings = false  # Suppress Python warnings (DeprecationWarning, etc.)
 

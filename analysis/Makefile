@@ -19,6 +19,9 @@ VENV_ACTIVATE := $(if $(VENV_DIR),$(VENV_DIR)/bin/activate,)
 # Python interpreter (use venv if available)
 PYTHON := $(if $(VENV_ACTIVATE),$(VENV_DIR)/bin/python,python)
 
+# Disable data loading messages by default (cleaner progress bars)
+export ANALYSIS_DATA_LOADING ?= off
+
 # Default target
 .DEFAULT_GOAL := help
 

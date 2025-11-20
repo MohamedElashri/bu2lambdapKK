@@ -308,7 +308,17 @@ class BranchConfig:
         missing = sorted(list(requested_set - available_set))
 
         if missing:
-            self.logger.warning(f"Missing {len(missing)} requested branches: {missing[:5]}...")
+            # Only show warning if data loading messages are enabled
+            try:
+                from utils.logging_config import show_data_loading_messages
+
+                if show_data_loading_messages():
+                    self.logger.warning(
+                        f"Missing {len(missing)} requested branches: {missing[:5]}..."
+                    )
+            except ImportError:
+                # Fallback to showing warning if utils not available
+                self.logger.warning(f"Missing {len(missing)} requested branches: {missing[:5]}...")
 
         return {
             "valid": valid,
