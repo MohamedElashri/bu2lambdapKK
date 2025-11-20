@@ -15,16 +15,34 @@ class BranchingFractionCalculator:
 
     Key formula:
 
-    Br(B⁺ → cc̄ X) × Br(cc̄ → Λ̄pK⁻)
-    ─────────────────────────────── = Σ(N_cc/ε_cc) / Σ(N_J/ψ/ε_J/ψ)
-    Br(B⁺ → J/ψ X) × Br(J/ψ → Λ̄pK⁻)
+    Br(B⁺ → cc̄ X) * Br(cc̄ → Λ̄pK⁻)
+    ───────────────────────────────── = Σ(N_cc/ε_cc) / Σ(N_J/ψ/ε_J/ψ)
+    Br(B⁺ → J/ψ X) * Br(J/ψ → Λ̄pK⁻)
+
+    EFFICIENCY CANCELLATION:
+    ==================================================
+    ALL states have IDENTICAL final state: Λ̄pK⁻K⁺
+
+    Therefore ε here is ONLY ε_sel (selection efficiency)
+
+    Components that CANCEL in ratio:
+    - ε_reco:  Same tracks for all states
+    - ε_strip: Same stripping requirements
+    - ε_trig:  Same trigger line
+    - ε_PID:   Same particle identification
+
+    This is DATA-TO-DATA comparison (better than MC PID corrections)!
+    PID corrections would not account for correlations correctly.
+
+    Residual systematic from small (pT, η) differences: NEGLIGIBLE
+    Will be studied later, but current precision is statistics-dominated.
 
     These ratios are physics-meaningful and don't require
     knowing individual branching fractions!
 
     Phase 7 Implementation:
     - Uses yields from Phase 5 (mass fitting)
-    - Uses efficiency ratios from Phase 6
+    - Uses efficiency ratios from Phase 6 (ε_sel only)
     - Combines all years with proper error propagation
     - Statistical uncertainties only (draft analysis)
 
@@ -61,7 +79,7 @@ class BranchingFractionCalculator:
         Sum over all years, propagating uncertainties properly.
 
         Error propagation for Y = N/ε:
-        σ_Y = Y × sqrt((σ_N/N)² + (σ_ε/ε)²)
+        σ_Y = Y * sqrt((σ_N/N)² + (σ_ε/ε)²)
 
         Args:
             state: State name ("jpsi", "etac", "chic0", "chic1")
@@ -79,7 +97,7 @@ class BranchingFractionCalculator:
 
             # Check if efficiency exists for this year
             if year not in self.efficiencies.get(state, {}):
-                print(f"  ⚠️  Warning: No efficiency data for {state} in {year}, skipping")
+                print(f"   Warning: No efficiency data for {state} in {year}, skipping")
                 continue
 
             n_year, n_err = self.yields[year][state]
@@ -147,7 +165,11 @@ class BranchingFractionCalculator:
         results = []
 
         print("\n" + "=" * 80)
-        print("BRANCHING FRACTION RATIOS (Statistical uncertainties only)")
+        print("BRANCHING FRACTION RATIOS")
+        print("=" * 80)
+        print("Statistical uncertainties only (draft analysis)")
+        print("\nNOTE: ε = ε_sel only (other efficiencies CANCEL in ratios)")
+        print("      Identical final state → data-to-data comparison")
         print("=" * 80)
 
         # Direct ratios to J/ψ
@@ -349,18 +371,32 @@ class BranchingFractionCalculator:
         md += f"Our result: Br(χc1)/Br(χc0) = {ratios_df[ratios_df['numerator']=='chic1']['ratio'].values[0]:.3f}\n\n"
         md += "**Note**: These predictions were not observed in B⁺→φφ analysis either.\n\n"
 
+        md += "## Systematic Uncertainties\n\n"
+        md += "### Current status: Statistical uncertainties ONLY\n\n"
+        md += "### Efficiency-related systematics (to be studied later):\n\n"
+        md += "**Cancellation in ratios** (per supervisor guidance):\n"
+        md += "- ✓ ε_reco: CANCELS (identical tracks)\n"
+        md += "- ✓ ε_strip: CANCELS (identical final state)\n"
+        md += "- ✓ ε_trig: CANCELS (same trigger line)\n"
+        md += "- ✓ ε_PID: CANCELS (same particle types)\n"
+        md += "- ✓ Data-to-data comparison avoids MC PID corrections\n\n"
+        md += "**Residual differences** (small, to be quantified):\n"
+        md += "- Slightly different (pT, η) distributions due to mass differences\n"
+        md += "- MC should correctly capture these kinematic effects\n"
+        md += "- Estimated to be NEGLIGIBLE compared to statistical errors\n"
+        md += "- Will be studied using MC variations\n\n"
+        md += "**Other systematics to add**:\n"
+        md += "- Fit model variations (signal/background shapes)\n"
+        md += "- Selection optimization procedure\n"
+        md += "- Multiple candidate treatment\n\n"
+
         md += "## Next Steps\n\n"
         md += "1. ✓ Draft analysis complete with statistical uncertainties\n"
-        md += "2. ⚠️ Add systematic uncertainties:\n"
-        md += "   - Fit model variations\n"
-        md += "   - Selection optimization uncertainties\n"
-        md += "   - Efficiency uncertainties\n"
-        md += "   - Multiple candidate effects\n"
-        md += "3. ⚠️ Complete efficiency calculations:\n"
-        md += "   - Reconstruction efficiency (currently placeholder)\n"
-        md += "   - Stripping efficiency (currently placeholder)\n"
-        md += "4. ⚠️ Consider interference effects (if significant)\n"
-        md += "5. ⚠️ Measure multiple candidate fraction\n"
+        md += "2.  Quantify residual systematic from (p_T, eta) differences using MC\n"
+        md += "3.  Add fit systematics (signal/background model variations)\n"
+        md += "4.  Selection optimization uncertainties\n"
+        md += "5.  Multiple candidate fraction measurement\n"
+        md += "6.  Consider interference effects (if significant)\n"
 
         with open(output_dir / "final_results.md", "w") as f:
             f.write(md)

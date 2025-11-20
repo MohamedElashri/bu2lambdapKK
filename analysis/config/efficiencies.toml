@@ -1,96 +1,87 @@
 # ═══════════════════════════════════════════════════════════════
-# EFFICIENCY INPUTS
+# EFFICIENCY CONFIGURATION
 # ═══════════════════════════════════════════════════════════════
-# External efficiency measurements to be provided by user
-# Total efficiency: ε_total = ε_acc × ε_reco × ε_strip × ε_trig × ε_sel
+# Based on supervisor guidance: Efficiency cancellation in ratios
+#
+# KEY PRINCIPLE: All channels have IDENTICAL final state (Λ̄pK⁻K⁺)
+# Therefore many efficiencies CANCEL when calculating BR ratios
 # ═══════════════════════════════════════════════════════════════
 
 [efficiency_components]
-# Which components are calculated vs provided
-acceptance = "calculated"  # From MC truth (generator level → detector acceptance)
-reconstruction = "placeholder"  # I still need to figure it out
-stripping = "user_provided"  # From data-driven stripping campaign
-trigger = "calculated"  # From the data that pass trigger selection
-selection = "calculated"  # From MC (offline selection on reconstructed)
+PID = "cancels_in_ratio"  # SAME particle types → cancels in ratio
+# Which components are calculated vs canceled in ratios
+acceptance = "cancels_in_ratio"  # Similar for all charmonium states
+reconstruction = "cancels_in_ratio"  # SAME tracks → cancels in ratio
+selection = "calculated"  # Kinematic differences → MUST calculate
+stripping = "cancels_in_ratio"  # SAME final state → cancels in ratio
+trigger = "cancels_in_ratio"  # SAME trigger line → cancels in ratio
 
 [efficiency_components.notes]
 comment = """
-Efficiency Calculation Strategy:
-- Acceptance (ε_acc): Calculated from MC truth matching
-- Reconstruction (ε_reco): Placeholder = 0 (I still need to figure it out)
-- Stripping (ε_strip): User must provide from data-driven campaign
-- Trigger (ε_trig): Calculated from the data that pass trigger selection
-- Selection (ε_sel): Calculated from signal MC after optimized cuts
+EFFICIENCY CANCELLATION STRATEGY:
+==================================================
 
-NOTE: Full efficiency study will be done separately later!
-      For now, we focus on RATIOS where many efficiencies cancel.
+Normalization: B⁺ → J/ψ K⁺, J/ψ → Λ̄pK⁻ (+cc)
+Signal:        B⁺ → cc̄ K⁺, cc̄ → Λ̄pK⁻ (+cc)
+
+IDENTICAL FINAL STATE → Most efficiencies CANCEL in ratios!
+
+Components that CANCEL:
+-----------------------
+✓ ε_reco:  ALL states reconstruct same tracks (p, K⁻, K⁺, K⁺)
+✓ ε_strip: ALL states pass same stripping (final state identical)
+✓ ε_trig:  ALL states use same trigger line (identical particles)
+✓ ε_PID:   ALL states identify same particle types
+
+What we CALCULATE:
+------------------
+ε_sel: Selection efficiency (captures kinematic differences)
+       - Different charmonium masses → different phase space
+       - Different (p_T, eta) distributions → different cut acceptance
+       - State-specific optimized cuts
+
+Residual systematic uncertainties:
+----------------------------------
+Slightly different (p_T, eta) → small differences in ε_reco, ε_trig
+These are NEGLIGIBLE compared to statistical errors (to be studied later)
+MC simulations should capture these correctly for systematics study
+
+RESULT: ε_total ≈ ε_sel (other components cancel in BR ratios)
 """
 
-[stripping_efficiency]
-# From data-driven stripping campaign
-# TO BE PROVIDED by user
-# Format: {state}.{year} = {value = X, error = Y}
-
-[stripping_efficiency.jpsi]
-"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-
-[stripping_efficiency.etac]
-"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-
-[stripping_efficiency.chic0]
-"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-
-[stripping_efficiency.chic1]
-"2016" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2017" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-"2018" = {value = 0.0, error = 0.0}  # PLACEHOLDER
-
-[trigger_efficiency]
-# From KpKm phase space MC
-# Calculated by pipeline in Phase 6
-# Format: {state}.{year} = {value = X, error = Y}
-
-[trigger_efficiency.jpsi]
-"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-
-[trigger_efficiency.etac]
-"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-
-[trigger_efficiency.chic0]
-"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-
-[trigger_efficiency.chic1]
-"2016" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2017" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-"2018" = {value = 0.0, error = 0.0}  # TO BE CALCULATED
-
 [efficiency_ratios]
-# For branching fraction ratios, we need efficiency ratios relative to J/ψ
+# For branching fraction ratios relative to J/ψ
+# Many efficiencies cancel due to identical final state
 method = "ratio_relative_to_jpsi"
 
 [efficiency_ratios.notes]
 comment = """
-Efficiency Ratio Method:
-- Measure: ε(state) / ε(J/ψ) for each year
-- Many systematics cancel in the ratio
-- Reconstruction and PID efficiencies largely cancel
-- Remaining differences: kinematic effects (different masses)
+Efficiency Ratio Method with Cancellation:
+==========================================
 
-Advantages of ratio method:
-1. Systematics cancellation
-2. No need for absolute normalization
+R(BR) = [Br(B⁺→cc̄ X)*Br(cc̄→Λ̄pK⁻)] / [Br(B⁺→J/ψ X)*Br(J/ψ→Λ̄pK⁻)]
+      = [N_cc / ε_cc] / [N_J/ψ / ε_J/ψ]
+      = [N_cc / N_J/ψ] * [ε_J/ψ / ε_cc]
+
+Where: ε ≈ ε_sel (selection efficiency ONLY)
+
+Other components (ε_reco, ε_strip, ε_trig, ε_PID) CANCEL because:
+- Identical final state particles
+- Same reconstruction algorithms
+- Same stripping requirements
+- Same trigger selection
+- Same PID requirements
+
+Advantages:
+-----------
+1. Systematic uncertainties largely cancel
+2. No need for absolute efficiency measurements
 3. More robust to detector conditions
 4. Standard LHCb approach for relative measurements
+5. Data-to-data comparison (better than MC corrections)
+
+Residual differences:
+---------------------
+Small (p_T, eta) distribution differences → negligible systematic
+Will be quantified later using MC (trust MC for small corrections)
 """

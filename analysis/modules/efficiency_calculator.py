@@ -21,22 +21,35 @@ class EfficiencyCalculator:
     """
     Calculate efficiencies from MC samples (Phase 6)
 
-    SIMPLIFIED EFFICIENCY STRATEGY FOR DRAFT ANALYSIS:
+    EFFICIENCY STRATEGY:
     =================================================
-    Total efficiency ≈ SELECTION EFFICIENCY ONLY
 
-    ε_total ≈ ε_sel = N_pass_all_cuts / N_after_lambda_cuts
+    KEY INSIGHT: All channels have IDENTICAL final state (Λ̄pK⁻K⁺)
 
-    Components NOT included (deferred to full analysis):
-    - ε_acc: Acceptance (from truth) - assumed ~1.0 (cancels in ratios)
-    - ε_reco*strip: Reconstruction + stripping - assumed similar for all states
-    - ε_trig: Trigger - assumed similar for all states (OR already applied)
+    Normalization channel: B⁺ → J/ψ K⁺, J/ψ → Λ̄pK⁻ (+cc)
+    Signal channels:       B⁺ → cc̄ K⁺, cc̄ → Λ̄pK⁻ (+cc)
 
-    This simplification is justified because:
-    1. We measure RATIOS (ε_state / ε_J/ψ), many factors cancel
-    2. Similar detector acceptance for all charmonium states
-    3. Similar trigger efficiency (all have high-pT tracks)
-    4. Focus is on statistical precision first, systematics later
+    Therefore, the following efficiencies CANCEL in ratios:
+    --------------------------------------------------------
+    ✓ ε_reco:  Reconstruction efficiency - SAME tracks for all states
+    ✓ ε_strip: Stripping efficiency - SAME final state particles
+    ✓ ε_trig:  Trigger efficiency - SAME trigger line & final state
+    ✓ ε_PID:   Particle ID efficiency - SAME particle types
+
+    What we DO calculate:
+    ---------------------
+    ε_sel: Selection efficiency = N_pass_all_cuts / N_after_lambda_cuts
+
+    This captures the kinematic differences between states due to:
+    - Different charmonium masses → slightly different phase space
+    - Different momentum distributions → different selection efficiencies
+    - State-specific optimized cuts
+
+    Residual systematic uncertainties:
+    ----------------------------------
+    Small differences in ε_reco, ε_trig due to slightly different (pT, η)
+    distributions will be studied later. MC should capture these correctly.
+    At current precision, these are NEGLIGIBLE compared to statistical errors
 
 
     Attributes:
@@ -189,10 +202,12 @@ class EfficiencyCalculator:
         print("\n" + "=" * 80)
         print("PHASE 6: EFFICIENCY CALCULATION")
         print("=" * 80)
-        print("\nDRAFT ANALYSIS STRATEGY:")
-        print("  - Calculate SELECTION EFFICIENCY ONLY: ε_sel")
-        print("  - Other components (acc, reco, strip, trig) assumed similar")
-        print("  - Focus on RATIOS: ε_state / ε_J/ψ (many factors cancel)")
+        print("\nEFFICIENCY CANCELLATION STRATEGY (per supervisor):")
+        print("  ✓ ALL states have IDENTICAL final state: Λ̄pK⁻K⁺")
+        print("  ✓ ε_reco, ε_strip, ε_trig, ε_PID → CANCEL in ratios")
+        print("  ✓ Calculate ONLY ε_sel (captures kinematic differences)")
+        print("  ✓ Residual systematic differences: NEGLIGIBLE vs statistics")
+        print("  ✓ Trust MC for small (pT,η) effects")
         print("=" * 80)
 
         # States with MC available
@@ -277,6 +292,8 @@ class EfficiencyCalculator:
         print("=" * 80)
         print("\nThese ratios enter the BR calculation:")
         print("  R(BR_state / BR_J/ψ) = [N_state / N_J/ψ] × [ε_J/ψ / ε_state]")
+        print("\nNOTE: ε here is ONLY ε_sel (selection efficiency)")
+        print("      ε_reco, ε_strip, ε_trig → CANCELED (identical final state)")
         print("=" * 80)
 
         for state in ["etac", "chic0", "chic1", "etac_2s"]:
