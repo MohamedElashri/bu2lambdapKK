@@ -185,13 +185,6 @@ class TestBackwardCompatibility:
         # Should have branching_fractions attribute
         assert hasattr(config, "branching_fractions")
 
-    def test_efficiency_inputs_attribute_created(self, config_dir_fixture):
-        """Test that efficiency_inputs backward compatibility attribute exists."""
-        config = TOMLConfig(str(config_dir_fixture))
-
-        # Should have efficiency_inputs attribute
-        assert hasattr(config, "efficiency_inputs")
-
     def test_all_compatibility_attributes_present(self, config_dir_fixture):
         """Test that all backward compatibility attributes are created."""
         config = TOMLConfig(str(config_dir_fixture))
@@ -201,7 +194,6 @@ class TestBackwardCompatibility:
             "paths",
             "luminosity",
             "branching_fractions",
-            "efficiency_inputs",
         ]
 
         for attr in required_compat:

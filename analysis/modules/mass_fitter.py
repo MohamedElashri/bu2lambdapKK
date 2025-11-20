@@ -338,7 +338,7 @@ class MassFitter:
         all_fit_results = {}
 
         print("\n" + "=" * 80)
-        print("MASS FITTING WITH ROOFIT - ALL 6 CHARMONIUM STATES")
+        print("MASS FITTING WITH ROOFIT - ALL 5 CHARMONIUM STATES")
         print("=" * 80)
         print(f"Charmonium fit range: {self.fit_range[0]} - {self.fit_range[1]} MeV")
         print(f"B+ mass window: {self.bu_mass_min} - {self.bu_mass_max} MeV")
@@ -359,30 +359,30 @@ class MassFitter:
             for year in sorted(data_by_year.keys()):
                 pbar.set_postfix_str(f"Year {year}")
 
-            events = data_by_year[year]
+                events = data_by_year[year]
 
-            # Apply B+ mass window cut
-            bu_mass = events["Bu_MM_corrected"]  # Lambda-corrected B+ mass
-            bu_mask = (bu_mass >= self.bu_mass_min) & (bu_mass <= self.bu_mass_max)
-            events_bu_cut = events[bu_mask]
+                # Apply B+ mass window cut
+                bu_mass = events["Bu_MM_corrected"]  # Lambda-corrected B+ mass
+                bu_mask = (bu_mass >= self.bu_mass_min) & (bu_mass <= self.bu_mass_max)
+                events_bu_cut = events[bu_mask]
 
-            print(
-                f"  Events after B+ mass cut [{self.bu_mass_min}, {self.bu_mass_max}]: {len(events_bu_cut)}"
-            )
+                print(
+                    f"  Events after B+ mass cut [{self.bu_mass_min}, {self.bu_mass_max}]: {len(events_bu_cut)}"
+                )
 
-            # Get charmonium mass data (M(Λ̄pK⁻), use h2=K⁻)
-            mass_array = events_bu_cut["M_LpKm_h2"]
+                # Get charmonium mass data (M(Λ̄pK⁻), use h2=K⁻)
+                mass_array = events_bu_cut["M_LpKm_h2"]
 
-            # Apply charmonium fit range filter
-            mask = (mass_array >= self.fit_range[0]) & (mass_array <= self.fit_range[1])
-            mass_filtered = mass_array[mask]
+                # Apply charmonium fit range filter
+                mask = (mass_array >= self.fit_range[0]) & (mass_array <= self.fit_range[1])
+                mass_filtered = mass_array[mask]
 
-            print(
-                f"  Events in charmonium fit range [{self.fit_range[0]}, {self.fit_range[1]}]: {len(mass_filtered)}"
-            )
+                print(
+                    f"  Events in charmonium fit range [{self.fit_range[0]}, {self.fit_range[1]}]: {len(mass_filtered)}"
+                )
 
-            datasets_to_fit[year] = mass_filtered
-            pbar.update(1)
+                datasets_to_fit[year] = mass_filtered
+                pbar.update(1)
 
         # Create combined dataset
         if fit_combined and len(datasets_to_fit) > 1:

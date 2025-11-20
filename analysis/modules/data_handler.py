@@ -113,9 +113,6 @@ class TOMLConfig:
             "output": self.data["output"],
         }
 
-        # Map efficiencies -> efficiency_inputs for backward compatibility
-        self.efficiency_inputs = self.efficiencies
-
         # Map detector -> luminosity for backward compatibility
         self.luminosity = {"integrated_luminosity": self.detector["integrated_luminosity"]}
 

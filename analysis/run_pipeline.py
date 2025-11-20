@@ -110,7 +110,6 @@ class PipelineManager:
             "paths",
             "luminosity",
             "branching_fractions",
-            "efficiency_inputs",
         ]
         for attr in compat_attrs:
             if not hasattr(self.config, attr):

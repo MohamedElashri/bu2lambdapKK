@@ -313,7 +313,6 @@ class TestConfigurationCompleteness:
             "paths",
             "luminosity",
             "branching_fractions",
-            "efficiency_inputs",
         ]
 
         for attr in compat_attrs:
