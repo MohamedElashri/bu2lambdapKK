@@ -483,8 +483,8 @@ class MassFitter:
                 all_yields[dataset_name] = dataset_yields
                 all_fit_results[dataset_name] = fit_result
 
-                # Plot fit result
-                self.plot_fit_result(dataset_name, mass_var, dataset, model, yields)
+                # Plot results (pass fit_result for quality metrics)
+                self.plot_fit_result(dataset_name, mass_var, dataset, model, yields, fit_result)
 
                 pbar.update(1)
 
@@ -523,7 +523,13 @@ class MassFitter:
         }
 
     def plot_fit_result(
-        self, year: str, mass_var: Any, dataset: Any, model: Any, yields: dict[str, Any]
+        self,
+        year: str,
+        mass_var: Any,
+        dataset: Any,
+        model: Any,
+        yields: dict[str, Any],
+        fit_result: Any = None,
     ) -> None:
         """
         Plot fit result with official LHCb publication style
@@ -634,23 +640,109 @@ class MassFitter:
 
         frame.Draw()
 
-        # Add LHCb label in top left
+        # Add LHCb label in top left corner
         lhcb_label = ROOT.TLatex()  # type: ignore
         lhcb_label.SetNDC()
         lhcb_label.SetTextFont(42)
         lhcb_label.SetTextSize(0.06)
-        lhcb_label.DrawLatex(0.20, 0.85, "LHCb")
+        lhcb_label.DrawLatex(0.12, 0.87, "LHCb")
 
         # Add year label below LHCb
         year_label = ROOT.TLatex()  # type: ignore
         year_label.SetNDC()
         year_label.SetTextFont(42)
-        year_label.SetTextSize(0.04)  # Smaller to avoid overlap with J/psi label
+        year_label.SetTextSize(0.05)
         year_text = "2016-2018" if year == "combined" else str(year)
-        year_label.DrawLatex(0.20, 0.78, year_text)
+        year_label.DrawLatex(0.12, 0.81, year_text)
+
+        # Calculate pull statistics early (before drawing info boxes)
+        pull_hist = frame.pullHist("data", "total")
+        pull_mean = 0.0
+        pull_rms = 0.0
+        n_pulls = 0
+
+        # Get pull values from histogram
+        for i in range(pull_hist.GetN()):
+            x = pull_hist.GetPointX(i)
+            y = pull_hist.GetPointY(i)
+            if abs(y) < 10:  # Exclude outliers
+                pull_mean += y
+                pull_rms += y * y
+                n_pulls += 1
+
+        if n_pulls > 0:
+            pull_mean /= n_pulls
+            pull_rms = (pull_rms / n_pulls - pull_mean * pull_mean) ** 0.5
+
+        # Add fit info box to the left of legend - fancy style with two columns
+        fit_info_left = ROOT.TPaveText(0.40, 0.60, 0.58, 0.90, "NDC")  # type: ignore
+        fit_info_left.SetBorderSize(2)
+        fit_info_left.SetLineColor(ROOT.kBlue)  # type: ignore
+        fit_info_left.SetFillColor(ROOT.kWhite)  # type: ignore
+        fit_info_left.SetFillStyle(1001)
+        fit_info_left.SetTextAlign(12)  # Left-aligned
+        fit_info_left.SetTextFont(42)
+        fit_info_left.SetTextSize(0.032)
+        fit_info_left.SetTextColor(ROOT.kBlack)  # type: ignore
+
+        fit_info_right = ROOT.TPaveText(0.58, 0.60, 0.76, 0.90, "NDC")  # type: ignore
+        fit_info_right.SetBorderSize(2)
+        fit_info_right.SetLineColor(ROOT.kBlue)  # type: ignore
+        fit_info_right.SetFillColor(ROOT.kWhite)  # type: ignore
+        fit_info_right.SetFillStyle(1001)
+        fit_info_right.SetTextAlign(12)  # Left-aligned
+        fit_info_right.SetTextFont(42)
+        fit_info_right.SetTextSize(0.032)
+        fit_info_right.SetTextColor(ROOT.kBlack)  # type: ignore
+
+        # Get fit statistics (top 10 most important quantities)
+        total_events = sum(y.getVal() for y in yields.values())
+        n_jpsi = yields["jpsi"].getVal()
+        n_jpsi_err = yields["jpsi"].getError()
+        n_etac = yields["etac"].getVal()
+        n_etac_err = yields["etac"].getError()
+        n_chic0 = yields["chic0"].getVal()
+        n_chic0_err = yields["chic0"].getError()
+        n_chic1 = yields["chic1"].getVal()
+        n_chic1_err = yields["chic1"].getError()
+        n_etac2s = yields["etac_2s"].getVal()
+        n_etac2s_err = yields["etac_2s"].getError()
+        n_bkg = yields["background"].getVal()
+        n_bkg_err = yields["background"].getError()
+        sigma_res = self.resolution.getVal()  # type: ignore
+        sigma_res_err = self.resolution.getError()  # type: ignore
+
+        # Left column - yields
+        fit_info_left.AddText("#bf{Yields}")
+        fit_info_left.AddText(f"N_{{J/#psi}} = {n_jpsi:.0f} #pm {n_jpsi_err:.0f}")
+        fit_info_left.AddText(f"N_{{#eta_{{c}}}} = {n_etac:.0f} #pm {n_etac_err:.0f}")
+        fit_info_left.AddText(f"N_{{#chi_{{c0}}}} = {n_chic0:.0f} #pm {n_chic0_err:.0f}")
+        fit_info_left.AddText(f"N_{{#chi_{{c1}}}} = {n_chic1:.0f} #pm {n_chic1_err:.0f}")
+        fit_info_left.AddText(f"N_{{#eta_{{c}}(2S)}} = {n_etac2s:.0f} #pm {n_etac2s_err:.0f}")
+
+        # Right column - fit info
+        # Calculate fit quality metrics
+        n_signal = n_jpsi + n_etac + n_chic0 + n_chic1 + n_etac2s
+
+        # Get fit quality from fit result if available
+        fit_status = "N/A"
+        edm = -1
+        if fit_result is not None:
+            fit_status = "OK" if fit_result.status() == 0 else "FAILED"
+            edm = fit_result.edm()
+
+        fit_info_right.AddText("#bf{Fit Info}")
+        fit_info_right.AddText(f"N_{{bkg}} = {n_bkg:.0f} #pm {n_bkg_err:.0f}")
+        fit_info_right.AddText(f"N_{{sig}} = {n_signal:.0f}")
+        fit_info_right.AddText(f"N_{{tot}} = {total_events:.0f}")
+        fit_info_right.AddText(f"#sigma_{{res}} = {sigma_res:.1f} #pm {sigma_res_err:.1f} MeV")
+        fit_info_right.AddText(f"Pull: #mu = {pull_mean:.2f}, #sigma = {pull_rms:.2f}")
+
+        fit_info_left.Draw()
+        fit_info_right.Draw()
 
         # Add compact legend in upper right (official LHCb style)
-        legend = ROOT.TLegend(0.55, 0.60, 0.92, 0.90)  # type: ignore
+        legend = ROOT.TLegend(0.77, 0.60, 0.93, 0.90)  # type: ignore
         legend.SetBorderSize(0)
         legend.SetFillStyle(0)  # Transparent
         legend.SetFillColor(0)
@@ -744,7 +836,6 @@ class MassFitter:
         # Create and draw pull distribution in lower pad
         pad2.cd()
         pull_frame = mass_var.frame(ROOT.RooFit.Title(""))  # No title # type: ignore
-        pull_hist = frame.pullHist("data", "total")
         pull_frame.addPlotable(pull_hist, "P")
 
         # Style pull plot axes
