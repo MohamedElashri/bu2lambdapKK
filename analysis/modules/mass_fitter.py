@@ -2,6 +2,7 @@
 Mass Fitting Module for B+ -> Lambda pK-K+ Analysis
 
 Implements RooFit-based simultaneous mass fitting for charmonium states.
+MODIFIED: plot_fit_result method updated to match official LHCb publication style
 """
 
 from __future__ import annotations
@@ -15,6 +16,9 @@ from tqdm import tqdm
 
 # Enable RooFit batch mode for better performance
 ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)  # type: ignore
+
+# Set ROOT to batch mode to prevent display/GUI issues during testing
+ROOT.gROOT.SetBatch(True)  # type: ignore
 
 
 class MassFitter:
@@ -522,15 +526,18 @@ class MassFitter:
         self, year: str, mass_var: Any, dataset: Any, model: Any, yields: dict[str, Any]
     ) -> None:
         """
-        Plot fit result with LHCb publication quality
+        Plot fit result with official LHCb publication style
 
-        Creates official LHCb-style plot with:
-        - Data points with Poisson errors
+        Creates LHCb-style two-panel plot with:
+        - Upper panel: fit with data, model components
+        - Lower panel: pull distribution
+        - Data points with error bars
         - Total fit curve (solid blue)
-        - Signal components (dotted, high contrast colors)
+        - Signal components (solid red lines)
         - Background component (dashed gray)
-        - Pull distribution below fit
-        - Proper LaTeX labels
+        - Compact legend in upper right
+        - Year label on plot
+        - Dynamic particle labels positioned above peaks
 
         Args:
             year: Year string (or "combined")
@@ -539,68 +546,59 @@ class MassFitter:
             model: Total PDF
             yields: Dictionary of yield parameters
         """
-        # Create RooPlot with year as title
-        title = "2016-2018" if year == "combined" else str(year)
-        frame = mass_var.frame(ROOT.RooFit.Title(title))  # type: ignore
+        # Create RooPlot (no title, we'll add it as text)
+        frame = mass_var.frame(ROOT.RooFit.Title(""))  # type: ignore
 
-        # Plot data with error bars (black points)
+        # Plot data with error bars (black points, small size)
         dataset.plotOn(
             frame,
             ROOT.RooFit.Name("data"),  # type: ignore
             ROOT.RooFit.MarkerStyle(20),  # type: ignore
-            ROOT.RooFit.MarkerSize(0.8),  # type: ignore
+            ROOT.RooFit.MarkerSize(0.6),  # type: ignore
             ROOT.RooFit.MarkerColor(ROOT.kBlack),  # type: ignore
         )
 
-        # Plot total PDF (solid dark blue)
+        # Plot total PDF (solid blue, matching LHCb style)
         model.plotOn(
             frame,
             ROOT.RooFit.Name("total"),  # type: ignore
-            ROOT.RooFit.LineColor(ROOT.kAzure + 2),  # type: ignore
+            ROOT.RooFit.LineColor(ROOT.kBlue),  # type: ignore
             ROOT.RooFit.LineWidth(2),  # type: ignore
             ROOT.RooFit.LineStyle(ROOT.kSolid),  # type: ignore
         )
 
-        # Professional LHCb-style color scheme (eye-friendly, distinct colors)
-        colors = {
-            "jpsi": ROOT.kRed + 1,  # Red for J/psi (most prominent) # type: ignore
-            "etac": ROOT.kBlue + 2,  # Blue for eta_c # type: ignore
-            "chic0": ROOT.kGreen + 2,  # Green for chi_c0 # type: ignore
-            "chic1": ROOT.kOrange + 7,  # Orange for chi_c1 # type: ignore
-            "etac_2s": ROOT.kMagenta + 2,  # Magenta for eta_c(2S) # type: ignore
-            "background": ROOT.kGray + 2,  # Gray for combinatorial background # type: ignore
-        }
-
-        # Plot signal components with dashed lines
+        # Plot all signal components in red (solid lines, matching official style)
         for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
             component_name = f"pdf_signal_{state}"
             model.plotOn(
                 frame,
                 ROOT.RooFit.Components(component_name),  # type: ignore
                 ROOT.RooFit.Name(state),  # type: ignore
-                ROOT.RooFit.LineColor(colors[state]),  # type: ignore
-                ROOT.RooFit.LineStyle(ROOT.kDashed),  # Dashed for signals # type: ignore
+                ROOT.RooFit.LineColor(ROOT.kRed),  # type: ignore
+                ROOT.RooFit.LineStyle(ROOT.kSolid),  # type: ignore
                 ROOT.RooFit.LineWidth(2),  # type: ignore
             )
 
-        # Plot background with dotted line
+        # Plot background with dashed gray line
         bkg_component_name = f"pdf_bkg_{year}"
         model.plotOn(
             frame,
             ROOT.RooFit.Components(bkg_component_name),  # type: ignore
             ROOT.RooFit.Name("background"),  # type: ignore
-            ROOT.RooFit.LineColor(colors["background"]),  # type: ignore
-            ROOT.RooFit.LineStyle(ROOT.kDotted),  # Dotted for background # type: ignore
+            ROOT.RooFit.LineColor(ROOT.kGray + 1),  # type: ignore
+            ROOT.RooFit.LineStyle(ROOT.kDashed),  # type: ignore
             ROOT.RooFit.LineWidth(2),  # type: ignore
         )
 
-        # Create canvas with two pads for fit and pull distribution (LHCb standard size)
-        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 800, 800)  # type: ignore
+        # Create canvas with two pads (fit on top, pulls on bottom)
+        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 1200, 800)  # type: ignore
+        # Prevent Python from managing canvas memory (let ROOT handle it)
+        ROOT.SetOwnership(canvas, False)  # type: ignore
 
         # Upper pad for fit (70% of canvas)
         pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.30, 1.0, 1.0)  # type: ignore
         pad1.SetBottomMargin(0.015)
-        pad1.SetLeftMargin(0.14)
+        pad1.SetLeftMargin(0.07)
         pad1.SetRightMargin(0.05)
         pad1.SetTopMargin(0.07)
         pad1.Draw()
@@ -609,58 +607,141 @@ class MassFitter:
         pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.30)  # type: ignore
         pad2.SetTopMargin(0.015)
         pad2.SetBottomMargin(0.35)
-        pad2.SetLeftMargin(0.14)
+        pad2.SetLeftMargin(0.07)
         pad2.SetRightMargin(0.05)
         pad2.SetGridy(1)
         pad2.Draw()
 
         # Draw fit in upper pad
         pad1.cd()
+
+        # Style the frame for upper pad
         frame.GetYaxis().SetTitle(f"Candidates / ({self.bin_width:.0f} MeV/#it{{c}}^{{2}})")
-        frame.GetYaxis().SetTitleSize(0.06)
-        frame.GetYaxis().SetLabelSize(0.05)
-        frame.GetYaxis().SetTitleOffset(1.2)
+        frame.GetYaxis().SetTitleSize(0.045)
+        frame.GetYaxis().SetLabelSize(0.0375)
+        frame.GetYaxis().SetTitleOffset(0.7)
         frame.GetYaxis().SetTitleFont(42)
         frame.GetYaxis().SetLabelFont(42)
-        frame.GetXaxis().SetLabelSize(0.0)
+        frame.GetXaxis().SetLabelSize(0.0)  # Hide x-axis labels on upper pad
         frame.GetXaxis().SetTitleSize(0.0)
-        frame.SetTitle("")  # Remove default title
 
-        # Set larger Y-axis range to make error bars appear smaller (add 40% margin at top)
+        frame.SetTitle("")
+
+        # Set Y-axis range with margin at top for labels
         y_max = frame.GetMaximum()
-        frame.SetMaximum(y_max * 1.40)
+        frame.SetMaximum(y_max * 1.50)  # More headroom for higher labels
         frame.SetMinimum(0.0)
 
         frame.Draw()
 
-        # Add compact legend on the right side with two columns (LHCb style)
-        legend = ROOT.TLegend(0.60, 0.55, 0.94, 0.90)  # type: ignore
+        # Add LHCb label in top left
+        lhcb_label = ROOT.TLatex()  # type: ignore
+        lhcb_label.SetNDC()
+        lhcb_label.SetTextFont(42)
+        lhcb_label.SetTextSize(0.06)
+        lhcb_label.DrawLatex(0.20, 0.85, "LHCb")
+
+        # Add year label below LHCb
+        year_label = ROOT.TLatex()  # type: ignore
+        year_label.SetNDC()
+        year_label.SetTextFont(42)
+        year_label.SetTextSize(0.04)  # Smaller to avoid overlap with J/psi label
+        year_text = "2016-2018" if year == "combined" else str(year)
+        year_label.DrawLatex(0.20, 0.78, year_text)
+
+        # Add compact legend in upper right (official LHCb style)
+        legend = ROOT.TLegend(0.55, 0.60, 0.92, 0.90)  # type: ignore
         legend.SetBorderSize(0)
-        legend.SetFillStyle(0)  # Transparent background
+        legend.SetFillStyle(0)  # Transparent
         legend.SetFillColor(0)
-        legend.SetTextSize(0.032)  # Smaller text to fit more
+        legend.SetTextSize(0.04)
         legend.SetTextFont(42)
-        legend.SetMargin(0.12)
-        legend.SetNColumns(2)  # Two columns for compactness
-        legend.SetColumnSeparation(0.02)  # Reduce space between columns
+        legend.SetMargin(0.15)
 
-        # Add entries in a logical order for two-column layout
-        legend.AddEntry("data", "B^{+} #rightarrow #bar{#Lambda}pK^{#minus}K^{+}", "lep")
-        legend.AddEntry("total", "Fit Model", "l")
+        # Add legend entries (simplified, matching official style)
+        legend.AddEntry("data", "Data", "l")  # Use line instead of lep for smaller indicator
+        legend.AddEntry("total", "Full model", "l")
+        legend.AddEntry("jpsi", "Signal", "l")  # All signals shown as one entry
+        legend.AddEntry("background", "Background", "l")
 
-        state_labels = {
-            "jpsi": "J/#psi",
-            "etac": "#eta_{c}(1S)",
-            "chic0": "#chi_{c0}(1P)",
-            "chic1": "#chi_{c1}(1P)",
-            "etac_2s": "#eta_{c}(2S)",
-            "background": "Comb. bkg.",
-        }
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s", "background"]:
-            legend.AddEntry(state, state_labels[state], "l")
         legend.Draw()
 
-        # Create and draw pull distribution in lower pad (professional style)
+        # Dynamically position state labels ABOVE peaks
+        state_text = ROOT.TLatex()  # type: ignore
+        state_text.SetTextFont(42)
+        state_text.SetTextSize(0.04)
+        state_text.SetTextAlign(21)  # Center-aligned, bottom-aligned
+
+        # Define states to label with their LaTeX names
+        states_to_label = {
+            "etac": ("#eta_{c}", 2983.9),  # ηc(1S)
+            "jpsi": ("J/#psi", 3096.9),  # J/ψ
+            "chic0": ("#chi_{c0}", 3414.1),  # χc0
+            "chic1": ("#chi_{c1}", 3510.7),  # χc1
+            "etac_2s": ("#eta_{c}(2S)", 3637.6),  # ηc(2S)
+        }
+
+        # Evaluate model at each state's mass to get peak height
+        for state, (label, mass_pdg) in states_to_label.items():
+            # Set mass variable to this state's mass
+            mass_var.setVal(mass_pdg)
+
+            # Get the total PDF value at this mass (normalized to bin content)
+            pdf_value = model.getVal(ROOT.RooArgSet(mass_var))  # type: ignore
+
+            # Convert PDF value to plot coordinates (multiply by number of events and bin width)
+            total_events = sum(y.getVal() for y in yields.values())
+            bin_content = pdf_value * total_events * self.bin_width
+
+            # Position label well above the peak to avoid error bars overlap
+            # Individual settings for each particle and year
+            # Format: {state: {"combined": mult, "2016": mult, "2017": mult, "2018": mult}}
+            label_multipliers = {
+                "etac": {
+                    "combined": 1.30,  # ηc(1S) combined
+                    "2016": 1.55,  # ηc(1S) 2016
+                    "2017": 1.30,  # ηc(1S) 2017
+                    "2018": 1.40,  # ηc(1S) 2018
+                },
+                "jpsi": {
+                    "combined": 1.15,  # J/ψ combined
+                    "2016": 1.30,  # J/ψ 2016
+                    "2017": 1.30,  # J/ψ 2017
+                    "2018": 1.10,  # J/ψ 2018
+                },
+                "chic0": {
+                    "combined": 1.65,  # χc0 combined
+                    "2016": 1.90,  # χc0 2016
+                    "2017": 1.90,  # χc0 2017
+                    "2018": 1.90,  # χc0 2018
+                },
+                "chic1": {
+                    "combined": 1.40,  # χc1 combined
+                    "2016": 1.90,  # χc1 2016
+                    "2017": 1.90,  # χc1 2017
+                    "2018": 1.90,  # χc1 2018
+                },
+                "etac_2s": {
+                    "combined": 1.55,  # ηc(2S) combined
+                    "2016": 2.00,  # ηc(2S) 2016
+                    "2017": 1.90,  # ηc(2S) 2017
+                    "2018": 1.90,  # ηc(2S) 2018
+                },
+            }
+
+            # Get the appropriate multiplier for this state and year
+            # Use default multiplier for unknown years (e.g., test data)
+            if year in label_multipliers[state]:
+                label_y = bin_content * label_multipliers[state][year]
+            else:
+                # Default to combined multiplier for unknown years
+                label_y = bin_content * label_multipliers[state].get("combined", 1.30)
+
+            # Don't place label if peak is too small (less than 5% of max)
+            if bin_content > y_max * 0.05:
+                state_text.DrawLatex(mass_pdg, label_y, label)
+
+        # Create and draw pull distribution in lower pad
         pad2.cd()
         pull_frame = mass_var.frame(ROOT.RooFit.Title(""))  # No title # type: ignore
         pull_hist = frame.pullHist("data", "total")
@@ -668,16 +749,16 @@ class MassFitter:
 
         # Style pull plot axes
         pull_frame.GetYaxis().SetTitle("Pull")
-        pull_frame.GetYaxis().SetTitleSize(0.13)
-        pull_frame.GetYaxis().SetLabelSize(0.11)
-        pull_frame.GetYaxis().SetTitleOffset(0.45)
+        pull_frame.GetYaxis().SetTitleSize(0.0975)
+        pull_frame.GetYaxis().SetLabelSize(0.0825)
+        pull_frame.GetYaxis().SetTitleOffset(0.3)
         pull_frame.GetYaxis().SetTitleFont(42)
         pull_frame.GetYaxis().SetLabelFont(42)
         pull_frame.GetYaxis().SetNdivisions(505)
         pull_frame.GetYaxis().SetRangeUser(-4.5, 4.5)
         pull_frame.GetYaxis().CenterTitle()
 
-        pull_frame.GetXaxis().SetTitle("m(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
+        pull_frame.GetXaxis().SetTitle("M(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
         pull_frame.GetXaxis().SetTitleSize(0.13)
         pull_frame.GetXaxis().SetLabelSize(0.11)
         pull_frame.GetXaxis().SetTitleOffset(1.1)
@@ -685,7 +766,7 @@ class MassFitter:
         pull_frame.GetXaxis().SetLabelFont(42)
         pull_frame.Draw()
 
-        # Explicitly remove the frame title
+        # Remove any title that might appear
         pull_frame.SetTitle("")
 
         # Add horizontal reference lines at 0, ±3σ
@@ -715,3 +796,7 @@ class MassFitter:
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))
         print(f"  ✓ Saved fit plot: {output_file}")
+
+        # Clean up canvas properly to prevent ROOT segfault during garbage collection
+        canvas.Clear()
+        canvas.Close()

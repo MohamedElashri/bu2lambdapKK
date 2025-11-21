@@ -41,7 +41,7 @@ def mock_config() -> Any:
         def __init__(self):
             self.particles = {
                 "mass_windows": {
-                    "charmonium_fit_range": [3000.0, 3800.0],  # Simple 800 MeV range
+                    "charmonium_fit_range": [2800.0, 4000.0],  # Include ηc(1S) at 2984 MeV
                 },
                 "pdg_masses": {
                     "jpsi": 3096.9,
