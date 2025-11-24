@@ -626,8 +626,8 @@ class MassFitter:
         frame.GetYaxis().SetTitleSize(0.045)
         frame.GetYaxis().SetLabelSize(0.0375)
         frame.GetYaxis().SetTitleOffset(0.7)
-        frame.GetYaxis().SetTitleFont(42)
-        frame.GetYaxis().SetLabelFont(42)
+        frame.GetYaxis().SetTitleFont(132)  # Times-like font for professional look
+        frame.GetYaxis().SetLabelFont(132)  # Times-like font for professional look
         frame.GetXaxis().SetLabelSize(0.0)  # Hide x-axis labels on upper pad
         frame.GetXaxis().SetTitleSize(0.0)
 
@@ -643,14 +643,14 @@ class MassFitter:
         # Add LHCb label in top left corner
         lhcb_label = ROOT.TLatex()  # type: ignore
         lhcb_label.SetNDC()
-        lhcb_label.SetTextFont(42)
+        lhcb_label.SetTextFont(132)  # Times-like font for professional look
         lhcb_label.SetTextSize(0.06)
         lhcb_label.DrawLatex(0.12, 0.87, "LHCb")
 
         # Add year label below LHCb
         year_label = ROOT.TLatex()  # type: ignore
         year_label.SetNDC()
-        year_label.SetTextFont(42)
+        year_label.SetTextFont(132)  # Times-like font for professional look
         year_label.SetTextSize(0.05)
         year_text = "2016-2018" if year == "combined" else str(year)
         year_label.DrawLatex(0.12, 0.81, year_text)
@@ -681,7 +681,7 @@ class MassFitter:
         fit_info_left.SetFillColor(ROOT.kWhite)  # type: ignore
         fit_info_left.SetFillStyle(1001)
         fit_info_left.SetTextAlign(12)  # Left-aligned
-        fit_info_left.SetTextFont(42)
+        fit_info_left.SetTextFont(132)  # Times-like font for professional look
         fit_info_left.SetTextSize(0.032)
         fit_info_left.SetTextColor(ROOT.kBlack)  # type: ignore
 
@@ -691,7 +691,7 @@ class MassFitter:
         fit_info_right.SetFillColor(ROOT.kWhite)  # type: ignore
         fit_info_right.SetFillStyle(1001)
         fit_info_right.SetTextAlign(12)  # Left-aligned
-        fit_info_right.SetTextFont(42)
+        fit_info_right.SetTextFont(132)  # Times-like font for professional look
         fit_info_right.SetTextSize(0.032)
         fit_info_right.SetTextColor(ROOT.kBlack)  # type: ignore
 
@@ -747,7 +747,7 @@ class MassFitter:
         legend.SetFillStyle(0)  # Transparent
         legend.SetFillColor(0)
         legend.SetTextSize(0.04)
-        legend.SetTextFont(42)
+        legend.SetTextFont(132)  # Times-like font for professional look
         legend.SetMargin(0.15)
 
         # Add legend entries (simplified, matching official style)
@@ -760,7 +760,7 @@ class MassFitter:
 
         # Dynamically position state labels ABOVE peaks
         state_text = ROOT.TLatex()  # type: ignore
-        state_text.SetTextFont(42)
+        state_text.SetTextFont(132)  # Times-like font for professional look
         state_text.SetTextSize(0.04)
         state_text.SetTextAlign(21)  # Center-aligned, bottom-aligned
 
@@ -843,8 +843,8 @@ class MassFitter:
         pull_frame.GetYaxis().SetTitleSize(0.0975)
         pull_frame.GetYaxis().SetLabelSize(0.0825)
         pull_frame.GetYaxis().SetTitleOffset(0.3)
-        pull_frame.GetYaxis().SetTitleFont(42)
-        pull_frame.GetYaxis().SetLabelFont(42)
+        pull_frame.GetYaxis().SetTitleFont(132)  # Times-like font for professional look
+        pull_frame.GetYaxis().SetLabelFont(132)  # Times-like font for professional look
         pull_frame.GetYaxis().SetNdivisions(505)
         pull_frame.GetYaxis().SetRangeUser(-4.5, 4.5)
         pull_frame.GetYaxis().CenterTitle()
@@ -853,8 +853,8 @@ class MassFitter:
         pull_frame.GetXaxis().SetTitleSize(0.13)
         pull_frame.GetXaxis().SetLabelSize(0.11)
         pull_frame.GetXaxis().SetTitleOffset(1.1)
-        pull_frame.GetXaxis().SetTitleFont(42)
-        pull_frame.GetXaxis().SetLabelFont(42)
+        pull_frame.GetXaxis().SetTitleFont(132)  # Times-like font for professional look
+        pull_frame.GetXaxis().SetLabelFont(132)  # Times-like font for professional look
         pull_frame.Draw()
 
         # Remove any title that might appear
