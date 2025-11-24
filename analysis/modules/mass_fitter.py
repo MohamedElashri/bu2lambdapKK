@@ -84,12 +84,12 @@ class MassFitter:
 
         # Shared parameters across years (will be created on first use)
         self.masses: dict[str, ROOT.RooRealVar] = {}  # M_J/ψ, M_ηc, M_χc0, M_χc1 # type: ignore
-        self.widths: dict[str, ROOT.RooRealVar] = (
+        self.widths: dict[str, ROOT.RooRealVar] = (  # type: ignore
             {}
         )  # Γ states (some fixed, some floating) # type: ignore
-        self.resolution: ROOT.RooRealVar | None = (
+        self.resolution: ROOT.RooRealVar | None = (  # type: ignore
             None  # Single resolution parameter (shared) # type: ignore
-        )
+        )  # type: ignore
 
         # Observable (shared across all fits)
         self.mass_var: ROOT.RooRealVar | None = None  # type: ignore
@@ -100,9 +100,9 @@ class MassFitter:
         self.argus_params: dict[str, dict[str, Any]] = {}  # {year: {param: value}}
 
         self.models: dict[str, ROOT.RooAbsPdf] = {}  # {year: model} # type: ignore
-        self.yields: dict[str, dict[str, ROOT.RooRealVar]] = (
+        self.yields: dict[str, dict[str, ROOT.RooRealVar]] = (  # type: ignore
             {}
-        )  # {year: {state: yield_var}} # type: ignore
+        )  # {year: {state: yield_var}}
 
     def setup_observable(self) -> ROOT.RooRealVar:  # type: ignore
         """
@@ -663,7 +663,6 @@ class MassFitter:
 
         # Get pull values from histogram
         for i in range(pull_hist.GetN()):
-            x = pull_hist.GetPointX(i)
             y = pull_hist.GetPointY(i)
             if abs(y) < 10:  # Exclude outliers
                 pull_mean += y
@@ -721,15 +720,8 @@ class MassFitter:
         fit_info_left.AddText(f"N_{{#eta_{{c}}(2S)}} = {n_etac2s:.0f} #pm {n_etac2s_err:.0f}")
 
         # Right column - fit info
-        # Calculate fit quality metrics
+        # Get fit quality metrics
         n_signal = n_jpsi + n_etac + n_chic0 + n_chic1 + n_etac2s
-
-        # Get fit quality from fit result if available
-        fit_status = "N/A"
-        edm = -1
-        if fit_result is not None:
-            fit_status = "OK" if fit_result.status() == 0 else "FAILED"
-            edm = fit_result.edm()
 
         fit_info_right.AddText("#bf{Fit Info}")
         fit_info_right.AddText(f"N_{{bkg}} = {n_bkg:.0f} #pm {n_bkg_err:.0f}")
