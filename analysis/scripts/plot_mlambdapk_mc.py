@@ -464,6 +464,209 @@ def create_comparison_plot(
     print(f"  ✓ Saved: {output_path.name}")
 
 
+def create_comparison_plot_log(
+    histograms_no_cuts: dict[str, ROOT.TH1D],
+    histograms_with_cuts: dict[str, ROOT.TH1D],
+    year_label: str,
+    output_path: Path,
+    absolute_yields: dict[str, float],
+    cut_efficiencies: dict[str, float],
+) -> None:
+    """
+    Create side-by-side comparison plot with semi-log Y-axis scale.
+
+    Same as create_comparison_plot but with logarithmic Y-axis to show
+    the full dynamic range of the distributions.
+
+    Args:
+        histograms_no_cuts: Dict of {state: TH1D} without cuts
+        histograms_with_cuts: Dict of {state: TH1D} with cuts
+        year_label: String like "2016" or "Combined"
+        output_path: Path to save the PDF
+        absolute_yields: Dict of absolute yields from fit {state: N_events}
+        cut_efficiencies: Dict of cut efficiencies {state: efficiency}
+    """
+    keep_alive: list = []
+    hists_no_cuts_norm: dict[str, ROOT.TH1D] = {}
+    hists_with_cuts_norm: dict[str, ROOT.TH1D] = {}
+    for state in SIGNAL_STATES:
+        abs_yield: float = absolute_yields.get(state, 0.0)
+        eff: float = cut_efficiencies.get(state, 1.0)
+        if state in histograms_no_cuts:
+            h: ROOT.TH1D = histograms_no_cuts[state].Clone(f"{state}_nocuts_norm_log")
+            ROOT.SetOwnership(h, False)
+            if h.Integral() > 0:
+                h.Scale(abs_yield / h.Integral())
+            hists_no_cuts_norm[state] = h
+            keep_alive.append(h)
+        if state in histograms_with_cuts:
+            h = histograms_with_cuts[state].Clone(f"{state}_cuts_norm_log")
+            ROOT.SetOwnership(h, False)
+            if h.Integral() > 0:
+                h.Scale((abs_yield * eff) / h.Integral())
+            hists_with_cuts_norm[state] = h
+            keep_alive.append(h)
+    canvas_name: str = f"c_log_{year_label.replace('-', '_').replace(' ', '_')}"
+    canvas: ROOT.TCanvas = ROOT.TCanvas(canvas_name, "", 1600, 700)
+    ROOT.SetOwnership(canvas, False)
+    keep_alive.append(canvas)
+    y_max: float = 0.0
+    y_min: float = float("inf")
+    for state in SIGNAL_STATES:
+        if state in hists_no_cuts_norm:
+            h_max: float = hists_no_cuts_norm[state].GetMaximum()
+            y_max = max(y_max, h_max)
+            for i in range(1, hists_no_cuts_norm[state].GetNbinsX() + 1):
+                val: float = hists_no_cuts_norm[state].GetBinContent(i)
+                if val > 0:
+                    y_min = min(y_min, val)
+        if state in hists_with_cuts_norm:
+            h_max = hists_with_cuts_norm[state].GetMaximum()
+            y_max = max(y_max, h_max)
+            for i in range(1, hists_with_cuts_norm[state].GetNbinsX() + 1):
+                val = hists_with_cuts_norm[state].GetBinContent(i)
+                if val > 0:
+                    y_min = min(y_min, val)
+    y_max *= 3.0
+    if y_min == float("inf"):
+        y_min = 0.1
+    else:
+        y_min = max(0.1, y_min * 0.5)
+    if y_max == 0:
+        y_max = 100
+    y_title: str = "Candidates / (5 MeV/#it{c}^{2})"
+    pad1: ROOT.TPad = ROOT.TPad("pad1_log", "No Cuts", 0.0, 0.0, 0.5, 1.0)
+    pad2: ROOT.TPad = ROOT.TPad("pad2_log", "With Cuts", 0.5, 0.0, 1.0, 1.0)
+    ROOT.SetOwnership(pad1, False)
+    ROOT.SetOwnership(pad2, False)
+    keep_alive.extend([pad1, pad2])
+    for pad in [pad1, pad2]:
+        pad.SetLeftMargin(0.12)
+        pad.SetRightMargin(0.05)
+        pad.SetTopMargin(0.08)
+        pad.SetBottomMargin(0.12)
+        pad.SetLogy(True)
+    canvas.cd()
+    pad1.Draw()
+    pad2.Draw()
+    pad1.cd()
+    first_drawn: bool = False
+    for state in SIGNAL_STATES:
+        if state in hists_no_cuts_norm:
+            h = hists_no_cuts_norm[state]
+            h.SetLineColor(STATE_COLORS[state])
+            h.SetLineWidth(2)
+            h.SetFillStyle(0)
+            h.SetMaximum(y_max)
+            h.SetMinimum(y_min)
+            h.GetXaxis().SetTitle("M(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
+            h.GetYaxis().SetTitle(y_title)
+            h.GetXaxis().SetTitleFont(132)
+            h.GetYaxis().SetTitleFont(132)
+            h.GetXaxis().SetLabelFont(132)
+            h.GetYaxis().SetLabelFont(132)
+            h.GetXaxis().SetTitleSize(0.05)
+            h.GetYaxis().SetTitleSize(0.045)
+            h.GetXaxis().SetLabelSize(0.04)
+            h.GetYaxis().SetLabelSize(0.04)
+            h.GetYaxis().SetTitleOffset(1.3)
+            if not first_drawn:
+                h.Draw("HIST")
+                first_drawn = True
+            else:
+                h.Draw("HIST SAME")
+    legend1: ROOT.TLegend = ROOT.TLegend(0.62, 0.65, 0.92, 0.88)
+    ROOT.SetOwnership(legend1, False)
+    keep_alive.append(legend1)
+    legend1.SetBorderSize(0)
+    legend1.SetFillStyle(0)
+    legend1.SetTextFont(132)
+    legend1.SetTextSize(0.038)
+    for state in SIGNAL_STATES:
+        if state in hists_no_cuts_norm:
+            legend1.AddEntry(hists_no_cuts_norm[state], STATE_LABELS[state], "l")
+    legend1.Draw()
+    lhcb1: ROOT.TLatex = ROOT.TLatex()
+    lhcb1.SetNDC()
+    lhcb1.SetTextFont(132)
+    lhcb1.SetTextSize(0.055)
+    lhcb1.DrawLatex(0.15, 0.85, "LHCb MC")
+    year1: ROOT.TLatex = ROOT.TLatex()
+    year1.SetNDC()
+    year1.SetTextFont(132)
+    year1.SetTextSize(0.045)
+    year1.DrawLatex(0.15, 0.78, year_label)
+    title1: ROOT.TLatex = ROOT.TLatex()
+    title1.SetNDC()
+    title1.SetTextFont(132)
+    title1.SetTextSize(0.04)
+    title1.DrawLatex(0.15, 0.71, "No Cuts (log scale)")
+    keep_alive.extend([lhcb1, year1, title1])
+    pad1.Modified()
+    pad1.Update()
+    pad2.cd()
+    first_drawn = False
+    for state in SIGNAL_STATES:
+        if state in hists_with_cuts_norm:
+            h = hists_with_cuts_norm[state]
+            h.SetLineColor(STATE_COLORS[state])
+            h.SetLineWidth(2)
+            h.SetFillStyle(0)
+            h.SetMaximum(y_max)
+            h.SetMinimum(y_min)
+            h.GetXaxis().SetTitle("M(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
+            h.GetYaxis().SetTitle(y_title)
+            h.GetXaxis().SetTitleFont(132)
+            h.GetYaxis().SetTitleFont(132)
+            h.GetXaxis().SetLabelFont(132)
+            h.GetYaxis().SetLabelFont(132)
+            h.GetXaxis().SetTitleSize(0.05)
+            h.GetYaxis().SetTitleSize(0.045)
+            h.GetXaxis().SetLabelSize(0.04)
+            h.GetYaxis().SetLabelSize(0.04)
+            h.GetYaxis().SetTitleOffset(1.3)
+            if not first_drawn:
+                h.Draw("HIST")
+                first_drawn = True
+            else:
+                h.Draw("HIST SAME")
+    legend2: ROOT.TLegend = ROOT.TLegend(0.62, 0.65, 0.92, 0.88)
+    ROOT.SetOwnership(legend2, False)
+    keep_alive.append(legend2)
+    legend2.SetBorderSize(0)
+    legend2.SetFillStyle(0)
+    legend2.SetTextFont(132)
+    legend2.SetTextSize(0.038)
+    for state in SIGNAL_STATES:
+        if state in hists_with_cuts_norm:
+            legend2.AddEntry(hists_with_cuts_norm[state], STATE_LABELS[state], "l")
+    legend2.Draw()
+    lhcb2: ROOT.TLatex = ROOT.TLatex()
+    lhcb2.SetNDC()
+    lhcb2.SetTextFont(132)
+    lhcb2.SetTextSize(0.055)
+    lhcb2.DrawLatex(0.15, 0.85, "LHCb MC")
+    year2: ROOT.TLatex = ROOT.TLatex()
+    year2.SetNDC()
+    year2.SetTextFont(132)
+    year2.SetTextSize(0.045)
+    year2.DrawLatex(0.15, 0.78, year_label)
+    title2: ROOT.TLatex = ROOT.TLatex()
+    title2.SetNDC()
+    title2.SetTextFont(132)
+    title2.SetTextSize(0.04)
+    title2.DrawLatex(0.15, 0.71, "With Cuts (log scale)")
+    keep_alive.extend([lhcb2, year2, title2])
+    pad2.Modified()
+    pad2.Update()
+    canvas.Modified()
+    canvas.Update()
+    canvas.SaveAs(str(output_path))
+    png_path: Path = output_path.with_suffix(".png")
+    canvas.SaveAs(str(png_path))
+    print(f"  ✓ Saved: {output_path.name}")
+
+
 def main() -> None:
     """Main function to run the M(LambdaPK) MC plotting script."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
@@ -590,11 +793,16 @@ def main() -> None:
             n_no: int = events_no_cuts.get(state, 0)
             n_cut: int = events_with_cuts.get(state, 0)
             cut_effs[state] = n_cut / n_no if n_no > 0 else 1.0
-        # Create plot for this year
+        # Create plot for this year (linear scale)
         print(f"\nCreating plot for {year}...")
         year_pdf: Path = output_dir / f"mlambdapk_mc_all_states_{year}.pdf"
         create_comparison_plot(
             hists_no_cuts, hists_with_cuts, year, year_pdf, absolute_yields, cut_effs
+        )
+        # Create log-scale plot for this year
+        year_pdf_log: Path = output_dir / f"mlambdapk_mc_all_states_{year}_log.pdf"
+        create_comparison_plot_log(
+            hists_no_cuts, hists_with_cuts, year, year_pdf_log, absolute_yields, cut_effs
         )
     # Create combined plot (all years)
     print(f"\n{'=' * 80}")
@@ -622,6 +830,16 @@ def main() -> None:
         absolute_yields,
         combined_cut_effs,
     )
+    # Create log-scale combined plot
+    combined_pdf_log: Path = output_dir / "mlambdapk_mc_all_states_combined_log.pdf"
+    create_comparison_plot_log(
+        combined_hists_no_cuts,
+        combined_hists_with_cuts,
+        "2016-2018",
+        combined_pdf_log,
+        absolute_yields,
+        combined_cut_effs,
+    )
     # Print cut efficiencies as markdown table
     print(f"\n{'=' * 80}")
     print("CUT EFFICIENCIES (Combined 2016-2018)")
@@ -641,10 +859,16 @@ def main() -> None:
     print("SUMMARY")
     print(f"{'=' * 80}")
     yield_source: str = "from mass fit to data" if args.run_fit else "default estimates"
-    print(f"Generated {len(years) + 1} plots (scaled to actual yields {yield_source}):")
+    n_plots: int = (len(years) + 1) * 2  # Linear + log for each year and combined
+    print(f"Generated {n_plots} plots (scaled to actual yields {yield_source}):")
+    print("\nLinear scale:")
     for year in years:
         print(f"  - mlambdapk_mc_all_states_{year}.pdf")
     print("  - mlambdapk_mc_all_states_combined.pdf")
+    print("\nSemi-log scale:")
+    for year in years:
+        print(f"  - mlambdapk_mc_all_states_{year}_log.pdf")
+    print("  - mlambdapk_mc_all_states_combined_log.pdf")
     print("\nAbsolute yields used for scaling:")
     for state in SIGNAL_STATES:
         print(f"  {STATE_LABELS[state]:12s}: N = {absolute_yields[state]:>6.0f}")
