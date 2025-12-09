@@ -210,3 +210,9 @@ cache/
 
 ## root typying shim package
 root_typing
+
+## slides
+*.tex
+
+## root files (templates)
+*.root
