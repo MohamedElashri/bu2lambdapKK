@@ -4,7 +4,7 @@ scipy
 matplotlib
 pandas
 
-# High-energy physics specific
+# HEP specific
 uproot
 awkward
 ROOT

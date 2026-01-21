@@ -212,7 +212,7 @@ cache/
 root_typing
 
 ## slides
-*.tex
+slides
 
 ## root files (templates)
 *.root

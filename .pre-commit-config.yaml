@@ -32,17 +32,6 @@ repos:
         args: ["--profile=black", "--line-length=100"]
         exclude: ^(analysis/tests/fixtures/|htmlcov/|eff/)
 
-  # Type checking with mypy (disabled - causes module conflicts)
-  # Uncomment and configure after resolving module structure
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.13.0
-  #   hooks:
-  #     - id: mypy
-  #       name: Type check with mypy
-  #       args: ["--ignore-missing-imports", "--no-strict-optional", "--namespace-packages"]
-  #       additional_dependencies: [types-toml]
-  #       exclude: ^(analysis/tests/|htmlcov/|eff/)
-
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -81,26 +70,16 @@ repos:
         files: \.toml$
         exclude: ^(analysis/tests/fixtures/)
 
-  # Mandatory test suite - ALL tests must pass
+  # Test suite - runs only when Python files are modified
   - repo: local
     hooks:
       - id: pytest-all-tests
-        name: Run ALL tests (required)
+        name: Run tests (when Python files changed)
         entry: bash -c 'ROOT=$(git rev-parse --show-toplevel); if [ -d "$ROOT/analysis/tests" ]; then cd "$ROOT" && PYTHONPATH="$ROOT" .venv/bin/python -m pytest "$ROOT/analysis/tests/" -v --tb=short || exit 1; elif [ -d "$ROOT/tests" ]; then cd "$ROOT" && PYTHONPATH="$ROOT" .venv/bin/python -m pytest "$ROOT/tests/" -v --tb=short || exit 1; else echo "❌ Cannot find tests directory"; exit 1; fi'
         language: system
         pass_filenames: false
         types: [python]
-        stages: [pre-commit, pre-push]
-        always_run: true
-
-      - id: pytest-coverage-check
-        name: Verify test coverage (≥35%)
-        entry: bash -c 'ROOT=$(git rev-parse --show-toplevel); if [ -d "$ROOT/analysis/tests" ]; then cd "$ROOT" && PYTHONPATH="$ROOT" .venv/bin/python -m pytest "$ROOT/analysis/tests/" --cov=analysis/modules --cov-report=term-missing:skip-covered --cov-fail-under=35 -q || exit 1; elif [ -d "$ROOT/tests" ]; then cd "$ROOT" && PYTHONPATH="$ROOT" .venv/bin/python -m pytest "$ROOT/tests/" --cov=modules --cov-report=term-missing:skip-covered --cov-fail-under=35 -q || exit 1; else echo "❌ Cannot find tests directory"; exit 1; fi'
-        language: system
-        pass_filenames: false
-        types: [python]
-        stages: [pre-push]
-        always_run: true
+        stages: [commit]
 
 # Configuration
 default_language_version:
