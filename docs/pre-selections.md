@@ -1,11 +1,37 @@
 ## Pre-selections
-There are 3 pre-selections:
 
-1. Trigger level pre-selection
+This document describes all selection stages applied to the data, from initial trigger decisions through to the final analysis selections. There are 4 distinct selection stages:
 
-TDW
+## 1. Trigger Level Pre-selection
 
-2. Restripping pre-selection
+The trigger selection requires events to pass all three trigger levels with the following logic:
+
+**L0_TIS (Trigger Independent of Signal)** - At least one of the following must fire:
+- `Bu_L0GlobalDecision_TIS`
+- `Bu_L0PhysDecision_TIS`
+- `Bu_L0HadronDecision_TIS`
+- `Bu_L0MuonDecision_TIS`
+- `Bu_L0MuonHighDecision_TIS`
+- `Bu_L0DiMuonDecision_TIS`
+- `Bu_L0PhotonDecision_TIS`
+- `Bu_L0ElectronDecision_TIS`
+
+**HLT1_TOS (Trigger On Signal)** - At least one of the following must fire:
+- `Bu_Hlt1TrackMVADecision_TOS`
+- `Bu_Hlt1TwoTrackMVADecision_TOS`
+
+**HLT2_TOS (Trigger On Signal)** - At least one of the following must fire:
+- `Bu_Hlt2Topo2BodyDecision_TOS`
+- `Bu_Hlt2Topo3BodyDecision_TOS`
+- `Bu_Hlt2Topo4BodyDecision_TOS`
+
+**Combined Trigger Logic**: `L0_TIS AND HLT1_TOS AND HLT2_TOS`
+
+All three levels must pass (with at least one line firing per level).
+
+---
+
+## 2. Restripping Pre-selection
 
 | Name | Explanation | Value | Unit |
 | --- | --- | --- | --- |
@@ -53,22 +79,119 @@ TDW
 | `MaxLmPrtTrkChi2` | Maximum chi-squared of the proton tracks in the Lambda0 decay | 4.0 | Dimensionless |
 | `MaxLmPiTrkChi2` | Maximum chi-squared of the pion tracks in the Lambda0 decay | 4.0 | Dimensionless |
 
-3. Offline pre-selection
+---
+
+## 3. Data Reduction Pre-selection
+
+During the data reduction and preparation stage (converting restripped data to analysis-ready reduced files), the following additional selections are applied:
 
 | Name | Explanation | Value | Unit |
 | --- | --- | --- | --- |
 | `Bu_FDCHI2_OWNPV` | Flight distance chi-squared of the B+ candidate | > 175 | Dimensionless |
 | `Delta_Z` | Difference in Z-coordinate between the end vertices of the Lambda0 and B+ particles | > 2.5 | mm |
 | `Lp_ProbNNp` | Probability of the Lambda0 proton being a proton according to the neural network | > 0.05 | Dimensionless |
-| `p_ProbNNp` | Probability of the proton being a proton according to the neural network | > 0.05 | Dimensionless |
-| `prodProbKK` | Product of the probabilities of the kaons being kaons according to the neural network | > 0.05 | Dimensionless |
-| `Bu_PT` | Transverse momentum of the B+ candidate | > 3000 | MeV/c |
-| `Bu_IPCHI2_OWNPV` | Impact parameter chi-squared of the B+ candidate | < 10 | Dimensionless |
+| `p_ProbNNp` | Probability of the bachelor proton being a proton according to the neural network | > 0.05 | Dimensionless |
+| `prodProbKK` | Product of the probabilities of the two kaons being kaons (h1_ProbNNk × h2_ProbNNk) | > 0.10 | Dimensionless |
 | `Bu_DTF_chi2` | Chi-squared of the decay tree fit for the B+ candidate | < 30 | Dimensionless |
+| `Bu_PT` | Transverse momentum of the B+ candidate | > 3000 | MeV/c |
+
+**Note**: These cuts are applied during the data processing stage (see `B2L0barPKpKm_processing.py`). The data reduction also includes branch selection, keeping only relevant variables for the analysis.
+
+---
+
+## 4. Analysis (Offline) Pre-selection
+
+These are the current analysis-level selections applied during the final analysis stage. Note that these have been updated from the original document:
+
+### Fixed Lambda Selection (Applied to All States)
+
+| Name | Explanation | Value | Unit |
+| --- | --- | --- | --- |
+| `L0_MM` | Invariant mass of the Lambda0 particle | 1111.0 - 1121.0 | MeV/c² |
+| `Lp_ProbNNp` | Lambda proton PID probability | > 0.3 | Dimensionless |
+| `Delta_Z` | Vertex separation between Lambda0 and B+ | > 5.0 | mm |
+| `L0_FDCHI2_OWNPV` | Lambda flight distance chi-squared | > 250.0 | Dimensionless |
+
+### Fixed B+ Selection (Applied to All States)
+
+| Name | Explanation | Value | Unit |
+| --- | --- | --- | --- |
+| `Bu_MM` (corrected) | B+ invariant mass (Lambda-corrected) | 5255.0 - 5305.0 | MeV/c² |
+
+### Manual/Baseline Cuts (Unoptimized)
+
+These cuts can be used as baseline selections when not running optimization:
+
+| Name | Explanation | Value | Unit |
+| --- | --- | --- | --- |
+| `Bu_DTF_chi2` | B+ decay tree fit χ² | < 30 | Dimensionless |
+| `Bu_FDCHI2_OWNPV` | B+ flight distance χ² | > 100 | Dimensionless |
+| `Bu_IPCHI2_OWNPV` | B+ impact parameter χ² | < 10 | Dimensionless |
+| `Bu_PT` | B+ transverse momentum | > 3000 | MeV/c |
+| `h1_ProbNNk` | First kaon PID probability | > 0.1 | Dimensionless |
+| `h2_ProbNNk` | Second kaon PID probability | > 0.1 | Dimensionless |
+| `p_ProbNNp` | Bachelor proton PID probability | > 0.1 | Dimensionless |
+
+### Optimizable Selections
+
+The analysis also includes various optimizable selections (for FOM optimization) covering:
+- B+ kinematic variables (`FDCHI2`, `PT`, `DTF_chi2`, `IPCHI2`)
+- Bachelor proton properties (`IPCHI2`, `ProbNNp`, track quality)
+- Kaon properties (`PIDK`, `IPCHI2`, track quality)
+- Lambda decay topology (`Delta_Z`, `L0_FDCHI2`)
+
+These optimizable selections have ranges and steps defined in `analysis/config/selection.toml` and are subject to optimization during the analysis.
+
+**Note**: Some analysis selections (especially manual cuts) overlap with data reduction selections but may have different thresholds. The data reduction selections are applied first to reduce file size, and the analysis selections provide the final event selection.
+
+---
+
+## Summary of Selection Flow
+
+1. **Trigger Selection**: Events must pass trigger requirements (`L0_TIS` AND `HLT1_TOS` AND `HLT2_TOS`)
+2. **Restripping**: Loose pre-selections at the stripping level
+3. **Data Reduction**: Intermediate selections to reduce file size (`Bu_FDCHI2 > 175`, `Delta_Z > 2.5`, etc.)
+4. **Analysis**: Final selections including Lambda mass window, optimizable cuts, and mass constraint
 
 
 
-## Branches
+## Final Effective Cuts Summary
+
+This table lists all variables with selection cuts applied across any stage, showing the **most restrictive (final effective) value** that determines the actual cut in the analysis. For variables with cuts at multiple stages, the strictest value is shown.
+
+| Branch Name | Final Effective Cut |
+| --- | --- |
+| **B+ Selections** | |
+| `Bu_MM` (corrected) | 5255.0 - 5305.0 MeV/c² |
+| `Bu_PT` | > 3000 MeV/c |
+| `Bu_FDCHI2_OWNPV` | > 175 (Data Reduction) → > 100 (Analysis baseline) |
+| `Bu_IPCHI2_OWNPV` | < 10 |
+| `Bu_DTF_chi2` | < 30 |
+| **Lambda Selections** | |
+| `L0_MM` | 1111.0 - 1121.0 MeV/c² |
+| `L0_FDCHI2_OWNPV` | > 250.0 |
+| `Delta_Z` | > 5.0 mm |
+| **Lambda Proton** | |
+| `Lp_ProbNNp` | > 0.3 |
+| **Bachelor Proton** | |
+| `p_ProbNNp` | > 0.1 |
+| **Kaons** | |
+| `h1_ProbNNk` | > 0.1 |
+| `h2_ProbNNk` | > 0.1 |
+| `prodProbKK` (h1 × h2) | > 0.10 |
+| **Trigger Requirements** | |
+| Trigger Logic | `L0_TIS` AND `HLT1_TOS` AND `HLT2_TOS` |
+
+**Notes:**
+- `Bu_FDCHI2_OWNPV`: Data reduction applies > 175, but analysis baseline uses > 100 (the data reduction cut of > 175 is already applied, so effectively > 175)
+- `prodProbKK` is calculated as h1_ProbNNk × h2_ProbNNk
+- All trigger lines are OR'd within each level (L0, HLT1, HLT2), but all three levels must pass
+- Optimizable cuts may vary depending on the optimization strategy used in the analysis
+
+
+---
+
+## Variable Definitions (Branches)
 | Name | Meaning | Dimension |
 | --- | --- | --- |
 | `h1_P` | Total momentum of the first hadron | MeV/c |
@@ -196,3 +319,5 @@ TDW
 | `Bu_Hlt2Topo2BodyBBDTDecision_TOS` | Hlt2 two-body BBDT topology trigger decision for the B+ particle (Trigger On Signal) | Boolean |
 | `Bu_Hlt2Topo3BodyBBDTDecision_TOS` | Hlt2 three-body BBDT topology trigger decision for the B+ particle (Trigger On Signal) | Boolean |
 | `Bu_Hlt2Topo4BodyBBDTDecision_TOS` | Hlt2 four-body BBDT topology trigger decision for the B+ particle (Trigger On Signal) | Boolean |
+
+---
