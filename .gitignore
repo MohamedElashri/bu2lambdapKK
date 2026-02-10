@@ -219,5 +219,8 @@ slides
 # snakemake
 .snakemake
 
+# studies output directories (each study has output/ inside it)
+analysis/studies/*/output/
+
 # archive (old Makefile-based analysis)
 # archive/ is tracked in git for reference

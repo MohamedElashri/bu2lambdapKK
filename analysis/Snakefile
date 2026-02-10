@@ -6,6 +6,8 @@
 #   snakemake validate_config              # Run single rule
 #   snakemake --config years="[2016]"      # Override config
 #   snakemake --dag | dot -Tpdf > dag.pdf  # Visualize DAG
+#
+# Standalone studies live in analysis/studies/<study_name>/ with their own Snakefiles.
 
 configfile: "snakemake_config.yaml"
 

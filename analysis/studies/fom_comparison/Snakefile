@@ -1,0 +1,41 @@
+# Snakefile — FoM Comparison Study (standalone)
+#
+# Compare S/√B vs S/(√S+√B) for high-yield and low-yield charmonium states.
+#
+# Usage:
+#   cd analysis/studies/fom_comparison
+#   uv run snakemake -j1
+#
+# Depends on Step 2 cached data/MC from the main pipeline.
+
+# Paths relative to this study directory → main analysis/
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/fom_comparison_summary.csv",
+        f"{OUTPUT_DIR}/fom_comparison.pdf",
+
+rule fom_comparison:
+    """Compare S/√B vs S/(√S+√B) for high-yield and low-yield states.
+
+    Requires Step 2 cached data from the main pipeline:
+      cd analysis/ && uv run snakemake load_data -j1
+    """
+    input:
+        # Sentinel from main pipeline Step 2
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        csv=f"{OUTPUT_DIR}/fom_comparison_summary.csv",
+        plot=f"{OUTPUT_DIR}/fom_comparison.pdf",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_fom_comparison.py"
