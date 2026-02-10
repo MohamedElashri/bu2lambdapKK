@@ -1,9 +1,31 @@
 """
 Step 3 Snakemake wrapper: Selection Optimization
 
-Reproduces the logic from:
-  - PipelineManager.phase3_selection_optimization() in run_pipeline.py
-  - PipelineManager._create_manual_cuts_dataframe() in run_pipeline.py
+Two modes controlled by config optimization_strategy.state_dependent:
+
+  Option A (state_dependent=false): UNIVERSAL cuts — same for all states.
+    Signal proxy: "no-charmonium" data (M(Lambdabar-p-K-) > 4 GeV).
+    Background proxy: B+ mass sidebands.
+    FoM: S / sqrt(S + B).
+    No MC used -> completely unbiased.
+
+  Option B (state_dependent=true): PER-STATE cuts — different per charmonium state.
+    Signal: S = epsilon(cuts) * N_expected
+      epsilon = N_MC_passing / N_MC_total  (MC efficiency after Lambda cuts)
+      N_expected = data sideband-subtracted yield (no selection cuts applied)
+    Background: B from data sideband interpolation in each state's M(Lambdabar-p-K-)
+      window for each cut combination.
+    FoM per state group (informed by studies/fom_comparison):
+      High-yield (J/psi, eta_c(1S)):       S / sqrt(B)          — maximise significance
+      Low-yield  (chi_c0, chi_c1, eta_c(2S)): S / (sqrt(S) + sqrt(B)) — minimise
+        relative yield uncertainty (Punzi-like), preserves signal efficiency.
+    MC states: jpsi, etac, chic0, chic1.  eta_c(2S) uses chi_c1 MC as proxy.
+
+  FoM study findings (studies/fom_comparison):
+    - 4/5 states show different optimal cuts between S/sqrt(B) and S/(sqrt(S)+sqrt(B))
+    - S/sqrt(B) over-tightens cuts for low-yield states (10-17% efficiency loss)
+    - S/(sqrt(S)+sqrt(B)) preserves signal efficiency when yields are O(20-30) events
+    - Conclusion: use state-dependent FoM selection for per-state optimisation
 
 Snakemake injects the `snakemake` object with:
   snakemake.params.use_manual_cuts  — bool: use manual cuts from config
@@ -201,39 +223,17 @@ if use_cached:
         print(f"\n✓ Step 3 complete: Optimized cuts saved to {cuts_output_file}")
         sys.exit(0)
 
-print("\n  Running full N-D optimization (this may take 30-60 minutes)")
-print("    We can skip this and use default cuts if needed\n")
+# Read optimization mode from config
+opt_config = config.selection.get("optimization_strategy", {})
+state_dependent = opt_config.get("state_dependent", False)
 
-# Combine track types (LL + DD) for optimizer
-print("Combining LL and DD track types for optimization...")
+print(
+    f"\n  Optimization mode: {'Option B (per-state)' if state_dependent else 'Option A (universal)'}"
+)
+print("    Lambda cuts are FIXED (already applied in Step 2)\n")
 
-mc_combined = {}
-for state in mc_dict:
-    mc_combined[state] = {}
-    for year in mc_dict[state]:
-        arrays_to_combine = []
-        for track_type in mc_dict[state][year]:
-            arr = mc_dict[state][year][track_type]
-            if hasattr(arr, "layout"):
-                arrays_to_combine.append(arr)
-        if arrays_to_combine:
-            mc_combined[state][year] = ak.concatenate(arrays_to_combine, axis=0)
-            print(f"  {state}/{year}: {len(mc_combined[state][year])} events")
-
-# Combine phase-space MC track types
-phase_space_combined = {}
-if phase_space_dict is not None:
-    for year in phase_space_dict:
-        arrays_to_combine = []
-        for track_type in phase_space_dict[year]:
-            arr = phase_space_dict[year][track_type]
-            if hasattr(arr, "layout"):
-                arrays_to_combine.append(arr)
-        if arrays_to_combine:
-            phase_space_combined[year] = ak.concatenate(arrays_to_combine, axis=0)
-            print(f"  phase_space/{year}: {len(phase_space_combined[year])} events")
-
-# Combine real data track types for background estimation
+# Combine real data track types (needed for both options)
+print("Combining LL and DD track types...")
 data_combined = {}
 for year in data_dict:
     arrays_to_combine = []
@@ -243,49 +243,68 @@ for year in data_dict:
             arrays_to_combine.append(arr)
     if arrays_to_combine:
         data_combined[year] = ak.concatenate(arrays_to_combine, axis=0)
-        print(f"  data/{year}: {len(data_combined[year])} events")
+        print(f"  data/{year}: {len(data_combined[year]):,} events")
 
-# Sum MC generated counts across track types (LL + DD)
-if mc_generated_counts is not None:
-    mc_generated_combined = {}
-    for state in mc_generated_counts:
-        mc_generated_combined[state] = {}
-        for year in mc_generated_counts[state]:
-            total_generated = sum(mc_generated_counts[state][year].values())
-            mc_generated_combined[state][year] = total_generated
-            print(f"  {state}/{year} generated: {total_generated:,} events")
+if state_dependent:
+    # -----------------------------------------------------------------------
+    # Option B: Per-state MC-based optimization
+    # -----------------------------------------------------------------------
+    # Combine MC per state across years and track types into a single array
+    # (the optimizer expects {state: single_ak_array})
+    mc_combined_flat = {}
+    for state in mc_dict:
+        arrays_to_combine = []
+        for year in mc_dict[state]:
+            for track_type in mc_dict[state][year]:
+                arr = mc_dict[state][year][track_type]
+                if hasattr(arr, "layout"):
+                    arrays_to_combine.append(arr)
+        if arrays_to_combine:
+            mc_combined_flat[state] = ak.concatenate(arrays_to_combine, axis=0)
+            print(f"  MC/{state}: {len(mc_combined_flat[state]):,} events (all years+tracks)")
 
-# Initialize optimizer
-print("\n✓ IMPORTANT: Correct optimization approach:")
-print("    Signal: signal MC (J/ψ, ηc, χc) - scaled to expected events")
-print("    Background: real data sidebands - interpolated to signal region")
-print("    Formula: n_sig = ε * L * σ_eff * 10³")
-print("    Where ε = n_mc_after_cuts / n_mc_generated (full selection efficiency)")
-print("    This properly estimates signal efficiency and background level!")
+    # Add etac_2s proxy (uses chic1 MC)
+    if "chic1" in mc_combined_flat:
+        mc_combined_flat["etac_2s"] = mc_combined_flat["chic1"]
+        print(
+            f"  MC/etac_2s: using chic1 MC as proxy "
+            f"({len(mc_combined_flat['etac_2s']):,} events)"
+        )
 
-# NEW: Unbiased optimization using data proxies only
-optimizer = SelectionOptimizer(
-    data=data_combined,
-    config=config,
-)
+    optimizer = SelectionOptimizer(
+        data=data_combined,
+        config=config,
+        mc_data=mc_combined_flat,
+    )
 
-# Validate data regions before optimization
-optimizer.validate_data_regions()
+    optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
 
-# Run N-D grid scan optimization with UNBIASED method
-print("\n  Running UNBIASED N-D GRID SCAN")
-print("    Signal proxy: no-charmonium data (M(Λ̄pK⁻) > 4 GeV)")
-print("    Background proxy: B⁺ mass sidebands")
-print("    Lambda cuts are FIXED (already applied in Step 2)")
-optimized_cuts_df = optimizer.optimize_nd_grid_scan()
+else:
+    # -----------------------------------------------------------------------
+    # Option A: Universal unbiased optimization
+    # -----------------------------------------------------------------------
+    optimizer = SelectionOptimizer(
+        data=data_combined,
+        config=config,
+    )
+
+    # Validate data regions before optimization
+    optimizer.validate_data_regions()
+
+    print("\n  Running UNBIASED N-D GRID SCAN")
+    print("    Signal proxy: no-charmonium data (M(Lambdabar-p-K-) > 4 GeV)")
+    print("    Background proxy: B+ mass sidebands")
+    optimized_cuts_df = optimizer.optimize_nd_grid_scan()
 
 # Cache and save
+method_desc = "per-state MC-based" if state_dependent else "universal unbiased"
 cache.save(
     "step3_optimized_cuts",
     optimized_cuts_df,
     dependencies=step3_deps,
-    description="Optimized selection cuts (unbiased method)",
+    description=f"Optimized selection cuts ({method_desc})",
 )
+tables_dir.mkdir(exist_ok=True, parents=True)
 optimized_cuts_df.to_csv(cuts_output_file, index=False)
 
 print(f"\n✓ Step 3 complete: Optimized cuts saved to {cuts_output_file}")
