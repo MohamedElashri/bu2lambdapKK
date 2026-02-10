@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import tomli_w
 
-from analysis.modules.data_handler import TOMLConfig
+from modules.data_handler import TOMLConfig
 
 
 @pytest.mark.validation

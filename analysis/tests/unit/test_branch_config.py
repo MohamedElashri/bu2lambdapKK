@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import tomli_w
 
-from analysis.modules.branch_config import BranchConfig, get_branch_config
-from analysis.modules.exceptions import ConfigurationError
+from modules.branch_config import BranchConfig, get_branch_config
+from modules.exceptions import ConfigurationError
 
 
 @pytest.mark.unit

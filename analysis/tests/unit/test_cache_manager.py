@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from analysis.modules.cache_manager import CacheManager, CacheMetadata
+from modules.cache_manager import CacheManager, CacheMetadata
 
 
 @pytest.mark.unit

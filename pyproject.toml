@@ -1,4 +1,4 @@
-# pyproject.toml - Project configuration for Bu2LambdaPKK analysis
+# pyproject.toml - Project configuration for Bu2LambdaPKK Snakemake analysis
 
 [build-system]
 build-backend = "setuptools.build_meta"
@@ -8,11 +8,44 @@ requires = ["setuptools>=45", "wheel"]
 authors = [
   {name = "Mohamed Elashri"}
 ]
-description = "Analysis pipeline for Bu → Λ p K K decay"
+dependencies = [
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "pandas",
+  "uproot",
+  "awkward",
+  "mplhep",
+  "vector",
+  "tqdm",
+  "uncertainties",
+  "psutil",
+  "pyyaml",
+  "tomli",
+  "tomli_w",
+  "snakemake",
+  "root>=0.1a10"
+]
+description = "Snakemake-based analysis pipeline for Bu → Λ p K K decay"
 name = "bu2lambdapkk-analysis"
 readme = "README.md"
 requires-python = ">=3.11"
 version = "1.0.0"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-cov>=4.0.0",
+  "pytest-mock>=3.10.0",
+  "pytest-xdist>=3.0.0",
+  "hypothesis>=6.0.0",
+  "pre-commit>=3.5.0",
+  "black>=24.0.0",
+  "ruff>=0.7.0",
+  "isort>=5.13.0",
+  "mypy>=1.13.0",
+  "types-toml>=0.10.0"
+]
 
 [tool.black]
 exclude = '''
@@ -59,7 +92,7 @@ omit = [
 source = ["analysis/modules"]
 
 [tool.isort]
-known_first_party = ["analysis"]
+known_first_party = ["modules", "utils", "analysis"]
 line_length = 100
 profile = "black"
 skip = [".venv", "__pycache__", "htmlcov", ".pytest_cache"]
@@ -69,11 +102,12 @@ skip_gitignore = true
 exclude = [
   "^analysis/tests/",
   "^htmlcov/",
-  "^\\.venv/"
+  "^\\.venv/",
+  "^archive/"
 ]
 ignore_missing_imports = true
-no_strict_optional = true
 python_version = "3.11"
+strict_optional = false
 warn_return_any = false
 warn_unused_configs = true
 
@@ -111,6 +145,7 @@ exclude = [
   ".mypy_cache",
   ".ruff_cache",
   "analysis/tests/fixtures",
+  "archive",
   "eff"
 ]
 line-length = 100
@@ -133,7 +168,15 @@ ignore = [
 # Enable pycodestyle (E, W), Pyflakes (F), and isort (I)
 select = ["E", "F", "W", "I"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["modules", "utils", "analysis"]
+
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"analysis/scripts/**" = ["E402"]  # sys.path manipulation before imports is intentional
+"analysis/tests/**" = ["B011"]  # Allow assert False in tests
 "eff/**" = ["ALL"]  # Ignore all linting in eff/ scripts
-"tests/**" = ["B011"]  # Allow assert False in tests
+
+[tool.setuptools.packages.find]
+include = ["modules*", "utils*"]
+where = ["analysis"]

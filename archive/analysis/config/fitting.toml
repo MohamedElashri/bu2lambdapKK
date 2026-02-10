@@ -1,0 +1,87 @@
+# ═══════════════════════════════════════════════════════════════
+# MASS FITTING CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+# All parameters related to RooFit mass fitting
+# ═══════════════════════════════════════════════════════════════
+
+[fit_method]
+# Maximum likelihood fitting configuration
+use_binned_fit = true  # true: binned ML, false: unbinned ML
+bin_width = 5.0  # MeV - bin width for binned fits and plotting
+
+[fit_method.notes]
+comment = """
+Binned vs Unbinned Maximum Likelihood:
+- Binned: Faster, suitable for large datasets, creates histogram first
+- Unbinned: More accurate, uses all event information
+- bin_width determines binning for both fitting and plotting (always 5 MeV per bin)
+- Number of bins calculated automatically: nbins = int((max - min) / bin_width)
+
+For our analysis with ~10k-100k events per state, binned is sufficient and much faster.
+"""
+
+[background_model]
+# ARGUS function parameters for combinatorial background
+model_type = "argus"
+argus_endpoint_offset = 200.0  # MeV - ARGUS endpoint extended beyond fit range
+
+[background_model.notes]
+comment = """
+ARGUS Background Model:
+- argus_endpoint_offset: ARGUS function endpoint is set to (fit_range_max + offset)
+- The offset extends the endpoint beyond the fit range to properly model threshold effects
+- Typical value: 200 MeV gives good description of combinatorial background
+- Physical motivation: Background threshold is above the signal region
+
+Formula: f(m) ∝ m × √(1 - (m/m₀)²) × exp(c × (1 - (m/m₀)²))
+where m₀ = fit_range_max + argus_endpoint_offset
+"""
+
+[signal_model]
+# Signal PDF for each charmonium state
+model_type = "double_crystal_ball"
+resolution_scale_factor = 1.0  # Multiplicative factor on detector resolution
+
+[signal_model.notes]
+comment = """
+Double Crystal Ball (DCB) PDF:
+- Gaussian core with power-law tails on both sides
+- Excellent description of detector resolution + radiative effects
+- Parameters: mean, sigma, alpha_L, n_L, alpha_R, n_R
+- Shared parameters across years for increased statistics
+- Mean and sigma vary per state (different masses and widths)
+
+The DCB is standard for LHCb mass fitting and properly accounts for:
+1. Detector resolution (Gaussian core)
+2. Radiative tails (power-law tails)
+3. Bremsstrahlung effects in calorimeter
+"""
+
+[fit_strategy]
+# RooFit fitting strategy
+strategy = 2  # 0=fast, 1=balanced, 2=robust (Minuit strategy)
+max_calls = 10000  # Maximum function calls
+tolerance = 0.01  # Convergence tolerance
+
+[fit_strategy.notes]
+comment = """
+Fitting Strategy:
+- Strategy 2: Most robust, uses Hessian matrix for error estimation
+- Appropriate for complex fits with 20+ parameters
+- Max calls: Sufficient for convergence in multi-state fits
+- Tolerance: Standard value for physics analyses
+"""
+
+[shared_parameters]
+# Parameters shared across years to increase statistics
+share_signal_shape = true  # Share signal PDF parameters across years
+share_background_shape = false  # Background can vary per year (different run conditions)
+
+[shared_parameters.notes]
+comment = """
+Parameter Sharing Philosophy:
+- Signal shape: Physics-driven, should be constant across years → SHARED
+- Background shape: Data-driven, may vary with run conditions → INDEPENDENT
+- Sharing increases statistical power by using all years simultaneously
+- Critical for low-statistics states (ηc, χc)
+"""

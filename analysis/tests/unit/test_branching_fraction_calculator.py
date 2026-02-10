@@ -10,7 +10,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from analysis.modules.branching_fraction_calculator import BranchingFractionCalculator
+from modules.branching_fraction_calculator import BranchingFractionCalculator
 
 
 @pytest.fixture

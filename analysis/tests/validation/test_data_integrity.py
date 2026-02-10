@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from analysis.tests.utils.mock_data_generator import (
+from tests.utils.mock_data_generator import (
     generate_efficiency_data,
     generate_mock_physics_data,
     generate_yield_data,

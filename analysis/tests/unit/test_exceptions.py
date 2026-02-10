@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from analysis.modules.exceptions import (
+from modules.exceptions import (
     AnalysisError,
     BranchMissingError,
     CacheError,

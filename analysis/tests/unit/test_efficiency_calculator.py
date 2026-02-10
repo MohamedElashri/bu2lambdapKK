@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis.modules.efficiency_calculator import EfficiencyCalculator
-from analysis.modules.exceptions import EfficiencyError
+from modules.efficiency_calculator import EfficiencyCalculator
+from modules.exceptions import EfficiencyError
 
 
 @pytest.fixture

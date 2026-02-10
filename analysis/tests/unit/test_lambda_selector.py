@@ -13,8 +13,8 @@ import awkward as ak
 import numpy as np
 import pytest
 
-from analysis.modules.exceptions import BranchMissingError
-from analysis.modules.lambda_selector import LambdaSelector
+from modules.exceptions import BranchMissingError
+from modules.lambda_selector import LambdaSelector
 
 
 @pytest.fixture

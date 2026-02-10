@@ -12,7 +12,7 @@ repos:
         name: Format code with black
         language_version: python3.11
         args: ["--line-length=100"]
-        exclude: ^(analysis/tests/fixtures/|htmlcov/)
+        exclude: ^(analysis/tests/fixtures/|htmlcov/|archive/)
 
   # Modern Python linter (replaces flake8)
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -21,16 +21,7 @@ repos:
       - id: ruff
         name: Lint with ruff
         args: ["--fix", "--exit-zero"]
-        exclude: ^(analysis/tests/fixtures/|htmlcov/|eff/)
-
-  # Sort Python imports
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        name: Sort imports with isort
-        args: ["--profile=black", "--line-length=100"]
-        exclude: ^(analysis/tests/fixtures/|htmlcov/|eff/)
+        exclude: ^(analysis/tests/fixtures/|htmlcov/|eff/|archive/)
 
   # General file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -68,18 +59,18 @@ repos:
         name: Format TOML files
         args: ["--autofix", "--indent=2"]
         files: \.toml$
-        exclude: ^(analysis/tests/fixtures/)
+        exclude: ^(analysis/tests/fixtures/|archive/)
 
   # Test suite - runs only when Python files are modified
   - repo: local
     hooks:
       - id: pytest-all-tests
         name: Run tests (when Python files changed)
-        entry: bash -c 'ROOT=$(git rev-parse --show-toplevel); if [ -d "$ROOT/analysis/tests" ]; then cd "$ROOT" && PYTHONPATH="$ROOT" .venv/bin/python -m pytest "$ROOT/analysis/tests/" -v --tb=short || exit 1; elif [ -d "$ROOT/tests" ]; then cd "$ROOT" && PYTHONPATH="$ROOT" .venv/bin/python -m pytest "$ROOT/tests/" -v --tb=short || exit 1; else echo "❌ Cannot find tests directory"; exit 1; fi'
+        entry: bash -c 'ROOT=$(git rev-parse --show-toplevel); cd "$ROOT/analysis" && uv run pytest tests/ -v --tb=short || exit 1'
         language: system
         pass_filenames: false
         types: [python]
-        stages: [commit]
+        stages: [pre-commit]
 
 # Configuration
 default_language_version:
@@ -96,5 +87,6 @@ exclude: |
     \.ruff_cache/.*|
     coverage\.xml|
     \.coverage|
-    .*\.egg-info/.*
+    .*\.egg-info/.*|
+    archive/.*
   )$

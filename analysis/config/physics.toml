@@ -2,37 +2,10 @@
 # PHYSICS CONSTANTS (PDG VALUES)
 # ═══════════════════════════════════════════════════════════════
 # Pure physics constants from Particle Data Group
-# These are fundamental constants that should never change
+# These are fundamental constants that should never change (until PDG releases better numbers anyway)
 # ═══════════════════════════════════════════════════════════════
 
-[pdg_masses]
-# All masses in MeV/c²
-# Source: PDG 2024
-lambda = 1115.683
-proton = 938.272
-kaon = 493.677
-jpsi = 3096.9      # J/ψ
-etac_1s = 2984.1   # ηc(1S)
-chic0 = 3414.71    # χc0(1P)
-chic1 = 3510.67    # χc1(1P)
-etac_2s = 3637.8   # ηc(2S)
-
-[pdg_widths]
-# All widths in MeV/c²
-# Natural widths from PDG 2024
-jpsi = 0.0926      # J/ψ - very narrow
-etac_1s = 30.5     # ηc(1S) natural width
-chic0 = 10.6       # χc0(1P)
-chic1 = 0.88       # χc1(1P)
-etac_2s = 11.6     # ηc(2S)
-
-[pdg_branching_fractions]
-# Known from PDG (for information/future use)
-bu_to_jpsi_k = {value = 1.032e-3, error = 0.034e-3}  # B⁺ → J/ψ K⁺
-bu_to_jpsi_x = {value = 1.09e-2, error = 0.03e-2}    # Inclusive
-
 [analysis_method]
-normalization = "self_normalization"
 comment = """
 We measure ratios relative to J/ψ:
   Br(B⁺ → cc̄ X) × Br(cc̄ → Λ̄pK⁻)
@@ -42,3 +15,30 @@ We measure ratios relative to J/ψ:
 These ratios don't require knowing individual Br values!
 Many systematic uncertainties cancel in the ratio.
 """
+normalization = "self_normalization"
+
+[pdg_branching_fractions]
+# Known from PDG (for information/future use)
+bu_to_jpsi_k = {value = 1.032e-3, error = 0.034e-3}  # B⁺ → J/ψ K⁺
+bu_to_jpsi_x = {value = 1.09e-2, error = 0.03e-2}  # Inclusive
+
+[pdg_masses]
+chic0 = 3414.71  # χc0(1P)
+chic1 = 3510.67  # χc1(1P)
+etac_1s = 2984.1  # ηc(1S)
+etac_2s = 3637.8  # ηc(2S)
+jpsi = 3096.9  # J/ψ
+kaon = 493.677
+# All masses in MeV/c²
+# Source: PDG 2024
+lambda = 1115.683
+proton = 938.272
+
+[pdg_widths]
+chic0 = 10.6  # χc0(1P)
+chic1 = 0.88  # χc1(1P)
+etac_1s = 30.5  # ηc(1S) natural width
+etac_2s = 11.6  # ηc(2S)
+# All widths in MeV/c²
+# Natural widths from PDG 2024
+jpsi = 0.0926  # J/ψ - very narrow

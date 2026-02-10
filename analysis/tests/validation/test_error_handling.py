@@ -16,10 +16,10 @@ from pathlib import Path
 import pytest
 import tomli_w
 
-from analysis.modules.branch_config import BranchConfig
-from analysis.modules.cache_manager import CacheManager
-from analysis.modules.data_handler import TOMLConfig
-from analysis.modules.exceptions import (
+from modules.branch_config import BranchConfig
+from modules.cache_manager import CacheManager
+from modules.data_handler import TOMLConfig
+from modules.exceptions import (
     AnalysisError,
     BranchMissingError,
     CacheError,

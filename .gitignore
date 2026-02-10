@@ -190,7 +190,6 @@ pyrightconfig.json
 
 ##
 .vscode/
-plan.md
 agent.md
 
 ## results and summaries
@@ -200,7 +199,7 @@ efficiencies.md
 ## analysis output directory
 analysis_output/
 
-## all md files except when their name is README.md
+## all md files except README.md
 *.md
 !README.md
 
@@ -216,3 +215,9 @@ slides
 
 ## root files (templates)
 *.root
+
+# snakemake
+.snakemake
+
+# archive (old Makefile-based analysis)
+# archive/ is tracked in git for reference

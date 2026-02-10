@@ -1,65 +1,7 @@
-[pdg_masses]
-# All masses in MeV/c²
-lambda = 1115.683
-proton = 938.272
-kaon = 493.677
-jpsi = 3096.9      # J/ψ
-etac_1s = 2984.1   # ηc(1S)
-chic0 = 3414.71    # χc0(1P)
-chic1 = 3510.67    # χc1(1P)
-etac_2s = 3637.8   # ηc(2S)
-
-[pdg_widths]
-# All widths in MeV/c²
-jpsi = 0.0926      # J/ψ - very narrow
-etac_1s = 30.5     # ηc(1S) natural width
-chic0 = 10.6       # χc0(1P)
-chic1 = 0.88       # χc1(1P)
-etac_2s = 11.6     # ηc(2S)
-
-[mass_windows]
-# Fixed mass windows for selection (not optimized)
-lambda = [1111.0, 1121.0]
-bu_corrected = [5255.0, 5305.0]
-charmonium_fit_range = [2800.0, 4000.0]
-
-[signal_regions]
-# For FOM calculation: define signal region for each state
-# Format: center (mass), window (half-width)
-
-[signal_regions.jpsi]
-center = 3096.916
-window = 15.0  # ±15 MeV → ~3σ detector resolution (very narrow state)
-comment = "Resolution-limited, very narrow natural width"
-
-[signal_regions.etac]
-center = 2983.9
-window = 64.0  # ±64 MeV → 2×Γ for natural width
-comment = "Broad state, window based on natural width"
-
-[signal_regions.chic0]
-center = 3414.71
-window = 21.0  # ±21 MeV → 2×Γ
-comment = "Medium width state"
-
-[signal_regions.chic1]
-center = 3510.67
-window = 20.0  # ±20 MeV → resolution limited
-comment = "Narrow state, resolution-limited like J/ψ"
-
-[signal_regions.etac_2s]
-center = 3637.8
-window = 23.2  # ±23.2 MeV → 2×Γ
-comment = "Medium width state"
-
 [fitting]
-# Maximum likelihood fitting configuration
-use_binned_fit = true  # true: binned ML, false: unbinned ML (default: binned)
-bin_width = 5.0  # MeV - bin width for binned fits and plotting
-
 # Background model parameters
 argus_endpoint_offset = 200.0  # MeV - ARGUS endpoint extended beyond fit range
-
+bin_width = 5.0  # MeV - bin width for binned fits and plotting
 comment = """
 Binned vs Unbinned Maximum Likelihood:
 - Binned: Faster, suitable for large datasets, creates histogram first
@@ -72,3 +14,57 @@ ARGUS Background Model:
 - The offset extends the endpoint beyond the fit range to properly model threshold effects
 - Typical value: 200 MeV gives good description of combinatorial background
 """
+# Maximum likelihood fitting configuration
+use_binned_fit = true  # true: binned ML, false: unbinned ML (default: binned)
+
+[mass_windows]
+bu_corrected = [5255.0, 5305.0]
+charmonium_fit_range = [2800.0, 4000.0]
+# Fixed mass windows for selection (not optimized)
+lambda = [1111.0, 1121.0]
+
+[pdg_masses]
+chic0 = 3414.71  # χc0(1P)
+chic1 = 3510.67  # χc1(1P)
+etac_1s = 2984.1  # ηc(1S)
+etac_2s = 3637.8  # ηc(2S)
+jpsi = 3096.9  # J/ψ
+kaon = 493.677
+# All masses in MeV/c²
+lambda = 1115.683
+proton = 938.272
+
+[pdg_widths]
+chic0 = 10.6  # χc0(1P)
+chic1 = 0.88  # χc1(1P)
+etac_1s = 30.5  # ηc(1S) natural width
+etac_2s = 11.6  # ηc(2S)
+# All widths in MeV/c²
+jpsi = 0.0926  # J/ψ - very narrow
+
+[signal_regions]
+
+[signal_regions.chic0]
+center = 3414.71
+comment = "Medium width state"
+window = 21.0  # ±21 MeV → 2×Γ
+
+[signal_regions.chic1]
+center = 3510.67
+comment = "Narrow state, resolution-limited like J/ψ"
+window = 20.0  # ±20 MeV → resolution limited
+
+[signal_regions.etac]
+center = 2983.9
+comment = "Broad state, window based on natural width"
+window = 64.0  # ±64 MeV → 2×Γ for natural width
+
+[signal_regions.etac_2s]
+center = 3637.8
+comment = "Medium width state"
+window = 23.2  # ±23.2 MeV → 2×Γ
+
+[signal_regions.jpsi]
+center = 3096.916
+comment = "Resolution-limited, very narrow natural width"
+window = 15.0  # ±15 MeV → ~3σ detector resolution (very narrow state)

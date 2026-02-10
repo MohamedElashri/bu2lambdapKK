@@ -1,0 +1,85 @@
+# ═══════════════════════════════════════════════════════════════
+# EFFICIENCY CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+# KEY PRINCIPLE: All channels have IDENTICAL final state (Λ̄pK⁻K⁺)
+# Therefore many efficiencies CANCEL when calculating BR ratios
+# ═══════════════════════════════════════════════════════════════
+
+[efficiency_components]
+PID = "cancels_in_ratio"  # SAME particle types → cancels in ratio
+# Which components are calculated vs canceled in ratios
+acceptance = "cancels_in_ratio"  # Similar for all charmonium states
+reconstruction = "cancels_in_ratio"  # SAME tracks → cancels in ratio
+selection = "calculated"  # Kinematic differences → MUST calculate
+stripping = "cancels_in_ratio"  # SAME final state → cancels in ratio
+trigger = "cancels_in_ratio"  # SAME trigger line → cancels in ratio
+
+[efficiency_components.notes]
+comment = """
+EFFICIENCY CANCELLATION STRATEGY:
+==================================================
+
+Normalization: B⁺ → J/ψ K⁺, J/ψ → Λ̄pK⁻ (+cc)
+Signal:        B⁺ → cc̄ K⁺, cc̄ → Λ̄pK⁻ (+cc)
+
+IDENTICAL FINAL STATE → Most efficiencies CANCEL in ratios!
+
+Components that CANCEL:
+-----------------------
+✓ ε_reco:  ALL states reconstruct same tracks (p, K⁻, K⁺, K⁺)
+✓ ε_strip: ALL states pass same stripping (final state identical)
+✓ ε_trig:  ALL states use same trigger line (identical particles)
+✓ ε_PID:   ALL states identify same particle types
+
+What we CALCULATE:
+------------------
+ε_sel: Selection efficiency (captures kinematic differences)
+       - Different charmonium masses → different phase space
+       - Different (p_T, eta) distributions → different cut acceptance
+       - State-specific optimized cuts
+
+Residual systematic uncertainties:
+----------------------------------
+Slightly different (p_T, eta) → small differences in ε_reco, ε_trig
+These are NEGLIGIBLE compared to statistical errors (to be studied later)
+MC simulations should capture these correctly for systematics study
+
+RESULT: ε_total ≈ ε_sel (other components cancel in BR ratios)
+"""
+
+[efficiency_ratios]
+# For branching fraction ratios relative to J/ψ
+# Many efficiencies cancel due to identical final state
+method = "ratio_relative_to_jpsi"
+
+[efficiency_ratios.notes]
+comment = """
+Efficiency Ratio Method with Cancellation:
+==========================================
+
+R(BR) = [Br(B⁺→cc̄ X)*Br(cc̄→Λ̄pK⁻)] / [Br(B⁺→J/ψ X)*Br(J/ψ→Λ̄pK⁻)]
+      = [N_cc / ε_cc] / [N_J/ψ / ε_J/ψ]
+      = [N_cc / N_J/ψ] * [ε_J/ψ / ε_cc]
+
+Where: ε ≈ ε_sel (selection efficiency ONLY)
+
+Other components (ε_reco, ε_strip, ε_trig, ε_PID) CANCEL because:
+- Identical final state particles
+- Same reconstruction algorithms
+- Same stripping requirements
+- Same trigger selection
+- Same PID requirements
+
+Advantages:
+-----------
+1. Systematic uncertainties largely cancel
+2. No need for absolute efficiency measurements
+3. More robust to detector conditions
+4. Standard LHCb approach for relative measurements
+5. Data-to-data comparison (better than MC corrections)
+
+Residual differences:
+---------------------
+Small (p_T, eta) distribution differences → negligible systematic
+Will be quantified later using MC (trust MC for small corrections)
+"""

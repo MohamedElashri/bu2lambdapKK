@@ -1,31 +1,31 @@
-[L0_TIS]
-# At least one must fire (OR)
-lines = [
-    "Bu_L0GlobalDecision_TIS",
-    "Bu_L0PhysDecision_TIS",
-    "Bu_L0HadronDecision_TIS",
-    "Bu_L0MuonDecision_TIS",
-    "Bu_L0MuonHighDecision_TIS",
-    "Bu_L0DiMuonDecision_TIS",
-    "Bu_L0PhotonDecision_TIS",
-    "Bu_L0ElectronDecision_TIS"
-]
-
 [HLT1_TOS]
 # At least one must fire (OR)
 lines = [
-    "Bu_Hlt1TrackMVADecision_TOS",
-    "Bu_Hlt1TwoTrackMVADecision_TOS"
+  "Bu_Hlt1TrackMVADecision_TOS",
+  "Bu_Hlt1TwoTrackMVADecision_TOS"
 ]
 
 [HLT2_TOS]
 # At least one must fire (OR)
 lines = [
-    "Bu_Hlt2Topo2BodyDecision_TOS",
-    "Bu_Hlt2Topo3BodyDecision_TOS",
-    "Bu_Hlt2Topo4BodyDecision_TOS"
+  "Bu_Hlt2Topo2BodyDecision_TOS",
+  "Bu_Hlt2Topo3BodyDecision_TOS",
+  "Bu_Hlt2Topo4BodyDecision_TOS"
+]
+
+[L0_TIS]
+# At least one must fire (OR)
+lines = [
+  "Bu_L0GlobalDecision_TIS",
+  "Bu_L0PhysDecision_TIS",
+  "Bu_L0HadronDecision_TIS",
+  "Bu_L0MuonDecision_TIS",
+  "Bu_L0MuonHighDecision_TIS",
+  "Bu_L0DiMuonDecision_TIS",
+  "Bu_L0PhotonDecision_TIS",
+  "Bu_L0ElectronDecision_TIS"
 ]
 
 [combination]
-logic = "L0_TIS AND HLT1_TOS AND HLT2_TOS"
 comment = "All three levels must pass (at least one line per level)"
+logic = "L0_TIS AND HLT1_TOS AND HLT2_TOS"

@@ -1,0 +1,88 @@
+# ═══════════════════════════════════════════════════════════════
+# DATA AND FILE MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+# File paths, data organization, output directories
+# ═══════════════════════════════════════════════════════════════
+
+[cache]
+# Caching intermediate results for faster re-running
+cache_dir = "./cache"
+enable_caching = true
+
+[cache.notes]
+comment = """
+Caching Strategy:
+- Phase 2: Cached data after Lambda cuts (largest data structure)
+- Phase 3: Optimized cuts (small DataFrame)
+- Phase 5: Fit results (fit parameters and plots)
+- Phase 6: Efficiency calculations
+- Speeds up re-running pipeline with different parameters
+- Cache automatically invalidated if config changes
+"""
+
+[input_data]
+# Data file locations
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+magnets = ["MD", "MU"]  # MagDown, MagUp
+years = ["2016", "2017", "2018"]  # Strings for consistency with dict keys
+
+[input_data.notes]
+comment = """
+Data Organization:
+- Files per year and magnet polarity
+- Format: dataBu2L0barPHH_{YY}{MD/MU}.root
+- Both LL and DD Lambda categories in same file
+- Tree structure: B2L0barPKpKm_{LL/DD}/DecayTree
+"""
+
+[input_mc]
+# Monte Carlo file locations
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc"
+states = ["Jpsi", "etac", "chic0", "chic1", "KpKm"]
+
+[input_mc.notes]
+comment = """
+MC Organization:
+- Separate directories per charmonium state
+- Files per year and magnet polarity
+- Format: {state}_{YY}_{MD/MU}.root
+- KpKm: Phase space MC for trigger efficiency study
+- Note: Not all states may have both magnet polarities
+"""
+
+[output]
+docs_dir = "./docs"
+# Output directories for analysis results
+plots_dir = "./analysis_output/plots"
+results_dir = "./analysis_output/results"
+tables_dir = "./analysis_output/tables"
+
+[output.subdirs]
+branching_fractions = "./analysis_output/plots/branching_fractions"  # Final results plots
+efficiencies = "./analysis_output/plots/efficiencies"  # Efficiency plots
+# Automatic subdirectories created by pipeline
+fits = "./analysis_output/plots/fits"  # Mass fit plots
+optimization = "./analysis_output/plots/optimization"  # FOM scan plots
+
+[verbosity]
+# Control output verbosity and logging
+show_data_loading_messages = false  # Show "Missing N branches", "Loaded data X: N events"
+show_progress_bars = true  # Show tqdm progress bars
+show_warnings = false  # Suppress Python warnings (DeprecationWarning, etc.)
+
+[verbosity.notes]
+comment = """
+Verbosity Control:
+- show_data_loading_messages: Data loading status messages
+  - Includes: Missing branches, file loading confirmations
+  - Set to false for cleaner output in production runs
+- show_warnings: Python library warnings
+  - Already suppressed by default via suppress_warnings()
+- show_progress_bars: tqdm progress bars during processing
+  - Useful to see pipeline progress
+
+Environment variables override these settings:
+- ANALYSIS_DATA_LOADING=on/off
+- ANALYSIS_WARNINGS=on/off
+- ANALYSIS_PROGRESS=on/off
+"""

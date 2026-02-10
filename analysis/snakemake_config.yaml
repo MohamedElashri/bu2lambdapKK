@@ -1,0 +1,27 @@
+# Snakemake configuration for B⁺ → Λ̄pK⁻K⁺ analysis pipeline
+
+years:
+  - "2016"
+  - "2017"
+  - "2018"
+
+track_types:
+  - "LL"
+  - "DD"
+
+magnets:
+  - "MD"
+  - "MU"
+
+states:
+  - "jpsi"
+  - "etac"
+  - "chic0"
+  - "chic1"
+
+use_manual_cuts: false
+no_cache: false
+
+config_dir: "config"
+cache_dir: "cache"
+output_dir: "analysis_output"

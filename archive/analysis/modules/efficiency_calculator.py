@@ -1,0 +1,404 @@
+"""
+Efficiency Calculation Module for B+ -> Lambda pK-K+ Analysis
+
+Implements Phase 6 efficiency calculation
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import awkward as ak
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+from .exceptions import EfficiencyError
+
+
+class EfficiencyCalculator:
+    """
+    Calculate efficiencies from MC samples (Phase 6)
+
+    EFFICIENCY STRATEGY:
+    =================================================
+
+    KEY INSIGHT: All channels have IDENTICAL final state (Λ̄pK⁻K⁺)
+
+    Normalization channel: B⁺ → J/ψ K⁺, J/ψ → Λ̄pK⁻ (+cc)
+    Signal channels:       B⁺ → cc̄ K⁺, cc̄ → Λ̄pK⁻ (+cc)
+
+    Therefore, the following efficiencies CANCEL in ratios:
+    --------------------------------------------------------
+    ✓ ε_reco:  Reconstruction efficiency - SAME tracks for all states
+    ✓ ε_strip: Stripping efficiency - SAME final state particles
+    ✓ ε_trig:  Trigger efficiency - SAME trigger line & final state
+    ✓ ε_PID:   Particle ID efficiency - SAME particle types
+
+    What we DO calculate:
+    ---------------------
+    ε_sel: Selection efficiency = N_pass_all_cuts / N_after_lambda_cuts
+
+    This captures the kinematic differences between states due to:
+    - Different charmonium masses → slightly different phase space
+    - Different momentum distributions → different selection efficiencies
+    - State-specific optimized cuts
+
+    Residual systematic uncertainties:
+    ----------------------------------
+    Small differences in ε_reco, ε_trig due to slightly different (pT, η)
+    distributions will be studied later. MC should capture these correctly.
+    At current precision, these are NEGLIGIBLE compared to statistical errors
+
+
+    Attributes:
+        config: TOML configuration object
+        optimized_cuts: DataFrame containing optimized cuts per state
+    """
+
+    def __init__(
+        self,
+        config: Any,
+        optimized_cuts_df: pd.DataFrame | None = None,
+        mc_generated_counts: dict | None = None,
+    ) -> None:
+        """
+        Initialize efficiency calculator.
+
+        Args:
+            config: TOMLConfig with paths and parameters
+            optimized_cuts_df: DataFrame from Phase 3 with optimal cuts per state
+            mc_generated_counts: Dict of generator-level MC counts {state: {year: count}}
+        """
+        self.config: Any = config
+        self.optimized_cuts: pd.DataFrame | None = optimized_cuts_df
+        self.mc_generated_counts: dict | None = mc_generated_counts
+
+    def get_cuts_for_state(self, state: str) -> pd.DataFrame:
+        """
+        Extract optimized cuts for a specific charmonium state.
+
+        Args:
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
+
+        Returns:
+            DataFrame with cuts for this state only
+
+        Raises:
+            EfficiencyError: If optimized cuts not provided
+        """
+        if self.optimized_cuts is None:
+            raise EfficiencyError(
+                "Optimized cuts not provided to EfficiencyCalculator. "
+                "Please run Phase 3 (selection optimization) before calculating efficiencies."
+            )
+
+        return self.optimized_cuts[self.optimized_cuts["state"] == state]
+
+    def apply_optimized_cuts(self, mc_events: ak.Array, state: str) -> ak.Array:
+        """
+        Apply all optimized cuts from Phase 4 to MC events.
+
+        Args:
+            mc_events: Awkward array (MC events after Lambda cuts)
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
+
+        Returns:
+            Filtered awkward array with events passing all cuts
+
+        Raises:
+            EfficiencyError: If unknown cut type encountered
+        """
+        import awkward as ak
+
+        state_cuts = self.get_cuts_for_state(state)
+
+        # Get first branch to initialize mask
+        first_row = state_cuts.iloc[0]
+        first_branch_data = mc_events[first_row["branch_name"]]
+
+        # Flatten if jagged
+        if "var" in str(ak.type(first_branch_data)):
+            first_branch_data = ak.firsts(first_branch_data)
+
+        # Start with all events passing
+        mask = ak.ones_like(first_branch_data, dtype=bool)
+
+        # Apply each optimized cut
+        for _, row in state_cuts.iterrows():
+            branch = row["branch_name"]
+            cut_val = row["optimal_cut"]
+            cut_type = row["cut_type"]
+
+            branch_data = mc_events[branch]
+
+            # Flatten jagged arrays if needed
+            if "var" in str(ak.type(branch_data)):
+                branch_data = ak.firsts(branch_data)
+
+            if cut_type == "greater":
+                mask = mask & (branch_data > cut_val)
+            elif cut_type == "less":
+                mask = mask & (branch_data < cut_val)
+            else:
+                raise EfficiencyError(
+                    f"Unknown cut type '{cut_type}' for branch '{branch}'. "
+                    f"Expected 'greater' or 'less'. Check optimized cuts configuration."
+                )
+
+        return mc_events[mask]
+
+    def calculate_selection_efficiency(
+        self, mc_events: ak.Array, state: str, year: str
+    ) -> dict[str, Any]:
+        """
+        Calculate TOTAL SELECTION EFFICIENCY (Lambda + optimized cuts).
+
+        ε_total = N_pass_all_cuts / N_generated
+
+        This is the efficiency that enters the branching ratio formula.
+        Includes both Lambda pre-selection AND optimized B+/kaon cuts.
+
+        Args:
+            mc_events: Awkward array with MC events after Lambda pre-selection
+            state: "jpsi", "etac", "chic0", "chic1" - Note: etac_2s uses chi_c1 efficiency
+            year: Year string ("2016", "2017", "2018")
+
+        Returns:
+            Dictionary with keys:
+                - 'eff': Efficiency value (float)
+                - 'err': Statistical error (float)
+                - 'n_before': Events generated (int)
+                - 'n_after': Events passing all cuts (int)
+        """
+
+        # Apply optimized cuts to MC after Lambda cuts
+        mc_after = self.apply_optimized_cuts(mc_events, state)
+        n_after = len(mc_after)
+
+        # Get generated counts (before any cuts)
+        if self.mc_generated_counts is None:
+            raise EfficiencyError("Generated MC counts not provided. Cannot calculate efficiency.")
+
+        n_generated = self.mc_generated_counts.get(state, {}).get(year, 0)
+
+        if n_generated == 0:
+            raise EfficiencyError(f"No generated events found for {state} in {year}")
+
+        # Calculate TOTAL efficiency (includes Lambda cuts + optimized cuts)
+        eff = n_after / n_generated
+
+        # Statistical error from binomial distribution
+        # For large N: σ_eff ≈ sqrt(eff × (1-eff) / N_generated)
+        error = np.sqrt(eff * (1 - eff) / n_generated)
+
+        return {"eff": eff, "err": error, "n_before": n_generated, "n_after": n_after}
+
+    def calculate_all_efficiencies(
+        self, mc_by_state: dict[str, dict[str, ak.Array]]
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        """
+        Calculate selection efficiencies for all (state, year) pairs.
+
+        Args:
+            mc_by_state: Nested dictionary structure:
+                {state: {year: awkward_array}}
+                MC events already after Lambda pre-selection
+
+        Returns:
+            Nested dictionary structure:
+                {state: {year: {"eff": value, "err": error, "n_before": N, "n_after": N}}}
+        """
+
+        efficiencies: dict[str, dict[str, dict[str, float | int]]] = {}
+
+        print("\n" + "=" * 80)
+        print("PHASE 6: EFFICIENCY CALCULATION")
+        print("=" * 80)
+        print("\nEFFICIENCY CANCELLATION STRATEGY:")
+        print("  ✓ ALL states have IDENTICAL final state: Λ̄pK⁻K⁺")
+        print("  ✓ ε_reco, ε_strip, ε_trig, ε_PID → CANCEL in ratios")
+        print("  ✓ Calculate ONLY ε_sel (captures kinematic differences)")
+        print("  ✓ Residual systematic differences: NEGLIGIBLE vs statistics")
+        print("  ✓ Trust MC for small (pT,η) effects")
+        print("=" * 80)
+
+        # States with MC available
+        # Note: etac_2s has no MC, will use chi_c1 efficiency as proxy
+        mc_states = ["jpsi", "etac", "chic0", "chic1"]
+
+        print("\nCalculating efficiencies...")
+        total_calculations = sum(len(mc_by_state[state].keys()) for state in mc_states)
+        with tqdm(total=total_calculations, desc="Computing efficiencies", unit="year") as pbar:
+            for state in mc_states:
+                efficiencies[state] = {}
+
+                for year in sorted(mc_by_state[state].keys()):
+                    pbar.set_postfix_str(f"{state} {year}")
+                    mc_events = mc_by_state[state][year]
+
+                    # Calculate efficiency (includes generated counts)
+                    eff_result = self.calculate_selection_efficiency(mc_events, state, year)
+                    eff = eff_result["eff"]
+                    err = eff_result["err"]
+                    n_before = eff_result["n_before"]  # Generated events
+                    n_after = eff_result["n_after"]  # Events passing all cuts
+
+                    efficiencies[state][year] = {
+                        "eff": eff,
+                        "err": err,
+                        "n_before": n_before,
+                        "n_after": n_after,
+                    }
+
+                    pbar.update(1)
+
+        # Add etac_2s efficiency by copying chi_c1 (no MC available)
+        print(f"\n{'='*80}")
+        print("ADDING ETA_C(2S) EFFICIENCY")
+        print(f"{'='*80}")
+        print("Note: No MC available for eta_c(2S)")
+        print("      Using chi_c1 efficiency as proxy (similar mass, width, cuts)")
+
+        if "chic1" in efficiencies:
+            efficiencies["etac_2s"] = efficiencies["chic1"].copy()
+            print("✓ Copied chi_c1 efficiency to etac_2s")
+            for year in sorted(efficiencies["etac_2s"].keys()):
+                eff = efficiencies["etac_2s"][year]["eff"]
+                err = efficiencies["etac_2s"][year]["err"]
+                print(
+                    f"  Year {year}: ε_sel = {eff:.4f} ± {err:.4f} ({100*eff:.2f}%) [from chi_c1]"
+                )
+        else:
+            print("  Warning: No chi_c1 efficiency found to copy")
+
+        return efficiencies
+
+    def calculate_efficiency_ratios(
+        self, efficiencies: dict[str, dict[str, dict[str, Any]]]
+    ) -> pd.DataFrame:
+        """
+        Calculate efficiency RATIOS relative to J/ψ.
+
+        This is what enters the branching fraction ratio formula!
+        R(BR) = [N_state / N_J/ψ] * [ε_J/ψ / ε_state] * [BR_norm]
+
+        Many systematic uncertainties cancel in the ratio ε_J/ψ / ε_state.
+
+        Args:
+            efficiencies: Nested dictionary:
+                {state: {year: {"eff": value, "err": error, ...}}}
+
+        Returns:
+            DataFrame with efficiency ratios per year, saved to CSV
+        """
+        import numpy as np
+        import pandas as pd
+
+        results = []
+
+        print("\n" + "=" * 80)
+        print("EFFICIENCY RATIOS (relative to J/ψ)")
+        print("=" * 80)
+        print("\nThese ratios enter the BR calculation:")
+        print("  R(BR_state / BR_J/ψ) = [N_state / N_J/ψ] × [ε_J/ψ / ε_state]")
+        print("\nNOTE: ε here is ONLY ε_sel (selection efficiency)")
+        print("      ε_reco, ε_strip, ε_trig → CANCELED (identical final state)")
+        print("=" * 80)
+
+        for state in ["etac", "chic0", "chic1", "etac_2s"]:
+            for year in sorted(efficiencies["jpsi"].keys()):
+                eff_state = efficiencies[state][year]["eff"]
+                eff_jpsi = efficiencies["jpsi"][year]["eff"]
+
+                err_state = efficiencies[state][year]["err"]
+                err_jpsi = efficiencies["jpsi"][year]["err"]
+
+                # Ratio: ε_J/ψ / ε_state (note: inverted for BR formula)
+                ratio = eff_jpsi / eff_state if eff_state > 0 else 0.0
+
+                # Error propagation for ratio R = A/B:
+                # σ_R = R × sqrt((σ_A/A)² + (σ_B/B)²)
+                rel_err_jpsi = err_jpsi / eff_jpsi if eff_jpsi > 0 else 0.0
+                rel_err_state = err_state / eff_state if eff_state > 0 else 0.0
+
+                error = ratio * np.sqrt(rel_err_jpsi**2 + rel_err_state**2)
+
+                results.append(
+                    {
+                        "state": state,
+                        "year": year,
+                        "eff_state": eff_state,
+                        "eff_jpsi": eff_jpsi,
+                        "ratio_eps_jpsi_over_state": ratio,
+                        "ratio_error": error,
+                    }
+                )
+
+                print(f"\n  {state} / {year}:")
+                print(f"    ε_{state} = {eff_state:.4f} ± {err_state:.4f}")
+                print(f"    ε_J/ψ = {eff_jpsi:.4f} ± {err_jpsi:.4f}")
+                print(f"    ε_J/ψ / ε_{state} = {ratio:.3f} ± {error:.3f}")
+
+        df = pd.DataFrame(results)
+
+        # Save to file
+
+        output_dir = Path(self.config.paths["output"]["tables_dir"])
+        output_dir.mkdir(exist_ok=True, parents=True)
+        df.to_csv(output_dir / "efficiency_ratios.csv", index=False)
+
+        print("\n✓ Saved: " + str(output_dir / "efficiency_ratios.csv"))
+
+        return df
+
+    def generate_efficiency_table(
+        self, efficiencies: dict[str, dict[str, dict[str, Any]]]
+    ) -> pd.DataFrame:
+        """
+        Generate efficiency summary table (similar to Table 26 in reference).
+
+        Format: States (rows) * Years (columns)
+        Shows ε_sel ± error for each combination
+
+        Args:
+            efficiencies: Nested dictionary:
+                {state: {year: {"eff": value, "err": error, ...}}}
+
+        Returns:
+            DataFrame with formatted efficiency table, saved to CSV and Markdown
+        """
+        import pandas as pd
+
+        rows = []
+        for state in sorted(efficiencies.keys()):
+            row = {"State": state}
+            for year in sorted(efficiencies[state].keys()):
+                eff = efficiencies[state][year]["eff"]
+                err = efficiencies[state][year]["err"]
+                n_before = efficiencies[state][year]["n_before"]
+                n_after = efficiencies[state][year]["n_after"]
+
+                row[f"{year}_eff"] = f"{eff:.4f} ± {err:.4f}"
+                row[f"{year}_N"] = f"{n_after}/{n_before}"
+            rows.append(row)
+
+        df = pd.DataFrame(rows)
+
+        # Save
+        output_dir = Path(self.config.paths["output"]["tables_dir"])
+        output_dir.mkdir(exist_ok=True, parents=True)
+
+        df.to_csv(output_dir / "efficiencies.csv", index=False)
+        df.to_markdown(output_dir / "efficiencies.md", index=False)
+
+        print("\n" + "=" * 80)
+        print("EFFICIENCY TABLE (Selection Efficiency Only)")
+        print("=" * 80)
+        print(df.to_string(index=False))
+
+        print("\n✓ Saved: " + str(output_dir / "efficiencies.csv"))
+        print("✓ Saved: " + str(output_dir / "efficiencies.md"))
+
+        return df
