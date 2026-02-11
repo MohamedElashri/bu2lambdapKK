@@ -1,0 +1,46 @@
+# Snakefile — χ²_DTF(B⁺) Distribution Study (standalone)
+#
+# Plots the χ²_DTF(B⁺) distribution with a restricted x-axis range [0, 35],
+# comparing MC (per-state and combined) vs Data shapes, with ratio panel
+# and KS test p-values.
+#
+# Usage:
+#   cd analysis/studies/chi2_dtf_range
+#   uv run snakemake -j1
+#
+# Depends on Step 2 cached data/MC from the main pipeline.
+
+# Paths relative to this study directory → main analysis/
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/chi2_dtf_comparison.pdf",
+        f"{OUTPUT_DIR}/chi2_dtf_ks_test.csv",
+
+rule chi2_dtf_range:
+    """Plot χ²_DTF(B⁺) distribution with restricted range [0, 35].
+
+    Shows MC (per-state overlaid + combined) and Data normalised to
+    unit area for shape comparison. Includes ratio panel (Data/MC)
+    and KS test p-values for MC/Data shape agreement.
+
+    Requires Step 2 cached data from the main pipeline:
+      cd analysis/ && uv run snakemake load_data -j1
+    """
+    input:
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        plot=f"{OUTPUT_DIR}/chi2_dtf_comparison.pdf",
+        csv=f"{OUTPUT_DIR}/chi2_dtf_ks_test.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_chi2_dtf_range.py"

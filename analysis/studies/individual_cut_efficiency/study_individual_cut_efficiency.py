@@ -37,16 +37,16 @@ project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-import awkward as ak
-import matplotlib.pyplot as plt
-import mplhep as hep
-import numpy as np
-import pandas as pd
-from matplotlib.backends.backend_pdf import PdfPages
+import awkward as ak  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+import mplhep as hep  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
-from modules.cache_manager import CacheManager
-from modules.data_handler import TOMLConfig
-from modules.exceptions import AnalysisError
+from modules.cache_manager import CacheManager  # noqa: E402
+from modules.data_handler import TOMLConfig  # noqa: E402
+from modules.exceptions import AnalysisError  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Read Snakemake params
