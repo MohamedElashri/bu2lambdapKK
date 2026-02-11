@@ -1,0 +1,47 @@
+# Snakefile — Individual Cut Efficiency Study (standalone)
+#
+# Shows the efficiency of each selection cut applied INDIVIDUALLY
+# (not cumulatively) to the full dataset, plus cumulative as final entry.
+#
+# Usage:
+#   cd analysis/studies/individual_cut_efficiency
+#   uv run snakemake -j1
+#
+# Depends on Step 2 cached data/MC from the main pipeline.
+
+# Paths relative to this study directory → main analysis/
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/individual_cut_efficiency.pdf",
+        f"{OUTPUT_DIR}/individual_cut_efficiency.csv",
+
+rule individual_cut_efficiency:
+    """Measure efficiency of each selection cut applied independently.
+
+    For each cut variable, applies ONLY that cut to the full dataset
+    and measures pass/fail fractions. Final entry shows cumulative
+    effect of all cuts together. Produces horizontal bar charts and
+    a summary CSV.
+
+    Requires Step 2 cached data from the main pipeline:
+      cd analysis/ && uv run snakemake load_data -j1
+    """
+    input:
+        # Sentinel from main pipeline Step 2
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        plot=f"{OUTPUT_DIR}/individual_cut_efficiency.pdf",
+        csv=f"{OUTPUT_DIR}/individual_cut_efficiency.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_individual_cut_efficiency.py"
