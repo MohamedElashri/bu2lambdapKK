@@ -44,3 +44,4 @@ directories via relative paths, so it must be run from within its own directory.
 | `fom_comparison` | Compare S/√B vs S/(√S+√B) FoM formulas across charmonium states |
 | `cumulative_cut_efficiency` | Cumulative cut efficiency on M(Λ̄pK⁻) distributions (3 categories: all/pass/fail) |
 | `ccbar_background_search` | Search for cc̄ resonances in M(Λ̄pK⁻) separated by B⁺ mass region (signal vs sidebands) |
+| `signal_efficiency_fits` | Signal efficiency from M(B⁺) fits (Crystal Ball + ARGUS) for MC and Data |
