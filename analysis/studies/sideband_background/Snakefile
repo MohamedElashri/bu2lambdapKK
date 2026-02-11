@@ -1,0 +1,87 @@
+# Snakefile — Sideband Background Modeling Study (standalone)
+#
+# Data-driven combinatorial background modeling using B⁺ mass sidebands:
+#   Rule 1: validate_shapes — check M(Λ̄pK⁻) shape independence across M(B⁺) slices
+#   Rule 2: extract_template — extract background template from near-signal sidebands
+#   Rule 3: compare_models — compare ARGUS vs sideband template background in M(Λ̄pK⁻) fit
+#
+# Usage:
+#   cd analysis/studies/sideband_background
+#   uv run snakemake -j1
+#
+# Depends on Step 2 cached data/MC from the main pipeline.
+
+# Paths relative to this study directory → main analysis/
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/shape_validation.pdf",
+        f"{OUTPUT_DIR}/shape_validation_tests.csv",
+        f"{OUTPUT_DIR}/background_template.pdf",
+        f"{OUTPUT_DIR}/background_template.root",
+        f"{OUTPUT_DIR}/background_comparison.pdf",
+        f"{OUTPUT_DIR}/background_comparison_results.csv",
+
+rule validate_shapes:
+    """Validate M(Λ̄pK⁻) shape independence across M(B⁺) sideband slices.
+
+    Divides M(B⁺) sideband into 4 slices, creates M(Λ̄pK⁻) projection
+    for each, normalises to unit area, and compares via KS and χ² tests.
+    If shapes are consistent → sideband background method is valid.
+    """
+    input:
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        plot=f"{OUTPUT_DIR}/shape_validation.pdf",
+        csv=f"{OUTPUT_DIR}/shape_validation_tests.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_validate_shapes.py"
+
+rule extract_template:
+    """Extract M(Λ̄pK⁻) background template from near-signal sidebands.
+
+    Combines near-left [4500-5150] and right [5330-5500] M(B⁺) sidebands,
+    optionally smooths with KDE, saves as ROOT histogram + RooFit workspace.
+    """
+    input:
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+        csv=f"{OUTPUT_DIR}/shape_validation_tests.csv",
+    output:
+        plot=f"{OUTPUT_DIR}/background_template.pdf",
+        root=f"{OUTPUT_DIR}/background_template.root",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_extract_template.py"
+
+rule compare_models:
+    """Compare ARGUS vs sideband template background models.
+
+    Fits M(Λ̄pK⁻) in B⁺ signal region with Voigtian signal + background,
+    using both ARGUS (parametric) and sideband template (data-driven).
+    Yield differences → systematic uncertainty estimate.
+    """
+    input:
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+        template=f"{OUTPUT_DIR}/background_template.root",
+    output:
+        plot=f"{OUTPUT_DIR}/background_comparison.pdf",
+        csv=f"{OUTPUT_DIR}/background_comparison_results.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_compare_models.py"

@@ -47,3 +47,4 @@ directories via relative paths, so it must be run from within its own directory.
 | `signal_efficiency_fits` | Signal efficiency from M(B⁺) fits (Crystal Ball + ARGUS) for MC and Data |
 | `individual_cut_efficiency` | Efficiency of each selection cut applied independently (not cumulatively) |
 | `chi2_dtf_range` | χ²_DTF(B⁺) distribution with restricted range [0, 35], MC vs Data with ratio panel and KS test |
+| `sideband_background` | Data-driven background modeling: sideband shape validation, template extraction, ARGUS vs template comparison |
