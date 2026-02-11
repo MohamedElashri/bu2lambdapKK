@@ -1,0 +1,50 @@
+# Snakefile — Cumulative Cut Efficiency Study (standalone)
+#
+# Show the effect of cumulative selection cuts on M(Λ̄pK⁻) distributions.
+# For each cut stage: all events, events passing, events failing.
+# Separate plots for MC (per signal state) and Data.
+#
+# Usage:
+#   cd analysis/studies/cumulative_cut_efficiency
+#   uv run snakemake -j1
+#
+# Depends on Step 2 cached data/MC from the main pipeline.
+
+# Paths relative to this study directory → main analysis/
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/cumulative_cuts_mc.pdf",
+        f"{OUTPUT_DIR}/cumulative_cuts_data.pdf",
+        f"{OUTPUT_DIR}/cumulative_cuts_summary.csv",
+
+rule cumulative_cut_efficiency:
+    """Show cumulative cut efficiency on M(Λ̄pK⁻) distributions.
+
+    Three categories per cut stage:
+      1. All events (baseline)
+      2. Events passing all cuts up to this stage
+      3. Events failing at least one cut up to this stage
+
+    Requires Step 2 cached data from the main pipeline:
+      cd analysis/ && uv run snakemake load_data -j1
+    """
+    input:
+        # Sentinel from main pipeline Step 2
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        mc_plot=f"{OUTPUT_DIR}/cumulative_cuts_mc.pdf",
+        data_plot=f"{OUTPUT_DIR}/cumulative_cuts_data.pdf",
+        csv=f"{OUTPUT_DIR}/cumulative_cuts_summary.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_cumulative_cut_efficiency.py"

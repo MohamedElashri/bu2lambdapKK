@@ -42,3 +42,4 @@ directories via relative paths, so it must be run from within its own directory.
 | Study | Description |
 |-------|-------------|
 | `fom_comparison` | Compare S/√B vs S/(√S+√B) FoM formulas across charmonium states |
+| `cumulative_cut_efficiency` | Cumulative cut efficiency on M(Λ̄pK⁻) distributions (3 categories: all/pass/fail) |
