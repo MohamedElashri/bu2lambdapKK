@@ -224,3 +224,7 @@ analysis/studies/*/output/
 
 # archive (old Makefile-based analysis)
 # archive/ is tracked in git for reference
+
+# local stuff
+copy_kpkp_mc.py
+match_mc_files.py
