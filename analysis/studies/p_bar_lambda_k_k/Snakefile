@@ -1,0 +1,39 @@
+
+# Snakefile for B+ -> p_bar Lambda K+ K+ invariant mass check
+
+import sys
+from pathlib import Path
+
+# Get directory of this Snakefile
+STUDY_DIR = Path(workflow.basedir)
+ANALYSIS_DIR = STUDY_DIR.parent.parent
+CONFIG_DIR = ANALYSIS_DIR / "config"
+
+# Set up paths for modules
+sys.path.insert(0, str(ANALYSIS_DIR))
+
+configfile: str(ANALYSIS_DIR / "snakemake_config.yaml")
+
+# Common configuration
+YEARS = ["2016", "2017", "2018"]
+OUTPUT_DIR = "output"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/mass_spectrum.pdf",
+        f"{OUTPUT_DIR}/summary.csv"
+
+rule run_check:
+    input:
+        # We need the config validator to have run to ensure basic setup
+        f"{ANALYSIS_DIR}/analysis_output/.config_validated"
+    output:
+        f"{OUTPUT_DIR}/mass_spectrum.pdf",
+        f"{OUTPUT_DIR}/summary.csv"
+    params:
+        config_dir = str(CONFIG_DIR),
+        output_dir = OUTPUT_DIR
+    log:
+        f"{OUTPUT_DIR}/run_check.log"
+    script:
+        "study_p_bar_lambda_k_k.py"
