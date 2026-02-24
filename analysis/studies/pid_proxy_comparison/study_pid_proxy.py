@@ -397,6 +397,31 @@ except Exception as exc:
     FIT_OK = False
 
 # ===========================================================================
+# Recompute sWeight sample to match exactly the events fitted by MassFitter.
+#
+# The MassFitter applies:
+#   (1) BASE_CUTS (chi2<30, FDCHI2>100, IPCHI2<6.5, PT>3000)  ← from data_ref
+#   (2) Bu_MM_corrected ∈ [SIG_MIN, SIG_MAX]                  ← applied internally
+#   (3) M_LpKm_h2 ∈ [FIT_MIN, FIT_MAX]                        ← applied internally
+# → 5,565 events (combined across years).
+#
+# The initial cc_sig_full / pid_sig_full above were built from all_data
+# (no BASE_CUTS) → 6,769 events.  sWeights from a fit on 5,565 events must
+# not be applied to a different 6,769-event sample; the mathematical identity
+# Σ_i sWeight_k = N_k only holds for the exact fitted dataset.
+# ===========================================================================
+data_ref_concat = ak.concatenate(list(data_ref.values()), axis=0)
+_bu_ref = flat(data_ref_concat, bu_branch)
+_cc_ref = flat(data_ref_concat, mass_branch)
+_mask_sw = (_bu_ref >= SIG_MIN) & (_bu_ref <= SIG_MAX) & (_cc_ref >= FIT_MIN) & (_cc_ref <= FIT_MAX)
+cc_sig_full = _cc_ref[_mask_sw]
+pid_sig_full = flat(data_ref_concat[_mask_sw], "PID_product")
+print(
+    f"\n  sWeight sample (data_ref ∩ signal_window ∩ fit_range): {len(cc_sig_full):,} events"
+    f"  [was {int(np.sum(mask_sig_full)):,} with all_data — now corrected]"
+)
+
+# ===========================================================================
 # Shared analytical PDF building (used by both Option C and Option D)
 # ===========================================================================
 if FIT_OK:
