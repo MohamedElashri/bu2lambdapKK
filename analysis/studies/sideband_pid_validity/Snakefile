@@ -1,0 +1,50 @@
+# Snakefile — Sideband Validity & Fit-Based Cut Comparison Study
+#
+# Investigates two questions:
+#   1. Is the B+ sideband a valid PID proxy? (charmonium filter bias check)
+#   2. Does a fit-based FOM confirm the optimizer's "no PID cut" result?
+#
+# Parts:
+#   1. PID distributions across data regions (sideband variants + signal region)
+#   2. FOM ratio ε_sig/√ε_bkg with alternative background proxies
+#   3. 1D PID scan with actual fits (7 fit points, base = Set1 cuts)
+#   4. Cut set comparison: 4 scenarios, fitted yields + significance
+#
+# Usage:
+#   cd analysis/studies/sideband_pid_validity
+#   uv run snakemake -j1
+
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/sideband_pid_validity.pdf",
+        f"{OUTPUT_DIR}/pid_scan_fit_fom.pdf",
+        f"{OUTPUT_DIR}/cut_set_comparison.pdf",
+        f"{OUTPUT_DIR}/sideband_pid_summary.csv",
+
+rule sideband_pid_validity:
+    """Sideband proxy validity check + fit-based cut comparison.
+
+    Answers the key question: is PID truly non-discriminating, or is the
+    sideband background proxy not representative of signal-region background?
+    Uses 11 actual RooFit mass fits (7 PID scan + 4 cut set comparison).
+    """
+    input:
+        f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        validity_plot=f"{OUTPUT_DIR}/sideband_pid_validity.pdf",
+        pid_scan_plot=f"{OUTPUT_DIR}/pid_scan_fit_fom.pdf",
+        cutset_plot=f"{OUTPUT_DIR}/cut_set_comparison.pdf",
+        csv=f"{OUTPUT_DIR}/sideband_pid_summary.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_sideband_pid_validity.py"

@@ -221,15 +221,15 @@ but realistic S/B helps FOM converge properly. Value calibrated to match typical
 [nd_optimizable_selection]
 
 [nd_optimizable_selection.bu_dtf_chi2]
-begin = 10.0
+begin = 0.0
 branch_name = "Bu_DTF_chi2"
 cut_type = "less"
 description = "B+ decay tree fit chi2"
 end = 30.0
-step = 10.0
+step = 2.0
 
 [nd_optimizable_selection.bu_fdchi2]
-begin = 100.0
+begin = 50
 branch_name = "Bu_FDCHI2_OWNPV"
 cut_type = "greater"
 description = "B+ flight distance chi2"
@@ -242,7 +242,7 @@ branch_name = "Bu_IPCHI2_OWNPV"
 cut_type = "less"
 description = "B+ impact parameter chi2"
 end = 10.0
-step = 2.0
+step = 0.5  # fine-grained scan (was 2.0)
 
 [nd_optimizable_selection.bu_pt]
 begin = 3000.0
@@ -250,31 +250,18 @@ branch_name = "Bu_PT"
 cut_type = "greater"
 description = "B+ transverse momentum (MeV/c)"
 end = 3500.0
-step = 500.0
+step = 100.0
 
-[nd_optimizable_selection.h1_probnnk]
-begin = 0.1
-branch_name = "h1_ProbNNk"
+# PID product: p_ProbNNp * h1_ProbNNk * h2_ProbNNk
+# Replaces three separate PID cuts with a single combined variable.
+# Branch computed in data_handler.compute_derived_branches().
+[nd_optimizable_selection.pid_product]
+begin = 0.0
+branch_name = "PID_product"
 cut_type = "greater"
-description = "K+ PID probability"
-end = 0.3
-step = 0.1
-
-[nd_optimizable_selection.h2_probnnk]
-begin = 0.1
-branch_name = "h2_ProbNNk"
-cut_type = "greater"
-description = "K- PID probability"
-end = 0.3
-step = 0.1
-
-[nd_optimizable_selection.p_probnnp]
-begin = 0.1
-branch_name = "p_ProbNNp"
-cut_type = "greater"
-description = "Bachelor proton PID probability"
-end = 0.3
-step = 0.1
+description = "Product of bachelor p, K+, K- PID probabilities (p_ProbNNp * h1_ProbNNk * h2_ProbNNk)"
+end = 1.0
+step = 0.05  # fine-grained scan
 
 [optimization_strategy]
 b_high_sideband_max = 5410.0  # MeV
@@ -309,16 +296,8 @@ Option B (state_dependent=true): PER-STATE CUTS  [ACTIVE]
       Low-yield (chi_c0, chi_c1, eta_c(2S)): S / (sqrt(S) + sqrt(B))
   - MC states: jpsi, etac, chic0, chic1; eta_c(2S) uses chic1 as proxy
 
-FoM study findings (studies/fom_comparison):
-  - 4/5 states show different optimal cuts between the two FoMs
-  - S/sqrt(B) over-tightens cuts for low-yield states (10-17% efficiency loss)
-  - S/(sqrt(S)+sqrt(B)) preserves signal efficiency for O(20-30) event yields
-  - Conclusion: state-dependent FoM selection is warranted
-
 N-D GRID SCAN:
   - Full exhaustive search over 7 variables
-  - Tests 3,888 combinations (3x3x3x2x4x6x3)
-  - Per-state: 3,888 combos x 5 states x 6 arrays = ~10 min
 """
 # ═══════════════════════════════════════════════════════════════
 # UNBIASED DATA-DRIVEN OPTIMIZATION STRATEGY

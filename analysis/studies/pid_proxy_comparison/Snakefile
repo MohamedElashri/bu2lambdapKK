@@ -1,0 +1,63 @@
+# Snakefile — PID Proxy Comparison Study
+#
+# Compares two improved background proxy strategies for PID optimization:
+#
+#   Option B: Signal-window ARGUS-tail proxy
+#     — M(B+) ∈ [5255,5305], M(Λ̄pK⁻) ∈ [2800,2900] ∪ [3800,4000]
+#     — Events in the signal window but far from all charmonium resonances
+#     — ARGUS-dominated region, same signal-side kinematics
+#
+#   Option C: sWeight-like analytical proxy
+#     — One reference mass fit (Set1_noPID) → ARGUS shape params + yields
+#     — Per-event background probability: P_bkg(m) = N_bkg × f_ARGUS(m) / TotalPDF(m)
+#     — Background efficiency = weighted average over all signal-window events
+#
+# Both are compared to the fit-based FOM from the sideband_pid_validity study,
+# which established that FOM1 = S1/√B improves +31% at PID > 0.20.
+#
+# Usage:
+#   cd analysis/studies/pid_proxy_comparison
+#   uv run snakemake -j1
+
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+PREV_STUDY = "../sideband_pid_validity"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/option_b_fom.pdf",
+        f"{OUTPUT_DIR}/option_c_fom.pdf",
+        f"{OUTPUT_DIR}/option_d_fom.pdf",
+        f"{OUTPUT_DIR}/proxy_comparison.pdf",
+        f"{OUTPUT_DIR}/pid_proxy_summary.csv",
+
+rule pid_proxy_comparison:
+    """PID background proxy comparison study.
+
+    Evaluates three proxy strategies for background PID efficiency:
+      Option B: Signal-window ARGUS-tail (off-resonance events in signal window)
+      Option C: Approximate sWeight — P_bkg(m) = N_bkg*f_ARGUS / TotalPDF (no cov)
+      Option D: True sPlot sWeights using the full yield covariance matrix V_kj
+                sWeight_bkg(m_i) = [Σ_j V_{bkg,j} f_j(m_i)] / [Σ_n N_n f_n(m_i)]
+
+    The fit-based FOM from sideband_pid_validity is used as ground truth.
+    """
+    input:
+        step2=f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+        prev_csv=f"{PREV_STUDY}/output/sideband_pid_summary.csv",
+    output:
+        optb_plot=f"{OUTPUT_DIR}/option_b_fom.pdf",
+        optc_plot=f"{OUTPUT_DIR}/option_c_fom.pdf",
+        optd_plot=f"{OUTPUT_DIR}/option_d_fom.pdf",
+        comparison_plot=f"{OUTPUT_DIR}/proxy_comparison.pdf",
+        csv=f"{OUTPUT_DIR}/pid_proxy_summary.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_pid_proxy.py"

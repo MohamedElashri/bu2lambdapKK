@@ -1,0 +1,46 @@
+# Snakefile — N-Tuple Pre-Selection Diagnostic Study
+#
+# Loads raw data (before Lambda cuts) from ROOT files and plots:
+#   1. Lambda selection variables: L0_MM, L0_FDCHI2_OWNPV, Delta_Z_mm, Lp_ProbNNp
+#      (with vertical lines at our cut values, to reveal stripping-level pre-selections)
+#   2. Bu_DTF_chi2 over wide range [0, 200] (to see where n-tuple hard cut sits)
+#
+# Usage:
+#   cd analysis/studies/ntuple_preselection
+#   uv run snakemake -j1
+#
+# NOTE: This study loads ROOT files directly — it does NOT require Step 2 cache.
+#       It reads from config/data.toml to locate the ROOT files.
+
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/lambda_preselection_vars.pdf",
+        f"{OUTPUT_DIR}/bu_dtf_chi2_wide.pdf",
+        f"{OUTPUT_DIR}/ntuple_presel_summary.csv",
+
+rule ntuple_preselection:
+    """Plot Lambda variables and Bu_DTF_chi2 in raw data (no cuts applied).
+
+    Lambda variable plots reveal stripping-level pre-selections as hard
+    cut-offs in the distributions. Bu_DTF_chi2 wide-range plot shows
+    the n-tuple-level cut position.
+
+    Does NOT require Step 2 cache — loads ROOT files directly.
+    """
+    output:
+        lambda_plot=f"{OUTPUT_DIR}/lambda_preselection_vars.pdf",
+        chi2_plot=f"{OUTPUT_DIR}/bu_dtf_chi2_wide.pdf",
+        csv=f"{OUTPUT_DIR}/ntuple_presel_summary.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_ntuple_preselection.py"

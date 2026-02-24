@@ -470,6 +470,14 @@ class DataManager:
             M_KK = (h1_vec + h2_vec).mass
             events = ak.with_field(events, M_KK, "M_KK")
 
+        # 4. PID product: p_ProbNNp * h1_ProbNNk * h2_ProbNNk
+        # Used as a single combined PID cut variable in the N-D optimisation scan,
+        # replacing three separate PID cuts.
+        pid_branches = ["p_ProbNNp", "h1_ProbNNk", "h2_ProbNNk"]
+        if all(b in events.fields for b in pid_branches):
+            pid_product = events["p_ProbNNp"] * events["h1_ProbNNk"] * events["h2_ProbNNk"]
+            events = ak.with_field(events, pid_product, "PID_product")
+
         return events
 
     def apply_trigger_selection(self, events: ak.Array) -> ak.Array:

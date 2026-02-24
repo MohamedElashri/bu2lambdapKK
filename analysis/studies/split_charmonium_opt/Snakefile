@@ -10,14 +10,24 @@ configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
 rule all:
     input:
         f"{OUTPUT_DIR}/split_opt_cut_table.csv",
-        f"{OUTPUT_DIR}/fits/mass_fit_combined_stitched.pdf",
+        f"{OUTPUT_DIR}/fits/mass_fit_set1_high_yield.pdf",
+        f"{OUTPUT_DIR}/fits/mass_fit_set2_low_yield.pdf",
 
 rule split_charmonium_opt:
+    """Split charmonium optimization: two FOM variants, two independent fits.
+
+    Set 1 (S/sqrt(B))           → optimised for high-yield states (J/psi, eta_c)
+    Set 2 (S/(sqrt(S)+sqrt(B))) → optimised for low-yield states (chi_c0/1, eta_c(2S))
+
+    Each cut set is applied to the FULL dataset independently — no stitching.
+    Produces two separate mass-fit plots for direct comparison.
+    """
     input:
         f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
     output:
         csv=f"{OUTPUT_DIR}/split_opt_cut_table.csv",
-        plot=f"{OUTPUT_DIR}/fits/mass_fit_combined_stitched.pdf",
+        plot_set1=f"{OUTPUT_DIR}/fits/mass_fit_set1_high_yield.pdf",
+        plot_set2=f"{OUTPUT_DIR}/fits/mass_fit_set2_low_yield.pdf",
     params:
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,

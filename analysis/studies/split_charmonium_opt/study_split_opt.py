@@ -3,10 +3,16 @@ Standalone study: Split Charmonium Optimization Study
 
 Steps:
 1. Estimate N_expected per state.
-2. N-D grid scan optimizing sum(S)/sqrt(sum(B)) for Set 1
-3. N-D grid scan optimizing sum(S)/(sqrt(sum(S))+sqrt(sum(B))) for Set 2
-4. Apply cuts and stitch dataset at 3300 MeV.
-5. Mass Fit the stitched dataset.
+2. N-D grid scan optimizing sum(S)/sqrt(sum(B)) for Set 1  [high-yield: J/psi, eta_c]
+3. N-D grid scan optimizing sum(S)/(sqrt(sum(S))+sqrt(sum(B))) for Set 2  [low-yield: chi_c0/1, eta_c(2S)]
+4. Apply Set 1 cuts to full dataset → mass fit → save plot_set1.pdf
+5. Apply Set 2 cuts to full dataset → mass fit → save plot_set2.pdf
+
+NOTE: The two cut sets are applied to the FULL dataset separately (not stitched).
+      Stitching (splitting data by M(cc-bar) and applying different cuts to each half)
+      is conceptually wrong: you cannot apply two different selection criteria
+      simultaneously to the same dataset.  Each cut set produces its own independent
+      fit result for comparison.
 """
 
 import itertools
@@ -33,6 +39,8 @@ config_dir = snakemake.params.config_dir
 cache_dir = snakemake.params.cache_dir
 output_dir = snakemake.params.output_dir
 csv_output = snakemake.output.csv
+plot_set1 = snakemake.output.plot_set1
+plot_set2 = snakemake.output.plot_set2
 
 config = TOMLConfig(config_dir)
 config.paths["output"]["plots_dir"] = output_dir
@@ -44,9 +52,6 @@ SET2_STATES = ["chic0", "chic1", "etac_2s"]
 ALL_STATES = SET1_STATES + SET2_STATES
 MC_STATES = ["jpsi", "etac", "chic0", "chic1"]
 MC_PROXY = {"etac_2s": "chic1"}
-
-# Cutoff mass in MeV for data stitching
-MASS_CUTOFF = 3300.0
 
 
 def compute_step_dependencies(step, extra_params=None):
@@ -288,45 +293,65 @@ df = pd.DataFrame(res_rows)
 df.to_csv(csv_output, index=False)
 print(f"Saved cut table to {csv_output}")
 
-print("\nStitching data...")
-stitched_data_by_year = {}
-for year, data_year in data_combined.items():
-    mass_arr = data_year[mass_branch]
-    if "var" in str(ak.type(mass_arr)):
-        mass_arr = ak.firsts(mass_arr)
-    mass_arr = ak.to_numpy(mass_arr)
-
-    mask_low = mass_arr < MASS_CUTOFF
-    mask_high = mass_arr >= MASS_CUTOFF
-
-    data_brs = []
-    for var in all_vars:
-        br = data_year[var["branch_name"]]
-        if "var" in str(ak.type(br)):
-            br = ak.firsts(br)
-        data_brs.append(ak.to_numpy(br))
-    data_brs = np.column_stack(data_brs)
-
-    set1_mask = eval_mask(data_brs, np.array(best_cuts1), cut_types)
-    set2_mask = eval_mask(data_brs, np.array(best_cuts2), cut_types)
-
-    final_mask = (mask_low & set1_mask) | (mask_high & set2_mask)
-    stitched_data_by_year[year] = data_year[final_mask]
-
-    print(
-        f"  {year}: original {len(data_year)}, after stitched cuts {len(stitched_data_by_year[year])}"
-    )
-
-print("\nFitting Stitched Dataset...")
-fitter = MassFitter(config)
-results = fitter.perform_fit(stitched_data_by_year, fit_combined=True)
-
 import shutil
 
+fitter = MassFitter(config)
+
+
+def apply_cuts_to_data(cut_combo, label):
+    """Apply a cut combination to all years of data. Returns {year: filtered_array}."""
+    cuts_arr = np.array(cut_combo)
+    result = {}
+    for year, data_year in data_combined.items():
+        data_brs = []
+        for var in all_vars:
+            br = data_year[var["branch_name"]]
+            if "var" in str(ak.type(br)):
+                br = ak.firsts(br)
+            data_brs.append(ak.to_numpy(br))
+        data_brs = np.column_stack(data_brs)
+
+        sel_mask = eval_mask(data_brs, cuts_arr, cut_types)
+        result[year] = data_year[sel_mask]
+        n_before = len(data_year)
+        n_after = int(np.sum(sel_mask))
+        print(f"  {label} / {year}: {n_before:,} → {n_after:,} events")
+    return result
+
+
+# --- Fit 1: Set 1 cuts (high-yield states: J/psi, eta_c) ---
+print("\n" + "=" * 60)
+print("Fitting with Set 1 cuts (S/sqrt(B), high-yield: J/psi, eta_c)...")
+print("=" * 60)
+set1_data_by_year = apply_cuts_to_data(best_cuts1, "Set1")
+config.paths["output"]["plots_dir"] = output_dir
+results_set1 = fitter.perform_fit(set1_data_by_year, fit_combined=True)
+
 src_plot = Path(output_dir) / "fits" / "mass_fit_combined.pdf"
-dst_plot = Path(output_dir) / "fits" / "mass_fit_combined_stitched.pdf"
+dst_plot = Path(plot_set1)
+dst_plot.parent.mkdir(parents=True, exist_ok=True)
 if src_plot.exists():
     shutil.copy(src_plot, dst_plot)
-    print("Done!")
+    print(f"  Saved: {dst_plot}")
 else:
-    print(f"Warning: {src_plot} was not created by MassFitter!")
+    print(f"  Warning: {src_plot} was not created by MassFitter (Set 1)")
+
+# --- Fit 2: Set 2 cuts (low-yield states: chi_c0, chi_c1, eta_c(2S)) ---
+print("\n" + "=" * 60)
+print("Fitting with Set 2 cuts (S/(sqrt(S)+sqrt(B)), low-yield: chi_c0/1, eta_c(2S))...")
+print("=" * 60)
+set2_data_by_year = apply_cuts_to_data(best_cuts2, "Set2")
+results_set2 = fitter.perform_fit(set2_data_by_year, fit_combined=True)
+
+src_plot = Path(output_dir) / "fits" / "mass_fit_combined.pdf"
+dst_plot = Path(plot_set2)
+dst_plot.parent.mkdir(parents=True, exist_ok=True)
+if src_plot.exists():
+    shutil.copy(src_plot, dst_plot)
+    print(f"  Saved: {dst_plot}")
+else:
+    print(f"  Warning: {src_plot} was not created by MassFitter (Set 2)")
+
+print("\nDone. Two independent fits produced:")
+print(f"  Set 1 (S/sqrt(B))               → {plot_set1}")
+print(f"  Set 2 (S/(sqrt(S)+sqrt(B)))      → {plot_set2}")
