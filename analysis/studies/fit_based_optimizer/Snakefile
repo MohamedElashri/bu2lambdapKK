@@ -1,0 +1,45 @@
+"""
+Snakefile: Fit-Based N-D Optimizer Study
+
+Runs actual mass fits at each grid point (252 combinations) with PID fixed at 0.20
+to find the true optimal selection cuts for Set1 (J/psi, eta_c) and Set2 (chi_c0/1, eta_c(2S)).
+
+Usage:
+    cd analysis/studies/fit_based_optimizer
+    uv run snakemake -j1
+"""
+
+ANALYSIS_DIR = "../.."
+CONFIG_DIR = f"{ANALYSIS_DIR}/config"
+CACHE_DIR = f"{ANALYSIS_DIR}/cache"
+OUTPUT_DIR = "output"
+
+configfile: f"{ANALYSIS_DIR}/snakemake_config.yaml"
+
+
+rule all:
+    input:
+        f"{OUTPUT_DIR}/scan_results.csv",
+        f"{OUTPUT_DIR}/fom1_landscape.pdf",
+        f"{OUTPUT_DIR}/fom2_landscape.pdf",
+        f"{OUTPUT_DIR}/fits/mass_fit_set1_opt.pdf",
+        f"{OUTPUT_DIR}/fits/mass_fit_set2_opt.pdf",
+        f"{OUTPUT_DIR}/optimal_cuts.csv",
+
+
+rule fit_based_optimizer:
+    input:
+        step2=f"{ANALYSIS_DIR}/analysis_output/.step2_complete",
+    output:
+        csv=f"{OUTPUT_DIR}/scan_results.csv",
+        fom1=f"{OUTPUT_DIR}/fom1_landscape.pdf",
+        fom2=f"{OUTPUT_DIR}/fom2_landscape.pdf",
+        fit_set1=f"{OUTPUT_DIR}/fits/mass_fit_set1_opt.pdf",
+        fit_set2=f"{OUTPUT_DIR}/fits/mass_fit_set2_opt.pdf",
+        opt_csv=f"{OUTPUT_DIR}/optimal_cuts.csv",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+    script:
+        "study_fit_optimizer.py"

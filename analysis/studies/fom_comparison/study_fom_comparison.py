@@ -8,7 +8,7 @@ Motivation:
 
 FoM definitions:
   FoM1 = S / sqrt(B)              -- optimal when B >> S (discovery-like)
-  FoM2 = S / (sqrt(S) + sqrt(B))  -- minimises relative yield uncertainty (Punzi-like)
+  FoM2 = S / sqrt(S + B)          -- Punzi FOM for low-yield states
 
 Approach (v3 -- MC-based signal, data-based background):
   1. Estimate N_expected per state from data (loose sideband subtraction, no cuts)
@@ -77,7 +77,7 @@ print("FoM COMPARISON STUDY (v3 -- MC signal + data background)")
 print("=" * 80)
 print("Comparing two Figure of Merit formulas across charmonium states:")
 print("  FoM1 = S / sqrt(B)              (B >> S regime)")
-print("  FoM2 = S / (sqrt(S) + sqrt(B))  (minimise relative uncertainty)")
+print("  FoM2 = S / sqrt(S + B)          (Punzi FOM)")
 print()
 print("Signal estimation: S = epsilon(cuts) * N_expected")
 print("  epsilon from MC, N_expected from data sideband subtraction (loose)")
@@ -122,9 +122,9 @@ def fom_s_over_sqrt_b(n_sig: float, n_bkg: float) -> float:
     return n_sig / np.sqrt(n_bkg)
 
 
-def fom_s_over_sqrt_s_plus_sqrt_b(n_sig: float, n_bkg: float) -> float:
-    """FoM2 = S / (sqrt(S) + sqrt(B)) -- minimises relative yield uncertainty."""
-    denom = np.sqrt(max(n_sig, 0)) + np.sqrt(max(n_bkg, 0))
+def fom_s_over_sqrt_s_plus_b(n_sig: float, n_bkg: float) -> float:
+    """FoM2 = S / sqrt(S + B) -- Punzi FOM for low-yield states."""
+    denom = np.sqrt(max(n_sig + n_bkg, 0.0))
     if denom <= 0:
         return 0.0
     return n_sig / denom
@@ -132,7 +132,7 @@ def fom_s_over_sqrt_s_plus_sqrt_b(n_sig: float, n_bkg: float) -> float:
 
 FOM_FUNCTIONS = {
     "S/sqrt(B)": fom_s_over_sqrt_b,
-    "S/(sqrt(S)+sqrt(B))": fom_s_over_sqrt_s_plus_sqrt_b,
+    "S/sqrt(S+B)": fom_s_over_sqrt_s_plus_b,
 }
 
 
@@ -529,7 +529,7 @@ for state in ALL_STATES:
 
     # Check if the two FoMs give different cuts
     e1 = best_results[(state, "S/sqrt(B)")]
-    e2 = best_results[(state, "S/(sqrt(S)+sqrt(B))")]
+    e2 = best_results[(state, "S/sqrt(S+B)")]
     if e1["best_cuts"] is not None and e2["best_cuts"] is not None:
         cuts_match = all(
             abs(e1["best_cuts"][j] - e2["best_cuts"][j]) < 1e-6 for j in range(len(all_variables))
@@ -566,7 +566,7 @@ with PdfPages(plot_path) as pdf:
     fig.suptitle("FoM Comparison: MC-based S, Data-based B", fontsize=14, y=0.98)
 
     df_fom1 = df_results[df_results["fom_formula"] == "S/sqrt(B)"]
-    df_fom2 = df_results[df_results["fom_formula"] == "S/(sqrt(S)+sqrt(B))"]
+    df_fom2 = df_results[df_results["fom_formula"] == "S/sqrt(S+B)"]
 
     states_ordered = ALL_STATES
     x = np.arange(len(states_ordered))
@@ -577,7 +577,7 @@ with PdfPages(plot_path) as pdf:
     s1 = [df_fom1[df_fom1["state"] == s]["sig_estimate"].values[0] for s in states_ordered]
     s2 = [df_fom2[df_fom2["state"] == s]["sig_estimate"].values[0] for s in states_ordered]
     ax.bar(x - width / 2, s1, width, label=r"Opt. with $S/\sqrt{B}$", color="steelblue")
-    ax.bar(x + width / 2, s2, width, label=r"Opt. with $S/(\sqrt{S}+\sqrt{B})$", color="coral")
+    ax.bar(x + width / 2, s2, width, label=r"Opt. with $S/\sqrt{S+B}$", color="coral")
     ax.set_ylabel("Estimated signal yield")
     ax.set_title("(a) Signal estimate per state")
     ax.set_xticks(x)
@@ -591,7 +591,7 @@ with PdfPages(plot_path) as pdf:
     b1 = [df_fom1[df_fom1["state"] == s]["bkg_estimate"].values[0] for s in states_ordered]
     b2 = [df_fom2[df_fom2["state"] == s]["bkg_estimate"].values[0] for s in states_ordered]
     ax.bar(x - width / 2, b1, width, label=r"Opt. with $S/\sqrt{B}$", color="steelblue")
-    ax.bar(x + width / 2, b2, width, label=r"Opt. with $S/(\sqrt{S}+\sqrt{B})$", color="coral")
+    ax.bar(x + width / 2, b2, width, label=r"Opt. with $S/\sqrt{S+B}$", color="coral")
     ax.set_ylabel("Estimated background")
     ax.set_title("(b) Background estimate per state")
     ax.set_xticks(x)
@@ -605,7 +605,7 @@ with PdfPages(plot_path) as pdf:
     sb1 = [df_fom1[df_fom1["state"] == s]["s_over_b"].values[0] for s in states_ordered]
     sb2 = [df_fom2[df_fom2["state"] == s]["s_over_b"].values[0] for s in states_ordered]
     ax.bar(x - width / 2, sb1, width, label=r"Opt. with $S/\sqrt{B}$", color="steelblue")
-    ax.bar(x + width / 2, sb2, width, label=r"Opt. with $S/(\sqrt{S}+\sqrt{B})$", color="coral")
+    ax.bar(x + width / 2, sb2, width, label=r"Opt. with $S/\sqrt{S+B}$", color="coral")
     ax.set_ylabel("S/B ratio")
     ax.set_title("(c) S/B ratio per state")
     ax.set_xticks(x)
@@ -623,7 +623,7 @@ with PdfPages(plot_path) as pdf:
         x + width / 2,
         fom2_vals,
         width,
-        label=r"$S/(\sqrt{S}+\sqrt{B})$ (own metric)",
+        label=r"$S/\sqrt{S+B}$ (own metric)",
         color="coral",
     )
     ax.set_ylabel("Best FoM value")
@@ -648,7 +648,7 @@ with PdfPages(plot_path) as pdf:
         v1 = [df_fom1[df_fom1["state"] == s][var["var_name"]].values[0] for s in states_ordered]
         v2 = [df_fom2[df_fom2["state"] == s][var["var_name"]].values[0] for s in states_ordered]
         ax.bar(x - width / 2, v1, width, label=r"$S/\sqrt{B}$", color="steelblue")
-        ax.bar(x + width / 2, v2, width, label=r"$S/(\sqrt{S}+\sqrt{B})$", color="coral")
+        ax.bar(x + width / 2, v2, width, label=r"$S/\sqrt{S+B}$", color="coral")
         ax.set_ylabel("Cut value")
         direction = ">" if var["cut_type"] == "greater" else "<"
         ax.set_title(f"{var['var_name']} ({direction})")
@@ -687,7 +687,7 @@ with PdfPages(plot_path) as pdf:
         fom2_curve / fom2_curve.max(),
         "r-",
         linewidth=2,
-        label=r"$S/(\sqrt{S}+\sqrt{B})$ (saturates)",
+        label=r"$S/\sqrt{S+B}$ (saturates)",
     )
     ax.set_xlabel("S/B ratio")
     ax.set_ylabel("Normalised FoM")
@@ -750,7 +750,7 @@ with PdfPages(plot_path) as pdf:
     table_data = []
     for state in ALL_STATES:
         e1 = best_results[(state, "S/sqrt(B)")]
-        e2 = best_results[(state, "S/(sqrt(S)+sqrt(B))")]
+        e2 = best_results[(state, "S/sqrt(S+B)")]
         if e1["best_cuts"] is None or e2["best_cuts"] is None:
             continue
         row = [STATE_LABELS[state], STATE_GROUPS[state], f"{n_expected[state]:.0f}"]
@@ -791,7 +791,7 @@ with PdfPages(plot_path) as pdf:
     n_prefix_cols = 3  # State, Group, N_exp
     for i, state in enumerate(ALL_STATES):
         e1 = best_results[(state, "S/sqrt(B)")]
-        e2 = best_results[(state, "S/(sqrt(S)+sqrt(B))")]
+        e2 = best_results[(state, "S/sqrt(S+B)")]
         if e1["best_cuts"] is None or e2["best_cuts"] is None:
             continue
         for j in range(len(all_variables)):
@@ -821,7 +821,7 @@ print(f"    {summary_plot}")
 n_differ = 0
 for state in ALL_STATES:
     e1 = best_results[(state, "S/sqrt(B)")]
-    e2 = best_results[(state, "S/(sqrt(S)+sqrt(B))")]
+    e2 = best_results[(state, "S/sqrt(S+B)")]
     if e1["best_cuts"] is not None and e2["best_cuts"] is not None:
         if not all(
             abs(e1["best_cuts"][j] - e2["best_cuts"][j]) < 1e-6 for j in range(len(all_variables))

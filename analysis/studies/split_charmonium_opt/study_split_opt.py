@@ -4,7 +4,7 @@ Standalone study: Split Charmonium Optimization Study
 Steps:
 1. Estimate N_expected per state.
 2. N-D grid scan optimizing sum(S)/sqrt(sum(B)) for Set 1  [high-yield: J/psi, eta_c]
-3. N-D grid scan optimizing sum(S)/(sqrt(sum(S))+sqrt(sum(B))) for Set 2  [low-yield: chi_c0/1, eta_c(2S)]
+3. N-D grid scan optimizing sum(S)/sqrt(sum(S)+sum(B)) for Set 2  [low-yield: chi_c0/1, eta_c(2S)]
 4. Apply Set 1 cuts to full dataset → mass fit → save plot_set1.pdf
 5. Apply Set 2 cuts to full dataset → mass fit → save plot_set2.pdf
 
@@ -261,7 +261,7 @@ with tqdm(total=total_combos) as pbar:
 
         s2 = sum(S[st] for st in SET2_STATES)
         b2 = sum(B[st] for st in SET2_STATES)
-        fom2 = s2 / (np.sqrt(max(s2, 0)) + np.sqrt(max(b2, 0)) + 1e-9)
+        fom2 = s2 / np.sqrt(max(s2 + b2, 1e-9))
         if fom2 > best_fom2:
             best_fom2 = fom2
             best_cuts2 = cut_combo
@@ -283,7 +283,7 @@ res_rows.append(
 res_rows.append(
     {
         "Set": "Set2_LowYield",
-        "FOM_formula": "S/(sqrt(S)+sqrt(B))",
+        "FOM_formula": "S/sqrt(S+B)",
         "FOM_value": best_fom2,
         **{v["var_name"]: best_cuts2[i] for i, v in enumerate(all_vars)},
     }
@@ -338,7 +338,7 @@ else:
 
 # --- Fit 2: Set 2 cuts (low-yield states: chi_c0, chi_c1, eta_c(2S)) ---
 print("\n" + "=" * 60)
-print("Fitting with Set 2 cuts (S/(sqrt(S)+sqrt(B)), low-yield: chi_c0/1, eta_c(2S))...")
+print("Fitting with Set 2 cuts (S/sqrt(S+B), low-yield: chi_c0/1, eta_c(2S))...")
 print("=" * 60)
 set2_data_by_year = apply_cuts_to_data(best_cuts2, "Set2")
 results_set2 = fitter.perform_fit(set2_data_by_year, fit_combined=True)
@@ -354,4 +354,4 @@ else:
 
 print("\nDone. Two independent fits produced:")
 print(f"  Set 1 (S/sqrt(B))               → {plot_set1}")
-print(f"  Set 2 (S/(sqrt(S)+sqrt(B)))      → {plot_set2}")
+print(f"  Set 2 (S/sqrt(S+B))      → {plot_set2}")

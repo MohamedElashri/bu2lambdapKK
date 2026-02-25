@@ -1,6 +1,6 @@
 # Snakefile — FoM Comparison Study (standalone)
 #
-# Compare S/√B vs S/(√S+√B) for high-yield and low-yield charmonium states.
+# Compare S/√B vs S/√(S+B) for high-yield and low-yield charmonium states.
 #
 # Usage:
 #   cd analysis/studies/fom_comparison
@@ -22,7 +22,7 @@ rule all:
         f"{OUTPUT_DIR}/fom_comparison.pdf",
 
 rule fom_comparison:
-    """Compare S/√B vs S/(√S+√B) for high-yield and low-yield states.
+    """Compare S/√B vs S/√(S+B) for high-yield and low-yield states.
 
     Requires Step 2 cached data from the main pipeline:
       cd analysis/ && uv run snakemake load_data -j1

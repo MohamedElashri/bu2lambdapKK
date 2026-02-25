@@ -205,9 +205,9 @@ class SelectionOptimizer:
         return n_sig / np.sqrt(n_bkg)
 
     @staticmethod
-    def fom_s_over_sqrt_s_plus_sqrt_b(n_sig: float, n_bkg: float) -> float:
-        """FoM2 = S / (sqrt(S) + sqrt(B)) — minimises relative yield uncertainty (low-yield)."""
-        denom = np.sqrt(max(n_sig, 0)) + np.sqrt(max(n_bkg, 0))
+    def fom_s_over_sqrt_s_plus_b(n_sig: float, n_bkg: float) -> float:
+        """FoM2 = S / sqrt(S + B) — Punzi FOM for low-yield states."""
+        denom = np.sqrt(max(n_sig + n_bkg, 0.0))
         if denom <= 0:
             return 0.0
         return n_sig / denom
@@ -216,7 +216,7 @@ class SelectionOptimizer:
         """Return (fom_name, fom_func) appropriate for the given state's yield regime."""
         if state in self.HIGH_YIELD_STATES:
             return "S/sqrt(B)", self.fom_s_over_sqrt_b
-        return "S/(sqrt(S)+sqrt(B))", self.fom_s_over_sqrt_s_plus_sqrt_b
+        return "S/sqrt(S+B)", self.fom_s_over_sqrt_s_plus_b
 
     def define_signal_region(self, state: str) -> tuple[float, float]:
         """Get mass window for counting signal events in FOM"""

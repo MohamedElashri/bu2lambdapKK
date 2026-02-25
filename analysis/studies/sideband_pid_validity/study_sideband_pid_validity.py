@@ -722,7 +722,7 @@ for pid_cut in PID_SCAN_CUTS:
         eB = n_bkg[1]
 
         fom1 = S1 / np.sqrt(B)
-        fom2 = S2 / (np.sqrt(max(S2, 0)) + np.sqrt(B))
+        fom2 = S2 / np.sqrt(max(S2 + B, 1e-9))
         # Errors via propagation (rough)
         efom1 = fom1 * np.sqrt((eS1 / max(S1, 1)) ** 2 + (0.5 * eB / B) ** 2)
         efom2 = 0.0  # skip error on fom2 for simplicity
@@ -829,7 +829,7 @@ with PdfPages(pid_scan_plot_path) as pdf:
         color="darkred",
         lw=2,
         ms=7,
-        label=r"FOM2 (fit) = $(\chi_{c0}+\chi_{c1}) / (\sqrt{S}+\sqrt{B})$",
+        label=r"FOM2 (fit) = $(\chi_{c0}+\chi_{c1}) / \sqrt{S+B}$",
     )
     ax.plot(
         cuts_v,
@@ -901,7 +901,7 @@ with PdfPages(pid_scan_plot_path) as pdf:
             color="darkred",
             lw=2,
             ms=7,
-            label=r"FOM2 from FIT: $(\chi_{c0}+\chi_{c1})/(\sqrt{S}+\sqrt{B})$",
+            label=r"FOM2 from FIT: $(\chi_{c0}+\chi_{c1})/\sqrt{S+B}$",
         )
         ax.plot(
             cuts_v,
