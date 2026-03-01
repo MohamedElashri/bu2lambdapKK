@@ -44,10 +44,13 @@ class SelectionOptimizer:
 
     # State classification for FoM selection (Option B)
     HIGH_YIELD_STATES = ["jpsi", "etac"]
-    LOW_YIELD_STATES = ["chic0", "chic1", "etac_2s"]
-    ALL_STATES = HIGH_YIELD_STATES + LOW_YIELD_STATES
-    MC_STATES = ["jpsi", "etac", "chic0", "chic1"]
-    MC_PROXY = {"etac_2s": "chic1"}
+    LOW_YIELD_STATES = ["chic0", "chic1"]
+    # States to run the final fit on (includes etac_2s even though no MC for optimization)
+    FIT_STATES = HIGH_YIELD_STATES + LOW_YIELD_STATES + ["etac_2s"]
+    # States we can optimize (have MC available)
+    OPTIMIZABLE_STATES = HIGH_YIELD_STATES + LOW_YIELD_STATES
+    # For backward compat in the scan loop
+    ALL_STATES = OPTIMIZABLE_STATES
 
     def __init__(
         self,
@@ -1039,10 +1042,82 @@ class SelectionOptimizer:
 
         df_results = pd.DataFrame(all_results)
 
+        # etac_2s: no MC available, copy chic1 optimal cuts
+        if "chic1" in df_results["state"].values:
+            etac_2s_cuts = df_results[df_results["state"] == "chic1"].copy()
+            etac_2s_cuts["state"] = "etac_2s"
+            etac_2s_cuts["fom"] = float("nan")  # no FoM (no MC)
+            df_results = pd.concat([df_results, etac_2s_cuts], ignore_index=True)
+            print("\n✓ Added etac_2s: using chic1 optimal cuts (no MC available for eta_c(2S) yet)")
+
+        # -- Save per-state summary table as markdown and JSON --
+        import json
+        from pathlib import Path
+
+        output_dir = Path("analysis_output/results")
+        output_dir.mkdir(exist_ok=True, parents=True)
+        tables_dir = Path("analysis_output/tables")
+        tables_dir.mkdir(exist_ok=True, parents=True)
+
+        # Rich per-state summary (FoM, S, B, epsilon, best cuts)
+        state_summary_rows = []
+        for state in self.FIT_STATES:
+            entry = best_results.get(state)
+            if entry is None or entry["best_cuts"] is None:
+                # etac_2s proxy entry
+                proxy = best_results.get("chic1")
+                if proxy and proxy["best_cuts"] is not None:
+                    fom_name, _ = self.get_fom_for_state("chic1")
+                    row = {
+                        "state": state,
+                        "note": "cuts from chic1 (no MC)",
+                        "FoM_type": fom_name,
+                        "FoM": float("nan"),
+                        "S_expected": f"{proxy['best_n_sig']:.1f}",
+                        "B_estimated": f"{proxy['best_n_bkg']:.1f}",
+                        "efficiency": f"{proxy['best_epsilon']:.4f}",
+                    }
+                    for j, var in enumerate(all_variables):
+                        row[var["var_name"]] = f"{proxy['best_cuts'][j]:.2f} ({var['cut_type']})"
+                    state_summary_rows.append(row)
+                continue
+            fom_name, _ = self.get_fom_for_state(state)
+            row = {
+                "state": state,
+                "note": "",
+                "FoM_type": fom_name,
+                "FoM": f"{entry['best_fom']:.4f}",
+                "S_expected": f"{entry['best_n_sig']:.1f}",
+                "B_estimated": f"{entry['best_n_bkg']:.1f}",
+                "efficiency": f"{entry['best_epsilon']:.4f}",
+            }
+            for j, var in enumerate(all_variables):
+                row[var["var_name"]] = f"{entry['best_cuts'][j]:.2f} ({var['cut_type']})"
+            state_summary_rows.append(row)
+
+        summary_df = pd.DataFrame(state_summary_rows)
+
+        # Save markdown table
+        md_path = tables_dir / "fom_optimization_results.md"
+        with open(md_path, "w") as mdf:
+            mdf.write("# FoM Optimization Results\n\n")
+            mdf.write(summary_df.to_markdown(index=False))
+            mdf.write("\n\n> **Notes:**\n")
+            mdf.write("> - `eta_c(2S)`: No MC yet; inherits `chi_c1` optimal cuts.\n")
+            mdf.write("> - High-yield states (`J/psi`, `eta_c`): FoM = S/sqrt(B)\n")
+            mdf.write("> - Low-yield states (`chi_c0`, `chi_c1`): FoM = S/(sqrt(S)+sqrt(B))\n")
+        print(f"\n✓ Saved optimization table: {md_path}")
+
+        # Save JSON
+        json_path = output_dir / "fom_optimization_results.json"
+        with open(json_path, "w") as jf:
+            json.dump(state_summary_rows, jf, indent=4)
+        print(f"✓ Saved optimization JSON:  {json_path}")
+
         print(f"\n{'='*80}")
         print("PER-STATE OPTIMIZATION COMPLETE")
         print(f"{'='*80}")
-        print(f"Total states: {df_results['state'].nunique()}")
+        print(f"Total states optimized: {df_results['state'].nunique()}")
         print(f"Variables optimized: {df_results['variable'].nunique()}")
         print(f"{'='*80}\n")
 

@@ -250,7 +250,7 @@ class MassFitter:
 
         PDF = Σ[N_state * Signal_state] + N_bkg * Background
 
-        States: ηc(1S), J/ψ, χc0, χc1, ηc(2S), ψ(3770)
+        States: ηc(1S), J/ψ, χc0, χc1, ηc(2S)
 
         Args:
             year: Year string
@@ -307,7 +307,7 @@ class MassFitter:
         return total_pdf, year_yields
 
     def perform_fit(
-        self, data_by_year: dict[str, ak.Array], fit_combined: bool = True
+        self, data_by_year: dict[str, ak.Array], fit_combined: bool = True, plot_tag: str = ""
     ) -> dict[str, Any]:
         """
         Perform mass fits to all years (per-year AND combined).
@@ -344,7 +344,7 @@ class MassFitter:
         print(f"Charmonium fit range: {self.fit_range[0]} - {self.fit_range[1]} MeV")
         print(f"B+ mass window: {self.bu_mass_min} - {self.bu_mass_max} MeV")
         print("Using M_LpKm_h2 (M(Λ̄pK⁻), h2=K⁻ correct for charmonium)")
-        print("Modeling: ηc(1S), J/ψ, χc0, χc1, ηc(2S), ψ(3770) simultaneously")
+        print("Modeling: ηc(1S), J/ψ, χc0, χc1, ηc(2S) simultaneously")
         print("All masses and widths FIXED to PDG values")
         print(f"Fit type: {'BINNED' if self.use_binned_fit else 'UNBINNED'} maximum likelihood")
         print(
@@ -475,7 +475,9 @@ class MassFitter:
                 all_fit_results[dataset_name] = fit_result
 
                 # Plot results (pass fit_result for quality metrics)
-                self.plot_fit_result(dataset_name, mass_var, dataset, model, yields, fit_result)
+                self.plot_fit_result(
+                    dataset_name, mass_var, dataset, model, yields, fit_result, plot_tag=plot_tag
+                )
 
                 pbar.update(1)
 
@@ -521,6 +523,7 @@ class MassFitter:
         model: Any,
         yields: dict[str, Any],
         fit_result: Any = None,
+        plot_tag: str = "",
     ) -> None:
         """
         Plot fit result with official LHCb publication style
@@ -871,9 +874,12 @@ class MassFitter:
         line_minus3.SetLineWidth(1)
         line_minus3.Draw()
 
-        # Save plot
+        # Save plot — each state's cuts go in their own subdirectory
         canvas.cd()
-        plot_dir = Path("analysis_output/plots/fits")
+        if plot_tag:
+            plot_dir = Path("analysis_output/plots/fits") / plot_tag
+        else:
+            plot_dir = Path("analysis_output/plots/fits")
         plot_dir.mkdir(exist_ok=True, parents=True)
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))
