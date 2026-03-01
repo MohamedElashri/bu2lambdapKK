@@ -1,0 +1,39 @@
+"""
+Optimization (Steps 5b & 6)
+"""
+
+import logging
+
+import awkward as ak
+import pandas as pd
+from config_loader import StudyConfig
+from fom_optimizer import SelectionOptimizer
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
+
+
+def run_grid_search(
+    config: StudyConfig, data_prepared: dict[str, ak.Array], mc_prepared: dict[str, ak.Array]
+) -> pd.DataFrame:
+    """
+    Run the multi-dimensional grid scan to find the best cuts.
+    Returns the optimal cut configuration as a DataFrame.
+    """
+    logger.info("Initializing SelectionOptimizer for grid search...")
+
+    # We need to concatenate the years for optimization
+    data_combined = ak.concatenate(list(data_prepared.values()))
+    data_dict = {"combined": data_combined}
+
+    # SelectionOptimizer expects mc_data dictionary grouped by state for Option B
+    optimizer = SelectionOptimizer(data_dict, config, mc_prepared)
+
+    logger.info("Running N-dimensional grid scan...")
+    if optimizer.state_dependent:
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
+    else:
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan()
+
+    logger.info("Grid scan optimization completed.")
+    return optimized_cuts_df

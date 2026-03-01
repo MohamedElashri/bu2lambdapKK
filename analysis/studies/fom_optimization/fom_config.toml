@@ -1,0 +1,87 @@
+[fitting]
+argus_endpoint_offset = 200.0
+bin_width = 5.0
+use_binned_fit = true
+
+[mass_windows]
+bu_corrected = [5255.0, 5305.0]
+charmonium_fit_range = [2800.0, 4000.0]
+
+[nd_optimizable_selection]
+
+[nd_optimizable_selection.bu_dtf_chi2]
+begin = 10.0
+branch_name = "Bu_DTF_chi2"
+cut_type = "less"
+end = 30.0
+step = 10.0
+
+[nd_optimizable_selection.bu_fdchi2]
+begin = 100.0
+branch_name = "Bu_FDCHI2_OWNPV"
+cut_type = "greater"
+end = 250.0
+step = 50.0
+
+[nd_optimizable_selection.bu_ipchi2]
+begin = 0.0
+branch_name = "Bu_IPCHI2_OWNPV"
+cut_type = "less"
+end = 10.0
+step = 2.0
+
+[nd_optimizable_selection.bu_pt]
+begin = 3000.0
+branch_name = "Bu_PT"
+cut_type = "greater"
+end = 3500.0
+step = 500.0
+
+[nd_optimizable_selection.pid_product]
+begin = 0.0
+branch_name = "PID_product"
+cut_type = "greater"
+end = 0.5
+step = 0.1
+
+[optimization]
+b_high_sideband = [5330.0, 5410.0]
+b_low_sideband = [5150.0, 5230.0]
+b_signal_region = [5255.0, 5305.0]
+charmonium_region = [2900.0, 3800.0]
+method = "unbiased_data_driven"
+no_charmonium_mass = [4000.0, 6000.0]
+signal_scale_factor = 10000.0
+state_dependent = true
+
+[paths]
+data_base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+magnets = ["MD", "MU"]
+mc_base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc"
+mc_states = ["jpsi", "etac", "chic0", "chic1"]
+track_types = ["LL", "DD"]
+years = ["2016", "2017", "2018"]
+
+[pdg]
+masses = {jpsi = 3096.9, etac_1s = 2984.1, chic0 = 3414.71, chic1 = 3510.67, etac_2s = 3637.8}
+widths = {jpsi = 0.0926, etac_1s = 30.5, chic0 = 10.6, chic1 = 0.88, etac_2s = 11.6}
+
+[signal_regions.chic0]
+center = 3414.71
+window = 21.0
+
+[signal_regions.chic1]
+center = 3510.67
+window = 20.0
+
+[signal_regions.etac]
+center = 2983.9
+window = 64.0
+
+[signal_regions.etac_2s]
+center = 3637.8
+window = 23.2
+
+[signal_regions.jpsi]
+center = 3096.916
+window = 15.0

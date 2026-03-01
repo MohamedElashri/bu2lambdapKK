@@ -1,0 +1,14 @@
+# Snakefile for FoM Optimization Standalone Study
+#
+# Usage:
+#   snakemake -j1
+
+rule all:
+    input:
+        "fom_optimization_completed.txt"
+
+rule run_fom_study:
+    output:
+        "fom_optimization_completed.txt"
+    shell:
+        "python main.py"
