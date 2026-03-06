@@ -221,11 +221,11 @@ def load_all_data(
         if arrs:
             data_dict[str(year)] = ak.concatenate(arrs)
 
-    # Apply B+ mass window to real data
+    # Apply B+ mass window (including sidebands) to real data
     for year in data_dict:
         n_before = len(data_dict[year])
-        mask_bmass = (data_dict[year]["Bu_MM_corrected"] > 5255) & (
-            data_dict[year]["Bu_MM_corrected"] < 5305
+        mask_bmass = (data_dict[year]["Bu_MM_corrected"] > 5150) & (
+            data_dict[year]["Bu_MM_corrected"] < 5410
         )
         data_dict[year] = data_dict[year][mask_bmass]
         logger.info(
@@ -258,10 +258,10 @@ def load_all_mc(
                             arrs.append(arr)
         if arrs:
             state_data = ak.concatenate(arrs)
-            # Apply B+ mass window to MC
+            # Apply B+ mass window (including sidebands) to MC
             n_before = len(state_data)
-            mask_bmass = (state_data["Bu_MM_corrected"] > 5255) & (
-                state_data["Bu_MM_corrected"] < 5305
+            mask_bmass = (state_data["Bu_MM_corrected"] > 5150) & (
+                state_data["Bu_MM_corrected"] < 5410
             )
             state_data = state_data[mask_bmass]
             logger.info(

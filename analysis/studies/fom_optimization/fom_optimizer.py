@@ -292,42 +292,55 @@ class SelectionOptimizer:
 
     def estimate_background_in_signal_region(self, data_events: ak.Array, state: str) -> float:
         """
-        Estimate combinatorial background in signal region from real data sidebands
+        Estimate combinatorial background in B+ signal region from real data sidebands
 
-        Uses sideband interpolation to estimate background under the peak.
-        This gives the true background level in data for cut optimization.
-
-        Method:
-        1. Count events in low sideband [center - 4*window, center - window]
-        2. Count events in high sideband [center + window, center + 4*window]
-        3. Average the two sidebands
-        4. Scale by width ratio: background_in_signal = avg_sideband * (signal_width / sideband_width)
+        Uses B+ sideband interpolation to estimate background under the B+ peak,
+        after requiring the event to be in the charmonium state's mass window.
 
         Args:
             data_events: Real data events after cuts
-            state: Charmonium state ("jpsi", "etac", "chic0", "chic1") - Note: etac_2s uses chi_c1 cuts
+            state: Charmonium state ("jpsi", "etac", "chic0", "chic1")
 
         Returns:
-            float: Estimated background in signal region
+            float: Estimated background in B+ signal region
         """
-        signal_region = self.define_signal_region(state)
-        sidebands = self.define_sideband_regions(state)
+        # Charmonium signal region window
+        sr = self.config.data["signal_regions"].get(
+            state, self.config.data["signal_regions"].get(state.lower(), {})
+        )
+        center_val = sr.get("center", 0)
+        window = sr.get("window", 0)
 
-        # Count events in each sideband
-        n_low_sb = self.count_events_in_region(data_events, sidebands[0])
-        n_high_sb = self.count_events_in_region(data_events, sidebands[1])
+        mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in data_events.fields else "M_LpKm"
+        in_cc = (data_events[mass_branch] > center_val - window) & (
+            data_events[mass_branch] < center_val + window
+        )
 
-        # Calculate sideband widths
-        low_sb_width = sidebands[0][1] - sidebands[0][0]
-        high_sb_width = sidebands[1][1] - sidebands[1][0]
-        signal_width = signal_region[1] - signal_region[0]
+        # B+ regions
+        b_sig_min = self.opt_config.get("b_signal_region_min", 5255.0)
+        b_sig_max = self.opt_config.get("b_signal_region_max", 5305.0)
+        b_low_min = self.opt_config.get("b_low_sideband_min", 5150.0)
+        b_low_max = self.opt_config.get("b_low_sideband_max", 5230.0)
+        b_high_min = self.opt_config.get("b_high_sideband_min", 5330.0)
+        b_high_max = self.opt_config.get("b_high_sideband_max", 5410.0)
 
-        # Average density from both sidebands (events per MeV)
+        bu_mass_branch = "Bu_MM_corrected" if "Bu_MM_corrected" in data_events.fields else "Bu_M"
+        bu_mass = data_events[bu_mass_branch]
+
+        in_low = (bu_mass > b_low_min) & (bu_mass < b_low_max)
+        in_high = (bu_mass > b_high_min) & (bu_mass < b_high_max)
+
+        n_low_sb = ak.sum(in_cc & in_low)
+        n_high_sb = ak.sum(in_cc & in_high)
+
+        low_sb_width = b_low_max - b_low_min
+        high_sb_width = b_high_max - b_high_min
+        signal_width = b_sig_max - b_sig_min
+
         density_low = n_low_sb / low_sb_width if low_sb_width > 0 else 0
         density_high = n_high_sb / high_sb_width if high_sb_width > 0 else 0
         avg_density = (density_low + density_high) / 2.0
 
-        # Estimate background in signal region
         n_bkg_estimate = avg_density * signal_width
 
         return n_bkg_estimate
@@ -817,56 +830,47 @@ class SelectionOptimizer:
         data_arrays = [self.data[year] for year in self.data.keys()]
         data_combined = ak.concatenate(data_arrays, axis=0)
 
-        # --- Pre-select data in B+ signal region ---
-        b_sig_min = self.opt_config.get("b_signal_region_min", 5255.0)
-        b_sig_max = self.opt_config.get("b_signal_region_max", 5305.0)
         bu_mass_branch = "Bu_MM_corrected" if "Bu_MM_corrected" in data_combined.fields else "Bu_M"
         mass_branch = "M_LpKm_h2" if "M_LpKm_h2" in data_combined.fields else "M_LpKm"
 
         bu_mass = data_combined[bu_mass_branch]
-        in_b_signal = (bu_mass > b_sig_min) & (bu_mass < b_sig_max)
-        data_b_signal = data_combined[in_b_signal]
+        cc_mass = data_combined[mass_branch]
 
-        print(
-            f"Data in B+ signal region [{b_sig_min:.0f}, {b_sig_max:.0f}]: "
-            f"{len(data_b_signal):,}"
-        )
+        b_sig_min = self.opt_config.get("b_signal_region_min", 5255.0)
+        b_sig_max = self.opt_config.get("b_signal_region_max", 5305.0)
+        b_low_sb_min = self.opt_config.get("b_low_sideband_min", 5150.0)
+        b_low_sb_max = self.opt_config.get("b_low_sideband_max", 5230.0)
+        b_high_sb_min = self.opt_config.get("b_high_sideband_min", 5330.0)
+        b_high_sb_max = self.opt_config.get("b_high_sideband_max", 5410.0)
+
+        in_b_sig = (bu_mass > b_sig_min) & (bu_mass < b_sig_max)
+        in_b_low_sb = (bu_mass > b_low_sb_min) & (bu_mass < b_low_sb_max)
+        in_b_high_sb = (bu_mass > b_high_sb_min) & (bu_mass < b_high_sb_max)
 
         # --- Build per-state mass windows and sideband masks ---
         signal_regions = getattr(self.config, "data", {}).get("signal_regions", {})
-        sb_low_mult = self.opt_config.get("sideband_low_multiplier", 4.0)
-        sb_low_end_mult = self.opt_config.get("sideband_low_end_multiplier", 1.0)
-        sb_high_start_mult = self.opt_config.get("sideband_high_start_multiplier", 1.0)
-        sb_high_mult = self.opt_config.get("sideband_high_multiplier", 4.0)
 
-        data_mass = data_b_signal[mass_branch]
         state_windows = {}
-        state_data_low_sb_masks = {}
-        state_data_high_sb_masks = {}
-
         for state in self.ALL_STATES:
             sr = signal_regions.get(state, signal_regions.get(state.lower(), {}))
             center = sr.get("center", 0)
             window = sr.get("window", 0)
-            sig_lo, sig_hi = center - window, center + window
-            low_sb = (center - sb_low_mult * window, center - sb_low_end_mult * window)
-            high_sb = (center + sb_high_start_mult * window, center + sb_high_mult * window)
+
+            in_cc_sig = (cc_mass > center - window) & (cc_mass < center + window)
+
+            b_sig_width = b_sig_max - b_sig_min
+            b_low_sb_width = b_low_sb_max - b_low_sb_min
+            b_high_sb_width = b_high_sb_max - b_high_sb_min
+
             state_windows[state] = {
-                "sig_lo": sig_lo,
-                "sig_hi": sig_hi,
-                "low_sb": low_sb,
-                "high_sb": high_sb,
-                "sig_width": 2 * window,
-                "low_sb_width": low_sb[1] - low_sb[0],
-                "high_sb_width": high_sb[1] - high_sb[0],
+                "in_sig": in_cc_sig & in_b_sig,
+                "in_low_sb": in_cc_sig & in_b_low_sb,
+                "in_high_sb": in_cc_sig & in_b_high_sb,
+                "b_sig_width": b_sig_width,
+                "b_low_sb_width": b_low_sb_width,
+                "b_high_sb_width": b_high_sb_width,
             }
-            state_data_low_sb_masks[state] = (data_mass > low_sb[0]) & (data_mass < low_sb[1])
-            state_data_high_sb_masks[state] = (data_mass > high_sb[0]) & (data_mass < high_sb[1])
-            print(
-                f"  {state:10s}: signal [{sig_lo:.0f}, {sig_hi:.0f}] MeV, "
-                f"sidebands [{low_sb[0]:.0f},{low_sb[1]:.0f}] + "
-                f"[{high_sb[0]:.0f},{high_sb[1]:.0f}]"
-            )
+            print(f"  {state:10s}: CC signal [{center-window:.1f}, {center+window:.1f}] MeV")
 
         # --- Estimate N_expected per state (loose sideband subtraction, no cuts) ---
         print(f"\n{'='*80}")
@@ -876,13 +880,14 @@ class SelectionOptimizer:
         n_expected = {}
         for state in self.ALL_STATES:
             sw = state_windows[state]
-            n_sig_region = float(ak.sum((data_mass > sw["sig_lo"]) & (data_mass < sw["sig_hi"])))
-            n_low = float(ak.sum(state_data_low_sb_masks[state]))
-            n_high = float(ak.sum(state_data_high_sb_masks[state]))
-            density_low = n_low / sw["low_sb_width"] if sw["low_sb_width"] > 0 else 0
-            density_high = n_high / sw["high_sb_width"] if sw["high_sb_width"] > 0 else 0
-            avg_density = (density_low + density_high) / 2.0
-            bkg_in_signal = avg_density * sw["sig_width"]
+            n_sig_region = float(ak.sum(sw["in_sig"]))
+            n_low = float(ak.sum(sw["in_low_sb"]))
+            n_high = float(ak.sum(sw["in_high_sb"]))
+
+            d_low = n_low / sw["b_low_sb_width"] if sw["b_low_sb_width"] > 0 else 0
+            d_high = n_high / sw["b_high_sb_width"] if sw["b_high_sb_width"] > 0 else 0
+            bkg_in_signal = ((d_low + d_high) / 2.0) * sw["b_sig_width"]
+
             n_exp = max(n_sig_region - bkg_in_signal, 1.0)
             n_expected[state] = n_exp
             print(
@@ -910,16 +915,15 @@ class SelectionOptimizer:
                     br = ak.firsts(br)
                 branches.append(br)
             mc_branches[state] = branches
-            fom_name, _ = self.get_fom_for_state(state)
             print(
-                f"  MC/{state}: {mc_totals[state]:,} events, "
-                f"N_expected={n_expected[state]:.0f}, FoM={fom_name}"
+                f"  MC/{state}: {mc_totals[state]:,} events, " f"N_expected={n_expected[state]:.0f}"
             )
 
         # --- Prepare data branch arrays ---
+        # NOTE: We now evaluate cuts on ALL data_combined events (not just B signal region)
         data_cut_branches = []
         for var in all_variables:
-            br = data_b_signal[var["branch_name"]]
+            br = data_combined[var["branch_name"]]
             if "var" in str(ak.type(br)):
                 br = ak.firsts(br)
             data_cut_branches.append(br)
@@ -929,14 +933,19 @@ class SelectionOptimizer:
         print(f"Running GRID SCAN: {total_combos:,} combos x " f"{len(self.ALL_STATES)} states")
         print(f"{'='*80}")
 
-        best_results: dict[str, dict[str, Any]] = {}
+        best_results: dict[str, dict[str, dict[str, Any]]] = {}
+        foms_to_compute = ["S/sqrt(B)", "S/sqrt(S+B)"]
+
         for state in self.ALL_STATES:
             best_results[state] = {
-                "best_fom": -np.inf,
-                "best_cuts": None,
-                "best_n_sig": 0.0,
-                "best_n_bkg": 0.0,
-                "best_epsilon": 0.0,
+                fom_type: {
+                    "best_fom": -np.inf,
+                    "best_cuts": None,
+                    "best_n_sig": 0.0,
+                    "best_n_bkg": 0.0,
+                    "best_epsilon": 0.0,
+                }
+                for fom_type in foms_to_compute
             }
 
         with tqdm(total=total_combos, desc="  Grid scan", unit="combo", ncols=100) as pbar:
@@ -978,23 +987,26 @@ class SelectionOptimizer:
                     sig_estimate = epsilon * n_expected[state]
 
                     # B = sideband interpolation
-                    n_low_sb = float(ak.sum(data_sel_mask & state_data_low_sb_masks[state]))
-                    n_high_sb = float(ak.sum(data_sel_mask & state_data_high_sb_masks[state]))
-                    d_low = n_low_sb / sw["low_sb_width"] if sw["low_sb_width"] > 0 else 0
-                    d_high = n_high_sb / sw["high_sb_width"] if sw["high_sb_width"] > 0 else 0
-                    bkg_estimate = ((d_low + d_high) / 2.0) * sw["sig_width"]
+                    n_low_sb = float(ak.sum(data_sel_mask & sw["in_low_sb"]))
+                    n_high_sb = float(ak.sum(data_sel_mask & sw["in_high_sb"]))
 
-                    # State-dependent FoM
-                    _, fom_func = self.get_fom_for_state(state)
-                    fom_val = fom_func(sig_estimate, bkg_estimate)
+                    d_low = n_low_sb / sw["b_low_sb_width"] if sw["b_low_sb_width"] > 0 else 0
+                    d_high = n_high_sb / sw["b_high_sb_width"] if sw["b_high_sb_width"] > 0 else 0
+                    bkg_estimate = ((d_low + d_high) / 2.0) * sw["b_sig_width"]
 
-                    entry = best_results[state]
-                    if fom_val > entry["best_fom"]:
-                        entry["best_fom"] = fom_val
-                        entry["best_cuts"] = cut_combination
-                        entry["best_n_sig"] = sig_estimate
-                        entry["best_n_bkg"] = bkg_estimate
-                        entry["best_epsilon"] = epsilon
+                    # Compute both FoMs
+                    fom1 = self.fom_s_over_sqrt_b(sig_estimate, bkg_estimate)
+                    fom2 = self.fom_s_over_sqrt_s_plus_b(sig_estimate, bkg_estimate)
+                    vals = {"S/sqrt(B)": fom1, "S/sqrt(S+B)": fom2}
+
+                    for fom_type, fom_val in vals.items():
+                        entry = best_results[state][fom_type]
+                        if fom_val > entry["best_fom"]:
+                            entry["best_fom"] = fom_val
+                            entry["best_cuts"] = cut_combination
+                            entry["best_n_sig"] = sig_estimate
+                            entry["best_n_bkg"] = bkg_estimate
+                            entry["best_epsilon"] = epsilon
 
                 pbar.update(1)
 
@@ -1005,40 +1017,43 @@ class SelectionOptimizer:
         print(f"{'='*80}")
 
         for state in self.ALL_STATES:
-            entry = best_results[state]
-            if entry["best_cuts"] is None:
-                print(f"  WARNING: No valid cuts found for {state}")
-                continue
+            # We determine the "primary" FoM based on yield level to pass to downstream fitting
+            primary_fom = "S/sqrt(B)" if state in self.HIGH_YIELD_STATES else "S/sqrt(S+B)"
+            for fom_type in foms_to_compute:
+                entry = best_results[state][fom_type]
+                if entry["best_cuts"] is None:
+                    print(f"  WARNING: No valid cuts found for {state} ({fom_type})")
+                    continue
 
-            fom_name, _ = self.get_fom_for_state(state)
-            group = "high-yield" if state in self.HIGH_YIELD_STATES else "low-yield"
-            eps = entry["best_epsilon"]
-            s, b = entry["best_n_sig"], entry["best_n_bkg"]
-            sb = s / max(b, 1)
+                eps = entry["best_epsilon"]
+                s, b = entry["best_n_sig"], entry["best_n_bkg"]
+                sb = s / max(b, 1)
 
-            print(f"\n  {state} ({group}, N_expected={n_expected[state]:.0f}, " f"FoM={fom_name}):")
-            print(
-                f"    FoM={entry['best_fom']:.3f}  eps={eps:.4f}  "
-                f"S={s:.1f}  B={b:.1f}  S/B={sb:.3f}"
-            )
-
-            cuts_str = "  ".join(
-                f"{var['var_name']}={entry['best_cuts'][j]:.2f}"
-                for j, var in enumerate(all_variables)
-            )
-            print(f"    cuts: {cuts_str}")
-
-            for j, var in enumerate(all_variables):
-                all_results.append(
-                    {
-                        "state": state,
-                        "variable": var["var_name"],
-                        "branch_name": var["branch_name"],
-                        "optimal_cut": entry["best_cuts"][j],
-                        "cut_type": var["cut_type"],
-                        "fom": entry["best_fom"],
-                    }
+                print(f"\n  {state} (FoM: {fom_type}, N_expected={n_expected[state]:.0f}):")
+                print(
+                    f"    FoM={entry['best_fom']:.3f}  eps={eps:.4f}  "
+                    f"S={s:.1f}  B={b:.1f}  S/B={sb:.3f}"
                 )
+
+                cuts_str = "  ".join(
+                    f"{var['var_name']}={entry['best_cuts'][j]:.2f}"
+                    for j, var in enumerate(all_variables)
+                )
+                print(f"    cuts: {cuts_str}")
+
+                # Populate DataFrame only with the primary FoM configuration to avoid dupes downstream
+                if fom_type == primary_fom:
+                    for j, var in enumerate(all_variables):
+                        all_results.append(
+                            {
+                                "state": state,
+                                "variable": var["var_name"],
+                                "branch_name": var["branch_name"],
+                                "optimal_cut": entry["best_cuts"][j],
+                                "cut_type": var["cut_type"],
+                                "fom": entry["best_fom"],
+                            }
+                        )
 
         df_results = pd.DataFrame(all_results)
 
@@ -1059,41 +1074,43 @@ class SelectionOptimizer:
         tables_dir = Path("analysis_output/tables")
         tables_dir.mkdir(exist_ok=True, parents=True)
 
-        # Rich per-state summary (FoM, S, B, epsilon, best cuts)
+        # Rich per-state summary
         state_summary_rows = []
-        for state in self.FIT_STATES:
-            entry = best_results.get(state)
-            if entry is None or entry["best_cuts"] is None:
-                # etac_2s proxy entry
-                proxy = best_results.get("chic1")
-                if proxy and proxy["best_cuts"] is not None:
-                    fom_name, _ = self.get_fom_for_state("chic1")
-                    row = {
-                        "state": state,
-                        "note": "cuts from chic1 (no MC)",
-                        "FoM_type": fom_name,
-                        "FoM": float("nan"),
-                        "S_expected": f"{proxy['best_n_sig']:.1f}",
-                        "B_estimated": f"{proxy['best_n_bkg']:.1f}",
-                        "efficiency": f"{proxy['best_epsilon']:.4f}",
-                    }
-                    for j, var in enumerate(all_variables):
-                        row[var["var_name"]] = f"{proxy['best_cuts'][j]:.2f} ({var['cut_type']})"
-                    state_summary_rows.append(row)
-                continue
-            fom_name, _ = self.get_fom_for_state(state)
+
+        def format_row(st, f_type, metrics, note=""):
             row = {
-                "state": state,
-                "note": "",
-                "FoM_type": fom_name,
-                "FoM": f"{entry['best_fom']:.4f}",
-                "S_expected": f"{entry['best_n_sig']:.1f}",
-                "B_estimated": f"{entry['best_n_bkg']:.1f}",
-                "efficiency": f"{entry['best_epsilon']:.4f}",
+                "state": st,
+                "note": note,
+                "FoM_type": f_type,
+                "FoM": (
+                    f"{metrics['best_fom']:.4f}"
+                    if not np.isnan(metrics.get("best_fom", float("nan")))
+                    else "NaN"
+                ),
+                "S_expected": f"{metrics.get('best_n_sig', 0.0):.1f}",
+                "B_estimated": f"{metrics.get('best_n_bkg', 0.0):.1f}",
+                "efficiency": f"{metrics.get('best_epsilon', 0.0):.4f}",
             }
-            for j, var in enumerate(all_variables):
-                row[var["var_name"]] = f"{entry['best_cuts'][j]:.2f} ({var['cut_type']})"
-            state_summary_rows.append(row)
+            if metrics.get("best_cuts") is not None:
+                for j, var in enumerate(all_variables):
+                    row[var["var_name"]] = f"{metrics['best_cuts'][j]:.2f} ({var['cut_type']})"
+            return row
+
+        for state in self.FIT_STATES:
+            if state == "etac_2s":
+                # etac_2s proxy entry - inherits from chic1 optimal cuts
+                for fom_type in foms_to_compute:
+                    proxy = best_results.get("chic1", {}).get(fom_type)
+                    if proxy and proxy["best_cuts"] is not None:
+                        state_summary_rows.append(
+                            format_row(state, fom_type, proxy, "cuts from chic1 (no MC)")
+                        )
+                continue
+
+            for fom_type in foms_to_compute:
+                entry = best_results.get(state, {}).get(fom_type)
+                if entry and entry["best_cuts"] is not None:
+                    state_summary_rows.append(format_row(state, fom_type, entry))
 
         summary_df = pd.DataFrame(state_summary_rows)
 
@@ -1104,8 +1121,9 @@ class SelectionOptimizer:
             mdf.write(summary_df.to_markdown(index=False))
             mdf.write("\n\n> **Notes:**\n")
             mdf.write("> - `eta_c(2S)`: No MC yet; inherits `chi_c1` optimal cuts.\n")
-            mdf.write("> - High-yield states (`J/psi`, `eta_c`): FoM = S/sqrt(B)\n")
-            mdf.write("> - Low-yield states (`chi_c0`, `chi_c1`): FoM = S/(sqrt(S)+sqrt(B))\n")
+            mdf.write(
+                "> - Optimization computed BOTH FoMs (S/sqrt(B) and S/sqrt(S+B)) for all states.\n"
+            )
         print(f"\n✓ Saved optimization table: {md_path}")
 
         # Save JSON
@@ -1117,8 +1135,8 @@ class SelectionOptimizer:
         print(f"\n{'='*80}")
         print("PER-STATE OPTIMIZATION COMPLETE")
         print(f"{'='*80}")
-        print(f"Total states optimized: {df_results['state'].nunique()}")
-        print(f"Variables optimized: {df_results['variable'].nunique()}")
+        print(f"Total states optimized: {len(self.ALL_STATES)}")
+        print(f"Variables optimized: {len(all_variables)}")
         print(f"{'='*80}\n")
 
         return df_results
