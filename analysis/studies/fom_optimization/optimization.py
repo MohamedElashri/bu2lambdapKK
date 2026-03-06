@@ -30,10 +30,10 @@ def run_grid_search(
     optimizer = SelectionOptimizer(data_dict, config, mc_prepared)
 
     logger.info("Running N-dimensional grid scan...")
-    if optimizer.state_dependent:
-        optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
-    else:
-        optimized_cuts_df = optimizer.optimize_nd_grid_scan()
+    # Both Option A and Option B use the same method now
+    # The optimizer internally checks config.optimization.state_dependent
+    # to decide between Grouped (Option A) and Per-State (Option B)
+    optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
 
     logger.info("Grid scan optimization completed.")
     return optimized_cuts_df

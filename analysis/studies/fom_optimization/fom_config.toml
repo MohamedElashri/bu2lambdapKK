@@ -49,10 +49,10 @@ b_high_sideband = [5330.0, 5410.0]
 b_low_sideband = [5150.0, 5230.0]
 b_signal_region = [5255.0, 5305.0]
 charmonium_region = [2900.0, 3800.0]
-method = "unbiased_data_driven"
+method = "mc_based"
 no_charmonium_mass = [4000.0, 6000.0]
 signal_scale_factor = 10000.0
-state_dependent = true
+state_dependent = false
 
 [paths]
 data_base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"

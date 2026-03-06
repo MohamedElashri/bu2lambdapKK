@@ -28,10 +28,12 @@ OPTIMIZED_STATES = ["jpsi", "etac", "chic0", "chic1"]
 ETAC_2S_PROXY = "chic1"
 
 
-def apply_cuts_for_state(events: ak.Array, cuts_df: pd.DataFrame, state: str) -> ak.Array:
-    """Apply optimized cuts for a given state. Falls back to chic1 for etac_2s."""
+def apply_cuts_for_state(
+    events: ak.Array, cuts_df: pd.DataFrame, state: str, fom_type: str
+) -> ak.Array:
+    """Apply optimized cuts for a given state and FoM type. Falls back to chic1 for etac_2s."""
     lookup_state = state if state != "etac_2s" else ETAC_2S_PROXY
-    state_cuts = cuts_df[cuts_df["state"] == lookup_state]
+    state_cuts = cuts_df[(cuts_df["state"] == lookup_state) & (cuts_df["FoM_type"] == fom_type)]
     if state_cuts.empty:
         logger.warning(f"No cuts found for state {lookup_state}, returning uncut events.")
         return events
@@ -93,47 +95,54 @@ def perform_final_fit(
     all_fit_results_json = {}
 
     for target_state in states_to_run:
-        source_cuts = target_state if target_state != "etac_2s" else ETAC_2S_PROXY
-        note = "" if target_state != "etac_2s" else f"cuts from {ETAC_2S_PROXY} (no MC)"
-        logger.info(f"\n{'='*60}")
-        logger.info(
-            f"Fitting with {target_state!r} optimal cuts"
-            + (f" (using {ETAC_2S_PROXY} cuts)" if note else "")
-        )
-        logger.info(f"{'='*60}")
+        for fom_type in ["S/sqrt(B)", "S/sqrt(S+B)"]:
+            source_cuts = target_state if target_state != "etac_2s" else ETAC_2S_PROXY
+            note = "" if target_state != "etac_2s" else f"cuts from {ETAC_2S_PROXY} (no MC)"
+            logger.info(f"\n{'='*60}")
+            logger.info(
+                f"Fitting with {target_state!r} optimal cuts for {fom_type}"
+                + (f" (using {ETAC_2S_PROXY} cuts)" if note else "")
+            )
+            logger.info(f"{'='*60}")
 
-        # Apply this state's cuts to every year
-        data_cut = {}
-        for year, events in data_prepared.items():
-            data_cut[year] = apply_cuts_for_state(events, cuts_df, target_state)
-            n_before = len(events)
-            n_after = len(data_cut[year])
-            logger.info(f"  {year}: {n_before} → {n_after} events after {source_cuts} cuts")
+            # Apply this state's cuts to every year
+            data_cut = {}
+            for year, events in data_prepared.items():
+                data_cut[year] = apply_cuts_for_state(events, cuts_df, target_state, fom_type)
+                n_before = len(events)
+                n_after = len(data_cut[year])
+                logger.info(
+                    f"  {year}: {n_before} → {n_after} events after {source_cuts} ({fom_type}) cuts"
+                )
 
-        fitter = MassFitter(config)
-        try:
-            # plot_tag puts all plots for this state's cuts in a dedicated subdir
-            plot_tag = f"{target_state}_cuts"
-            fit_results = fitter.perform_fit(data_cut, fit_combined=True, plot_tag=plot_tag)
-        except Exception as e:
-            logger.error(f"Fit failed for state {target_state}: {e}")
-            continue
+            fitter = MassFitter(config)
+            try:
+                # plot_tag puts all plots for this state's cuts in a dedicated subdir
+                # sanitize fom_type for filename (replace / with _)
+                safe_fom = fom_type.replace("/", "_").replace("+", "plus")
+                plot_tag = f"{target_state}_{safe_fom}_cuts"
+                fit_results = fitter.perform_fit(data_cut, fit_combined=True, plot_tag=plot_tag)
+            except Exception as e:
+                logger.error(f"Fit failed for state {target_state} ({fom_type}): {e}")
+                continue
 
-        # Extract yields for each charmonium state from the combined fit
-        combined_yields = fit_results.get("yields", {}).get("combined", {})
-        row = {"target_state": target_state, "note": note}
-        for fit_state in FIT_STATES:
-            if fit_state in combined_yields:
-                s_val, s_err = combined_yields[fit_state]
-                row[f"{fit_state}_yield"] = f"{s_val:.1f} ± {s_err:.1f}"
-            else:
-                row[f"{fit_state}_yield"] = "—"
-        all_fit_rows.append(row)
-        all_fit_results_json[target_state] = {
-            fs: {"yield": combined_yields[fs][0], "error": combined_yields[fs][1]}
-            for fs in FIT_STATES
-            if fs in combined_yields
-        }
+            # Extract yields for each charmonium state from the combined fit
+            combined_yields = fit_results.get("yields", {}).get("combined", {})
+            row = {"target_state": target_state, "FoM_type": fom_type, "note": note}
+            for fit_state in FIT_STATES:
+                if fit_state in combined_yields:
+                    s_val, s_err = combined_yields[fit_state]
+                    row[f"{fit_state}_yield"] = f"{s_val:.1f} ± {s_err:.1f}"
+                else:
+                    row[f"{fit_state}_yield"] = "—"
+            all_fit_rows.append(row)
+
+            result_key = f"{target_state} ({fom_type})"
+            all_fit_results_json[result_key] = {
+                fs: {"yield": combined_yields[fs][0], "error": combined_yields[fs][1]}
+                for fs in FIT_STATES
+                if fs in combined_yields
+            }
 
     if not all_fit_rows:
         logger.error("No fit results collected — something went wrong.")
@@ -149,15 +158,15 @@ def perform_final_fit(
             "Each row shows the simultaneous fit results when the **row state's** optimal "
             "cuts are applied to the data.\n\n"
         )
-        mdf.write("| Optimized for | Note |")
+        mdf.write("| Optimized for | FoM Type | Note |")
         for fs in FIT_STATES:
             mdf.write(f" {fs} yield |")
-        mdf.write("\n|---|---|")
+        mdf.write("\n|---|---|---|")
         for _ in FIT_STATES:
             mdf.write("---|")
         mdf.write("\n")
         for _, r in fit_df.iterrows():
-            mdf.write(f"| {r['target_state']} | {r['note']} |")
+            mdf.write(f"| {r['target_state']} | {r['FoM_type']} | {r['note']} |")
             for fs in FIT_STATES:
                 mdf.write(f" {r.get(f'{fs}_yield', '—')} |")
             mdf.write("\n")

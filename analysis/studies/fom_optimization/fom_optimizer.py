@@ -20,11 +20,11 @@ class SelectionOptimizer:
 
     Supports two modes controlled by config optimization_strategy.state_dependent:
 
-    Option A (state_dependent=false): UNIVERSAL cuts — same for all states.
-      Signal proxy: "no-charmonium" data (M(Λ̄pK⁻) > 4 GeV).
-      Background proxy: B⁺ mass sidebands.
-      FoM: S / sqrt(S + B).
-      No MC used → completely unbiased.
+    Option A (state_dependent=false): GROUPED cuts (High-Yield vs Low-Yield).
+      Signal: S = S_jpsi + S_etac (high) OR S_chic0 + S_chic1 (low)
+      Background: B = B_jpsi + B_etac (high) OR B_chic0 + B_chic1 (low)
+      FoM: S / √B for High-Yield, S / (√S + √B) for Low-Yield
+      Applies identical optimal cuts to all states within a group.
 
     Option B (state_dependent=true): PER-STATE cuts — different per charmonium state.
       Signal: S = ε(cuts) × N_expected, where ε is MC efficiency and N_expected
@@ -80,16 +80,18 @@ class SelectionOptimizer:
             print("SELECTION OPTIMIZER - PER-STATE (MC signal + data background)")
             print("=" * 80)
             print("Mode: Option B (STATE-SPECIFIC cuts)")
-            print("  Signal: S = epsilon(cuts) * N_expected  [MC efficiency]")
-            print("  Background: B from data sideband interpolation per cut")
+            print("  Signal: S = epsilon(cuts) * N_expected  [MC/State]")
+            print("  Background: B from data sideband interpolation per cut [Data/State]")
             print("  FoM: S/sqrt(B) for high-yield, S/(sqrt(S)+sqrt(B)) for low-yield")
             if mc_data is None:
-                print("  WARNING: MC data not provided! Will fall back to Option A.")
+                raise OptimizationError("MC data required for Option B.")
         else:
-            print("SELECTION OPTIMIZER - UNBIASED DATA-DRIVEN METHOD")
+            print("SELECTION OPTIMIZER - GROUPED STATES (MC signal + data background)")
             print("=" * 80)
-            print("Mode: Option A (UNIVERSAL cuts)")
-            print("  → Same cuts applied to all states")
+            print("Mode: Option A (GROUPED cuts: High-Yield vs Low-Yield)")
+            print("  Aggregates S and B across (J/ψ, η_c) and (χ_c0, χ_c1)")
+            if mc_data is None:
+                raise OptimizationError("MC data required for Option A (Grouped).")
         print("=" * 80)
 
     def get_no_charmonium_data(self, data: ak.Array) -> ak.Array:
@@ -537,249 +539,20 @@ class SelectionOptimizer:
         print(summary.to_string())
         print("\n✓ Saved to:", output_dir)
 
-    def optimize_nd_grid_scan(self) -> pd.DataFrame:
-        """
-        Perform N-dimensional GRID scan using unbiased data-driven method.
-
-        APPROACH:
-        - Signal proxy: "no-charmonium" data (M(Λ̄pK⁻) > 4 GeV)
-        - Background proxy: B⁺ mass sidebands
-        - NO MC used → completely unbiased!
-
-        Supports two modes:
-        - Option A (universal): Optimize once, apply to all states
-        - Option B (state-specific): Optimize per state
-
-        Uses only 7 variables from nd_optimizable_selection config:
-        - h1_ProbNNk, h2_ProbNNk, p_ProbNNp (PID)
-        - Bu_PT, Bu_FDCHI2, Bu_IPCHI2, Bu_DTF_chi2 (B+ kinematics)
-
-        Lambda cuts are already FIXED and applied in Phase 2.
-
-        Grid size: 3×3×3×2×4×6×3 = 3,888 combinations
-
-        Returns:
-            DataFrame with optimal cuts (universal or per state)
-        """
-        import itertools
-
-        # Get N-D grid scan variables from config
-        nd_config = getattr(self.config, "selection", {})
-
-        if not nd_config:
-            raise OptimizationError(
-                "No 'nd_optimizable_selection' section found in config/selection.toml!\n"
-                "N-D grid scan requires this section to define variables and ranges to optimize."
-            )
-
-        # Build variable list and grid points
-        all_variables = []
-        grid_axes = []  # Each element is a list of values to scan
-
-        for var_name, var_config in nd_config.items():
-            if var_name == "notes":
-                continue
-
-            # Generate grid points for this variable
-            begin = var_config["begin"]
-            end = var_config["end"]
-            step = var_config["step"]
-            grid_points = np.arange(begin, end + step / 2, step)  # Include endpoint
-
-            all_variables.append(
-                {
-                    "var_name": var_name,
-                    "branch_name": var_config["branch_name"],
-                    "cut_type": var_config["cut_type"],
-                    "description": var_config.get("description", ""),
-                }
-            )
-            grid_axes.append(grid_points)
-
-        n_vars = len(all_variables)
-        total_combinations = int(np.prod([len(axis) for axis in grid_axes]))
-
-        print(f"\n{'='*80}")
-        print(f"N-D GRID SCAN (UNBIASED): {n_vars} variables, {total_combinations:,} combinations")
-        print(f"{'='*80}")
-        for i, var in enumerate(all_variables):
-            n_points = len(grid_axes[i])
-            print(f"  {var['var_name']:20s} ({var['cut_type']:>7s}): {n_points} points")
-        print(f"{'='*80}\n")
-
-        # Combine all years
-        data_arrays = [self.data[year] for year in self.data.keys()]
-        data_combined = ak.concatenate(data_arrays, axis=0)
-
-        # Get signal and background proxies
-        sig_data = self.get_no_charmonium_data(data_combined)
-        bkg_data = self.get_b_mass_sideband_data(data_combined)
-
-        print(f"Signal proxy (no-charmonium): {len(sig_data):,} events")
-        print(f"Background proxy (B+ sidebands): {len(bkg_data):,} events\n")
-
-        all_results = []
-
-        if self.state_dependent:
-            # Option B: State-specific cuts (NOT YET IMPLEMENTED - needs discussion)
-            print("⚠️  State-specific optimization not yet implemented!")
-            print("    Using universal cuts instead.\n")
-            states = ["universal"]
-        else:
-            # Option A: Universal cuts
-            states = ["universal"]
-            print("Running Option A: UNIVERSAL optimization\n")
-
-        for state in states:
-            print(f"\n{'='*60}")
-            if state == "universal":
-                print("Optimizing UNIVERSAL cuts for all states")
-            else:
-                print(f"Optimizing cuts for state: {state}")
-            print(f"{'='*60}")
-
-            # Extract branch data (once, before loop)
-            sig_branches = []
-            bkg_branches = []
-
-            for var in all_variables:
-                sig_branch = sig_data[var["branch_name"]]
-                bkg_branch = bkg_data[var["branch_name"]]
-
-                # Flatten jagged arrays
-                if "var" in str(ak.type(sig_branch)):
-                    sig_branch = ak.firsts(sig_branch)
-                if "var" in str(ak.type(bkg_branch)):
-                    bkg_branch = ak.firsts(bkg_branch)
-
-                sig_branches.append(sig_branch)
-                bkg_branches.append(bkg_branch)
-
-            # Grid scan: test all combinations
-            best_fom = -np.inf
-            best_cuts = None
-            best_n_sig = 0.0
-            best_n_bkg = 0.0
-
-            print(f"  Scanning {total_combinations:,} combinations...")
-
-            # Use tqdm progress bar for grid scan
-            desc = f"  {state:8s}" if state != "universal" else "  Universal"
-            with tqdm(total=total_combinations, desc=desc, unit="combo", ncols=100) as pbar:
-                for i, cut_combination in enumerate(itertools.product(*grid_axes)):
-                    # Apply this combination of cuts
-                    sig_mask = ak.ones_like(sig_branches[0], dtype=bool)
-                    bkg_mask = ak.ones_like(bkg_branches[0], dtype=bool)
-
-                    for j, (cut_val, var) in enumerate(
-                        zip(cut_combination, all_variables, strict=False)
-                    ):
-                        if var["cut_type"] == "greater":
-                            sig_mask = sig_mask & (sig_branches[j] > cut_val)
-                            bkg_mask = bkg_mask & (bkg_branches[j] > cut_val)
-                        else:
-                            sig_mask = sig_mask & (sig_branches[j] < cut_val)
-                            bkg_mask = bkg_mask & (bkg_branches[j] < cut_val)
-
-                    # Count events passing cuts
-                    n_sig = ak.sum(sig_mask)
-                    n_bkg = ak.sum(bkg_mask)
-
-                    # Calculate FOM
-                    fom = self.compute_fom(n_sig, n_bkg)
-
-                    # Update best if this is better
-                    if fom > best_fom:
-                        best_fom = fom
-                        best_cuts = cut_combination
-                        best_n_sig = float(n_sig)
-                        best_n_bkg = float(n_bkg)
-                        pbar.set_postfix(
-                            FOM=f"{best_fom:.3f}", S=int(best_n_sig), B=int(best_n_bkg)
-                        )
-
-                    pbar.update(1)
-
-            print("  ✓ Grid scan complete!")
-            print(f"  Best FOM: {best_fom:.3f}")
-            print(f"  n_sig: {best_n_sig:.0f}, n_bkg: {best_n_bkg:.1f}")
-
-            # Store results
-            if best_cuts is None:
-                print("  WARNING: No valid cuts found!")
-                continue
-
-            print("\n  Optimal cuts:")
-            for j, var in enumerate(all_variables):
-                cut_val = best_cuts[j]
-                print(f"    {var['var_name']:20s} {var['cut_type']:>7s} {cut_val:8.3f}")
-
-                # For universal cuts, apply to all states
-                if state == "universal":
-                    for actual_state in ["jpsi", "etac", "chic0", "chic1"]:
-                        all_results.append(
-                            {
-                                "state": actual_state,
-                                "variable": var["var_name"],
-                                "branch_name": var["branch_name"],
-                                "optimal_cut": cut_val,
-                                "cut_type": var["cut_type"],
-                                "fom": best_fom,
-                            }
-                        )
-                else:
-                    # State-specific
-                    all_results.append(
-                        {
-                            "state": state,
-                            "variable": var["var_name"],
-                            "branch_name": var["branch_name"],
-                            "optimal_cut": cut_val,
-                            "cut_type": var["cut_type"],
-                            "fom": best_fom,
-                        }
-                    )
-
-        # Convert to DataFrame
-        df_results = pd.DataFrame(all_results)
-
-        # Add etac_2s by copying chi_c1 (no MC available)
-        if "chic1" in df_results["state"].values:
-            etac_2s_cuts = df_results[df_results["state"] == "chic1"].copy()
-            etac_2s_cuts["state"] = "etac_2s"
-            df_results = pd.concat([df_results, etac_2s_cuts], ignore_index=True)
-            print("\n✓ Added etac_2s cuts (copied from chi_c1)")
-
-        print(f"\n{'='*80}")
-        print("OPTIMIZATION COMPLETE")
-        print(f"{'='*80}")
-        print(f"Method: {'State-specific' if self.state_dependent else 'Universal'}")
-        print(f"Total states: {df_results['state'].nunique()}")
-        print(f"Variables optimized: {df_results['variable'].nunique()}")
-        print(f"{'='*80}\n")
-
-        return df_results
-
     def optimize_nd_grid_scan_mc_based(self) -> pd.DataFrame:
         """
         Perform N-dimensional grid scan with MC-based signal and data-based background.
 
-        Per-state optimization (Option B):
-          For each cut combination in the grid:
-            S = epsilon(cuts) * N_expected
-              epsilon = N_MC_passing_cuts / N_MC_total  (signal efficiency from MC)
-              N_expected = data sideband-subtracted yield (no selection cuts)
-            B = data sideband interpolation in each state's M(Λ̄pK⁻) window
+        Option A (Grouped):
+          Groups J/psi + eta_c into a 'high_yield' set and chic0 + chic1 into a 'low_yield' set.
+          Optimizes cuts to maximize S/sqrt(B) for high_yield and S/(sqrt(S)+sqrt(B)) for low_yield.
 
-          FoM is state-group-dependent (from studies/fom_comparison):
-            High-yield (J/ψ, η_c(1S)):       S / sqrt(B)
-            Low-yield  (χ_c0, χ_c1, η_c(2S)): S / (sqrt(S) + sqrt(B))
-
-        Requires self.mc_data to be set (dict of {state: combined_mc_events}).
+        Option B (Per-state):
+          Optimizes cuts independently for each state.
 
         Returns:
-            DataFrame with per-state optimal cuts in the same format as
-            optimize_nd_grid_scan() for downstream compatibility.
+            DataFrame with per-state optimal cuts (in Option A, states in the same group
+            share the exact same optimal cuts).
         """
         import itertools
 
@@ -975,7 +748,8 @@ class SelectionOptimizer:
                             mc_mask = mc_mask & (mc_branches[state][j] < cut_val)
                     mc_sel_masks[state] = mc_mask
 
-                # Evaluate S, B, FoM per state
+                # Evaluate S, B per state
+                state_s_b = {}
                 for state in self.ALL_STATES:
                     if state not in mc_branches:
                         continue
@@ -994,31 +768,87 @@ class SelectionOptimizer:
                     d_high = n_high_sb / sw["b_high_sb_width"] if sw["b_high_sb_width"] > 0 else 0
                     bkg_estimate = ((d_low + d_high) / 2.0) * sw["b_sig_width"]
 
-                    # Compute both FoMs
-                    fom1 = self.fom_s_over_sqrt_b(sig_estimate, bkg_estimate)
-                    fom2 = self.fom_s_over_sqrt_s_plus_b(sig_estimate, bkg_estimate)
-                    vals = {"S/sqrt(B)": fom1, "S/sqrt(S+B)": fom2}
+                    state_s_b[state] = (sig_estimate, bkg_estimate, epsilon)
 
-                    for fom_type, fom_val in vals.items():
-                        entry = best_results[state][fom_type]
-                        if fom_val > entry["best_fom"]:
-                            entry["best_fom"] = fom_val
-                            entry["best_cuts"] = cut_combination
-                            entry["best_n_sig"] = sig_estimate
-                            entry["best_n_bkg"] = bkg_estimate
-                            entry["best_epsilon"] = epsilon
+                # Option B: Per-state optimization update
+                if self.state_dependent:
+                    for state in self.ALL_STATES:
+                        if state not in state_s_b:
+                            continue
+                        sig_estimate, bkg_estimate, epsilon = state_s_b[state]
+
+                        fom1 = self.fom_s_over_sqrt_b(sig_estimate, bkg_estimate)
+                        fom2 = self.fom_s_over_sqrt_s_plus_b(sig_estimate, bkg_estimate)
+                        vals = {"S/sqrt(B)": fom1, "S/sqrt(S+B)": fom2}
+
+                        for fom_type, fom_val in vals.items():
+                            entry = best_results[state][fom_type]
+                            if fom_val > entry["best_fom"]:
+                                entry["best_fom"] = fom_val
+                                entry["best_cuts"] = cut_combination
+                                entry["best_n_sig"] = sig_estimate
+                                entry["best_n_bkg"] = bkg_estimate
+                                entry["best_epsilon"] = epsilon
+                else:
+                    # Option A: Grouped optimization update
+                    # High Yield Group
+                    s_high = sum(state_s_b.get(st, (0, 0, 0))[0] for st in self.HIGH_YIELD_STATES)
+                    b_high = sum(state_s_b.get(st, (0, 0, 0))[1] for st in self.HIGH_YIELD_STATES)
+
+                    fom1_high = self.fom_s_over_sqrt_b(s_high, b_high)
+                    fom2_high = self.fom_s_over_sqrt_s_plus_b(s_high, b_high)
+
+                    for state in self.HIGH_YIELD_STATES:
+                        if state not in state_s_b:
+                            continue
+                        sig_estimate, bkg_estimate, epsilon = state_s_b[state]
+                        for fom_type, grouped_fom in [
+                            ("S/sqrt(B)", fom1_high),
+                            ("S/sqrt(S+B)", fom2_high),
+                        ]:
+                            entry = best_results[state][fom_type]
+                            if grouped_fom > entry["best_fom"]:
+                                entry["best_fom"] = grouped_fom
+                                entry["best_cuts"] = cut_combination
+                                entry["best_n_sig"] = sig_estimate
+                                entry["best_n_bkg"] = bkg_estimate
+                                entry["best_epsilon"] = epsilon
+
+                    # Low Yield Group
+                    s_low = sum(state_s_b.get(st, (0, 0, 0))[0] for st in self.LOW_YIELD_STATES)
+                    b_low = sum(state_s_b.get(st, (0, 0, 0))[1] for st in self.LOW_YIELD_STATES)
+
+                    fom1_low = self.fom_s_over_sqrt_b(s_low, b_low)
+                    fom2_low = self.fom_s_over_sqrt_s_plus_b(s_low, b_low)
+
+                    for state in self.LOW_YIELD_STATES:
+                        if state not in state_s_b:
+                            continue
+                        sig_estimate, bkg_estimate, epsilon = state_s_b[state]
+                        for fom_type, grouped_fom in [
+                            ("S/sqrt(B)", fom1_low),
+                            ("S/sqrt(S+B)", fom2_low),
+                        ]:
+                            entry = best_results[state][fom_type]
+                            if grouped_fom > entry["best_fom"]:
+                                entry["best_fom"] = grouped_fom
+                                entry["best_cuts"] = cut_combination
+                                entry["best_n_sig"] = sig_estimate
+                                entry["best_n_bkg"] = bkg_estimate
+                                entry["best_epsilon"] = epsilon
 
                 pbar.update(1)
 
         # --- Build results DataFrame ---
         all_results = []
         print(f"\n{'='*80}")
-        print("RESULTS: Optimal cuts per state")
+        if self.state_dependent:
+            print("RESULTS: Optimal cuts per state (Option B)")
+        else:
+            print("RESULTS: Optimal cuts per grouped states (Option A)")
         print(f"{'='*80}")
 
         for state in self.ALL_STATES:
-            # We determine the "primary" FoM based on yield level to pass to downstream fitting
-            primary_fom = "S/sqrt(B)" if state in self.HIGH_YIELD_STATES else "S/sqrt(S+B)"
             for fom_type in foms_to_compute:
                 entry = best_results[state][fom_type]
                 if entry["best_cuts"] is None:
@@ -1030,10 +860,16 @@ class SelectionOptimizer:
                 sb = s / max(b, 1)
 
                 print(f"\n  {state} (FoM: {fom_type}, N_expected={n_expected[state]:.0f}):")
-                print(
-                    f"    FoM={entry['best_fom']:.3f}  eps={eps:.4f}  "
-                    f"S={s:.1f}  B={b:.1f}  S/B={sb:.3f}"
-                )
+                if self.state_dependent:
+                    print(
+                        f"    Group FoM / State FoM={entry['best_fom']:.3f}  eps={eps:.4f}  "
+                        f"S={s:.1f}  B={b:.1f}  S/B={sb:.3f}"
+                    )
+                else:
+                    print(
+                        f"    Group FoM={entry['best_fom']:.3f}  State eps={eps:.4f}  "
+                        f"State S={s:.1f}  State B={b:.1f}  State S/B={sb:.3f}"
+                    )
 
                 cuts_str = "  ".join(
                     f"{var['var_name']}={entry['best_cuts'][j]:.2f}"
@@ -1041,19 +877,19 @@ class SelectionOptimizer:
                 )
                 print(f"    cuts: {cuts_str}")
 
-                # Populate DataFrame only with the primary FoM configuration to avoid dupes downstream
-                if fom_type == primary_fom:
-                    for j, var in enumerate(all_variables):
-                        all_results.append(
-                            {
-                                "state": state,
-                                "variable": var["var_name"],
-                                "branch_name": var["branch_name"],
-                                "optimal_cut": entry["best_cuts"][j],
-                                "cut_type": var["cut_type"],
-                                "fom": entry["best_fom"],
-                            }
-                        )
+                # Populate DataFrame with ALL FoM configurations for downstream fitting
+                for j, var in enumerate(all_variables):
+                    all_results.append(
+                        {
+                            "state": state,
+                            "FoM_type": fom_type,
+                            "variable": var["var_name"],
+                            "branch_name": var["branch_name"],
+                            "optimal_cut": entry["best_cuts"][j],
+                            "cut_type": var["cut_type"],
+                            "fom": entry["best_fom"],
+                        }
+                    )
 
         df_results = pd.DataFrame(all_results)
 
