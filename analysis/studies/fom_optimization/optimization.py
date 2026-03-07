@@ -33,7 +33,11 @@ def run_grid_search(
     # Both Option A and Option B use the same method now
     # The optimizer internally checks config.optimization.state_dependent
     # to decide between Grouped (Option A) and Per-State (Option B)
-    optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
+    if getattr(config, "optimization", {}).get("method") == "mc_based_sequential":
+        logger.info("Using Sequential Optimization Method (Option C)")
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based_sequential()
+    else:
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
 
     logger.info("Grid scan optimization completed.")
     return optimized_cuts_df

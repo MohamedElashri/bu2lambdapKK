@@ -976,3 +976,474 @@ class SelectionOptimizer:
         print(f"{'='*80}\n")
 
         return df_results
+
+    def optimize_nd_grid_scan_mc_based_sequential(self) -> pd.DataFrame:
+        """
+        Perform a Two-Step Sequential Box Optimization (Option C).
+        Step 1 scans a primary set of variables (e.g. DTF, FD, IP).
+        Step 2 fixes Step 1 at optimal values and scans a secondary set (e.g. PT, PID).
+        """
+        import itertools
+
+        if self.mc_data is None:
+            raise OptimizationError("MC data required for Option C.")
+
+        # Always run Grouped (Option A logic) for Option C per user request
+        print(f"\n{'='*80}")
+        print("N-D SEQUENTIAL GRID SCAN (MC-BASED)")
+        print(f"{'='*80}")
+        print("NOTE: Option C enforces Grouped Optimization (High vs Low Yield).")
+        self.state_dependent = False  # Enforce Grouped logic
+
+        nd_config = getattr(self.config, "selection", {})
+        opt_config = getattr(self.config, "optimization", {})
+
+        step1_var_names = opt_config.get(
+            "seq_step1_vars", ["bu_dtf_chi2", "bu_fdchi2", "bu_ipchi2"]
+        )
+        step2_var_names = opt_config.get("seq_step2_vars", ["bu_pt", "pid_product"])
+
+        all_variables = {}
+        for var_name, var_config in nd_config.items():
+            if var_name == "notes":
+                continue
+            begin, end, step = var_config["begin"], var_config["end"], var_config["step"]
+            grid_points = np.arange(begin, end + step / 2, step)
+            all_variables[var_name] = {
+                "var_name": var_name,
+                "branch_name": var_config["branch_name"],
+                "cut_type": var_config["cut_type"],
+                "grid_axes": grid_points,
+            }
+
+        def _run_scan_step(step_name, current_vars, fixed_cuts=None):
+            # Same shared prep logic...
+            data_combined = ak.concatenate([self.data[y] for y in self.data])
+            bu_mass = data_combined[
+                "Bu_MM_corrected" if "Bu_MM_corrected" in data_combined.fields else "Bu_M"
+            ]
+            cc_mass = data_combined[
+                "M_LpKm_h2" if "M_LpKm_h2" in data_combined.fields else "M_LpKm"
+            ]
+
+            b_sig_min = opt_config.get("b_signal_region_min", 5255.0)
+            b_sig_max = opt_config.get("b_signal_region_max", 5305.0)
+            in_b_sig = (bu_mass > b_sig_min) & (bu_mass < b_sig_max)
+            in_b_low_sb = (bu_mass > opt_config.get("b_low_sideband_min", 5150.0)) & (
+                bu_mass < opt_config.get("b_low_sideband_max", 5230.0)
+            )
+            in_b_high_sb = (bu_mass > opt_config.get("b_high_sideband_min", 5330.0)) & (
+                bu_mass < opt_config.get("b_high_sideband_max", 5410.0)
+            )
+
+            b_sig_width = b_sig_max - b_sig_min
+            b_low_width = opt_config.get("b_low_sideband_max", 5230.0) - opt_config.get(
+                "b_low_sideband_min", 5150.0
+            )
+            b_high_width = opt_config.get("b_high_sideband_max", 5410.0) - opt_config.get(
+                "b_high_sideband_min", 5330.0
+            )
+
+            signal_regions = getattr(self.config, "data", {}).get("signal_regions", {})
+            state_windows = {}
+            for state in self.ALL_STATES:
+                sr = signal_regions.get(state, signal_regions.get(state.lower(), {}))
+                c, w = sr.get("center", 0), sr.get("window", 0)
+                in_cc_sig = (cc_mass > c - w) & (cc_mass < c + w)
+                state_windows[state] = {
+                    "in_sig": in_cc_sig & in_b_sig,
+                    "in_low_sb": in_cc_sig & in_b_low_sb,
+                    "in_high_sb": in_cc_sig & in_b_high_sb,
+                    "b_sig_width": b_sig_width,
+                    "b_low_sb_width": b_low_width,
+                    "b_high_sb_width": b_high_width,
+                }
+
+            n_expected = {}
+            for state in self.ALL_STATES:
+                sw = state_windows[state]
+                n_sr = float(ak.sum(sw["in_sig"]))
+                d_low = (
+                    float(ak.sum(sw["in_low_sb"])) / sw["b_low_sb_width"]
+                    if sw["b_low_sb_width"] > 0
+                    else 0
+                )
+                d_high = (
+                    float(ak.sum(sw["in_high_sb"])) / sw["b_high_sb_width"]
+                    if sw["b_high_sb_width"] > 0
+                    else 0
+                )
+                b_est = ((d_low + d_high) / 2.0) * sw["b_sig_width"]
+                n_expected[state] = max(n_sr - b_est, 1.0)
+
+            mc_branches, mc_totals = {}, {}
+            for state in self.ALL_STATES:
+                mc_totals[state] = len(self.mc_data[state])
+                brs = []
+                for var_name in current_vars:
+                    br = self.mc_data[state][all_variables[var_name]["branch_name"]]
+                    brs.append(ak.firsts(br) if "var" in str(ak.type(br)) else br)
+                mc_branches[state] = brs
+
+            data_cut_branches = []
+            for var_name in current_vars:
+                br = data_combined[all_variables[var_name]["branch_name"]]
+                data_cut_branches.append(ak.firsts(br) if "var" in str(ak.type(br)) else br)
+
+            # Apply "fixed_cuts" globally to masks first if this is step 2
+            global_data_mask = ak.ones_like(
+                (
+                    data_combined["Bu_PT"]
+                    if "Bu_PT" in data_combined.fields
+                    else data_combined.fields[0]
+                ),
+                dtype=bool,
+            )
+            global_mc_masks = {
+                st: ak.ones_like(
+                    (
+                        self.mc_data[st]["Bu_PT"]
+                        if "Bu_PT" in self.mc_data[st].fields
+                        else self.mc_data[st].fields[0]
+                    ),
+                    dtype=bool,
+                )
+                for st in self.ALL_STATES
+            }
+
+            if fixed_cuts is not None:
+                # fixed_cuts is a dict mapping state -> dict mapping fom_type -> dict of var_name -> cut_val
+                # Note: in grouped mode, states in same group share cuts.
+                pass  # We will apply fixed cuts intelligently per state/fom inside the loop below
+
+            grid_axes = [all_variables[v]["grid_axes"] for v in current_vars]
+            total_combos = int(np.prod([len(ax) for ax in grid_axes]))
+            print(
+                f"\n[{step_name}] Scanning {len(current_vars)} variables: {total_combos:,} combinations"
+            )
+
+            foms_to_compute = ["S/sqrt(B)", "S/sqrt(S+B)"]
+            best_results = {
+                state: {
+                    f: {
+                        "best_fom": -np.inf,
+                        "best_cuts": None,
+                        "best_n_sig": 0,
+                        "best_n_bkg": 0,
+                        "best_epsilon": 0,
+                    }
+                    for f in foms_to_compute
+                }
+                for state in self.ALL_STATES
+            }
+
+            # In Step 2, different FoM types might have had DIFFERENT optimal fixed_cuts from step 1
+            # We must run the sub-grid independently for each State/Group + FoM combo to be perfectly safe,
+            # or we embed the step 1 state/fom cuts inline.
+
+            # Since Option A enforces high/low yield grouped cuts:
+            # We'll just define the specific groups to evaluate
+
+            with tqdm(total=total_combos, desc=f"  {step_name}", unit="combo", ncols=100) as pbar:
+                for active_cuts in itertools.product(*grid_axes):
+
+                    # For Step 2, evaluating "a single active point" means evaluating it
+                    # IN CONJUNCTION with the specific fixed_{fom}_cuts for High/Low groups!
+                    # So we evaluate grouped logic manually here.
+
+                    for fom_type in foms_to_compute:
+                        # --- Evaluate High Yield Group ---
+                        s_high, b_high = 0.0, 0.0
+                        high_epsilons, high_s, high_b = {}, {}, {}
+
+                        for state in self.HIGH_YIELD_STATES:
+                            if fixed_cuts:
+                                fc = fixed_cuts[state][fom_type]
+                                # Create data mask
+                                d_mask = ak.ones_like(data_combined["Bu_PT"], dtype=bool)
+                                m_mask = ak.ones_like(self.mc_data[state]["Bu_PT"], dtype=bool)
+
+                                # Apply fixed
+                                for f_var, f_val in fc.items():
+                                    vtype = all_variables[f_var]["cut_type"]
+                                    d_br = data_combined[all_variables[f_var]["branch_name"]]
+                                    d_br = ak.firsts(d_br) if "var" in str(ak.type(d_br)) else d_br
+                                    m_br = self.mc_data[state][all_variables[f_var]["branch_name"]]
+                                    m_br = ak.firsts(m_br) if "var" in str(ak.type(m_br)) else m_br
+                                    if vtype == "greater":
+                                        d_mask = d_mask & (d_br > f_val)
+                                        m_mask = m_mask & (m_br > f_val)
+                                    else:
+                                        d_mask = d_mask & (d_br < f_val)
+                                        m_mask = m_mask & (m_br < f_val)
+                            else:
+                                d_mask = ak.ones_like(data_combined["Bu_PT"], dtype=bool)
+                                m_mask = ak.ones_like(self.mc_data[state]["Bu_PT"], dtype=bool)
+
+                            # Apply active cuts
+                            for j, var_name in enumerate(current_vars):
+                                c_val = active_cuts[j]
+                                vtype = all_variables[var_name]["cut_type"]
+                                if vtype == "greater":
+                                    d_mask = d_mask & (data_cut_branches[j] > c_val)
+                                    m_mask = m_mask & (mc_branches[state][j] > c_val)
+                                else:
+                                    d_mask = d_mask & (data_cut_branches[j] < c_val)
+                                    m_mask = m_mask & (mc_branches[state][j] < c_val)
+
+                            sw = state_windows[state]
+                            eps = (
+                                float(ak.sum(m_mask)) / mc_totals[state]
+                                if mc_totals[state] > 0
+                                else 0
+                            )
+                            sig_est = eps * n_expected[state]
+                            n_low = float(ak.sum(d_mask & sw["in_low_sb"]))
+                            n_high = float(ak.sum(d_mask & sw["in_high_sb"]))
+                            d_l = n_low / sw["b_low_sb_width"] if sw["b_low_sb_width"] > 0 else 0
+                            d_h = n_high / sw["b_high_sb_width"] if sw["b_high_sb_width"] > 0 else 0
+                            bkg_est = ((d_l + d_h) / 2.0) * sw["b_sig_width"]
+
+                            s_high += sig_est
+                            b_high += bkg_est
+                            high_epsilons[state] = eps
+                            high_s[state] = sig_est
+                            high_b[state] = bkg_est
+
+                        # Group High FoM
+                        if fom_type == "S/sqrt(B)":
+                            val_high = self.fom_s_over_sqrt_b(s_high, b_high)
+                        else:
+                            val_high = self.fom_s_over_sqrt_s_plus_b(s_high, b_high)
+
+                        for state in self.HIGH_YIELD_STATES:
+                            entry = best_results[state][fom_type]
+                            if val_high > entry["best_fom"]:
+                                entry["best_fom"] = val_high
+                                entry["best_cuts"] = active_cuts
+                                entry["best_n_sig"] = high_s[state]
+                                entry["best_n_bkg"] = high_b[state]
+                                entry["best_epsilon"] = high_epsilons[state]
+
+                        # --- Evaluate Low Yield Group ---
+                        s_low, b_low = 0.0, 0.0
+                        low_epsilons, low_s, low_b = {}, {}, {}
+
+                        for state in self.LOW_YIELD_STATES:
+                            if fixed_cuts:
+                                fc = fixed_cuts[state][fom_type]
+                                d_mask = ak.ones_like(data_combined["Bu_PT"], dtype=bool)
+                                m_mask = ak.ones_like(self.mc_data[state]["Bu_PT"], dtype=bool)
+                                for f_var, f_val in fc.items():
+                                    vtype = all_variables[f_var]["cut_type"]
+                                    d_br = data_combined[all_variables[f_var]["branch_name"]]
+                                    d_br = ak.firsts(d_br) if "var" in str(ak.type(d_br)) else d_br
+                                    m_br = self.mc_data[state][all_variables[f_var]["branch_name"]]
+                                    m_br = ak.firsts(m_br) if "var" in str(ak.type(m_br)) else m_br
+                                    if vtype == "greater":
+                                        d_mask = d_mask & (d_br > f_val)
+                                        m_mask = m_mask & (m_br > f_val)
+                                    else:
+                                        d_mask = d_mask & (d_br < f_val)
+                                        m_mask = m_mask & (m_br < f_val)
+                            else:
+                                d_mask = ak.ones_like(data_combined["Bu_PT"], dtype=bool)
+                                m_mask = ak.ones_like(self.mc_data[state]["Bu_PT"], dtype=bool)
+
+                            for j, var_name in enumerate(current_vars):
+                                c_val = active_cuts[j]
+                                vtype = all_variables[var_name]["cut_type"]
+                                if vtype == "greater":
+                                    d_mask = d_mask & (data_cut_branches[j] > c_val)
+                                    m_mask = m_mask & (mc_branches[state][j] > c_val)
+                                else:
+                                    d_mask = d_mask & (data_cut_branches[j] < c_val)
+                                    m_mask = m_mask & (mc_branches[state][j] < c_val)
+
+                            sw = state_windows[state]
+                            eps = (
+                                float(ak.sum(m_mask)) / mc_totals[state]
+                                if mc_totals[state] > 0
+                                else 0
+                            )
+                            sig_est = eps * n_expected[state]
+                            n_low = float(ak.sum(d_mask & sw["in_low_sb"]))
+                            n_high = float(ak.sum(d_mask & sw["in_high_sb"]))
+                            d_l = n_low / sw["b_low_sb_width"] if sw["b_low_sb_width"] > 0 else 0
+                            d_h = n_high / sw["b_high_sb_width"] if sw["b_high_sb_width"] > 0 else 0
+                            bkg_est = ((d_l + d_h) / 2.0) * sw["b_sig_width"]
+
+                            s_low += sig_est
+                            b_low += bkg_est
+                            low_epsilons[state] = eps
+                            low_s[state] = sig_est
+                            low_b[state] = bkg_est
+
+                        if fom_type == "S/sqrt(B)":
+                            val_low = self.fom_s_over_sqrt_b(s_low, b_low)
+                        else:
+                            val_low = self.fom_s_over_sqrt_s_plus_b(s_low, b_low)
+
+                        for state in self.LOW_YIELD_STATES:
+                            entry = best_results[state][fom_type]
+                            if val_low > entry["best_fom"]:
+                                entry["best_fom"] = val_low
+                                entry["best_cuts"] = active_cuts
+                                entry["best_n_sig"] = low_s[state]
+                                entry["best_n_bkg"] = low_b[state]
+                                entry["best_epsilon"] = low_epsilons[state]
+
+                    pbar.update(1)
+
+            # Map best vector back to a dictionary of names -> values
+            results_mapped = {
+                state: {
+                    f: {
+                        current_vars[j]: best_results[state][f]["best_cuts"][j]
+                        for j in range(len(current_vars))
+                    }
+                    for f in foms_to_compute
+                }
+                for state in self.ALL_STATES
+            }
+            # Return raw best_results dict for later processing/saving, and mapped for step2
+            return results_mapped, best_results, n_expected
+
+        # ACTUALLY RUN THE STEPS
+        step1_mapped, step1_raw, n_exp = _run_scan_step("STEP 1", step1_var_names, fixed_cuts=None)
+
+        # At this point, step1_mapped has the optimal cuts computed for High/Low and S/sqrt(B) vs S/sqrt(S+B).
+        # We pass this as `fixed_cuts` to Step 2.
+        step2_mapped, step2_raw, _ = _run_scan_step(
+            "STEP 2", step2_var_names, fixed_cuts=step1_mapped
+        )
+
+        # Combine Step 1 and Step 2 results for final output
+        final_best_results = {
+            state: {
+                f: {
+                    "best_fom": step2_raw[state][f]["best_fom"],
+                    "best_n_sig": step2_raw[state][f]["best_n_sig"],
+                    "best_n_bkg": step2_raw[state][f]["best_n_bkg"],
+                    "best_epsilon": step2_raw[state][f]["best_epsilon"],
+                    # best_cuts is now the merged list of ALL variables IN ORDER of `all_variables.keys()`
+                    "best_cuts": tuple(
+                        [
+                            (
+                                step1_mapped[state][f][v]
+                                if v in step1_var_names
+                                else step2_mapped[state][f][v]
+                            )
+                            for v in all_variables.keys()
+                        ]
+                    ),
+                }
+                for f in ["S/sqrt(B)", "S/sqrt(S+B)"]
+            }
+            for state in self.ALL_STATES
+        }
+
+        # Re-use the existing DataFrame saving logic from original function!
+        # --- Build results DataFrame ---
+        all_results = []
+        print(f"\n{'='*80}")
+        print("RESULTS: Optimal sequenced cuts per grouped states (Option C)")
+        print(f"{'='*80}")
+
+        foms_to_compute = ["S/sqrt(B)", "S/sqrt(S+B)"]
+        all_var_ordered = list(all_variables.values())
+
+        for state in self.ALL_STATES:
+            for fom_type in foms_to_compute:
+                entry = final_best_results[state][fom_type]
+                eps, s, b = entry["best_epsilon"], entry["best_n_sig"], entry["best_n_bkg"]
+                sb = s / max(b, 1)
+
+                print(f"\n  {state} (FoM: {fom_type}, N_expected={n_exp[state]:.0f}):")
+                print(
+                    f"    Group FoM={entry['best_fom']:.3f}  State eps={eps:.4f}  "
+                    f"State S={s:.1f}  State B={b:.1f}  State S/B={sb:.3f}"
+                )
+
+                cuts_str = "  ".join(
+                    f"{var['var_name']}={entry['best_cuts'][j]:.2f}"
+                    for j, var in enumerate(all_var_ordered)
+                )
+                print(f"    cuts: {cuts_str}")
+
+                for j, var in enumerate(all_var_ordered):
+                    all_results.append(
+                        {
+                            "state": state,
+                            "FoM_type": fom_type,
+                            "variable": var["var_name"],
+                            "branch_name": var["branch_name"],
+                            "optimal_cut": entry["best_cuts"][j],
+                            "cut_type": var["cut_type"],
+                            "fom": entry["best_fom"],
+                        }
+                    )
+
+        df_results = pd.DataFrame(all_results)
+
+        if "chic1" in df_results["state"].values:
+            etac_2s_cuts = df_results[df_results["state"] == "chic1"].copy()
+            etac_2s_cuts["state"] = "etac_2s"
+            etac_2s_cuts["fom"] = float("nan")
+            df_results = pd.concat([df_results, etac_2s_cuts], ignore_index=True)
+
+        import json
+        from pathlib import Path
+
+        output_dir = Path("analysis_output/results")
+        output_dir.mkdir(exist_ok=True, parents=True)
+        tables_dir = Path("analysis_output/tables")
+        tables_dir.mkdir(exist_ok=True, parents=True)
+
+        state_summary_rows = []
+
+        def format_row(st, f_type, metrics, note=""):
+            row = {
+                "state": st,
+                "note": note,
+                "FoM_type": f_type,
+                "FoM": f"{metrics['best_fom']:.4f}",
+                "S_expected": f"{metrics['best_n_sig']:.1f}",
+                "B_estimated": f"{metrics['best_n_bkg']:.1f}",
+                "efficiency": f"{metrics['best_epsilon']:.4f}",
+            }
+            for j, var in enumerate(all_var_ordered):
+                row[var["var_name"]] = f"{metrics['best_cuts'][j]:.2f} ({var['cut_type']})"
+            return row
+
+        for state in self.FIT_STATES:
+            if state == "etac_2s":
+                for fom_type in foms_to_compute:
+                    proxy = final_best_results.get("chic1", {}).get(fom_type)
+                    if proxy:
+                        state_summary_rows.append(
+                            format_row(state, fom_type, proxy, "cuts from chic1")
+                        )
+                continue
+            for fom_type in foms_to_compute:
+                entry = final_best_results.get(state, {}).get(fom_type)
+                if entry:
+                    state_summary_rows.append(format_row(state, fom_type, entry))
+
+        summary_df = pd.DataFrame(state_summary_rows)
+
+        md_path = tables_dir / "fom_optimization_results.md"
+        with open(md_path, "w") as mdf:
+            mdf.write("# FoM Optimization Results (Sequential - Option C)\n\n")
+            mdf.write(summary_df.to_markdown(index=False))
+            mdf.write("\n\n> **Notes:**\n")
+            mdf.write("> - `eta_c(2S)`: No MC yet; inherits `chi_c1` optimal cuts.\n")
+            mdf.write(
+                "> - Optimization computed BOTH FoMs for Grouped High vs Low yields in two sequential steps.\n"
+            )
+
+        json_path = output_dir / "fom_optimization_results.json"
+        with open(json_path, "w") as jf:
+            json.dump(state_summary_rows, jf, indent=4)
+
+        return df_results

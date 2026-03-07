@@ -87,21 +87,37 @@ def perform_final_fit(
     except Exception as e:
         logger.warning(f"Baseline fit failed: {e}")
 
-    # We will collect one row per optimized state
-    # (etac_2s uses chic1 cuts, so its "optimization target" is chic1)
-    states_to_run = OPTIMIZED_STATES + ["etac_2s"]
+    # Decide which cuts to loop over based on optimization strategy
+    if getattr(config, "optimization", {}).get("state_dependent", False):
+        # Option B: Run separate fits for each state
+        states_to_run = OPTIMIZED_STATES + ["etac_2s"]
+        state_labels = {st: st for st in states_to_run}
+    else:
+        # Option A: Run grouped fits (High Yield vs Low Yield)
+        # We only need one proxy state from each group because they share identical cuts
+        states_to_run = ["jpsi", "chic1"]
+        state_labels = {"jpsi": "High_Yield", "chic1": "Low_Yield"}
 
     all_fit_rows = []
     all_fit_results_json = {}
 
     for target_state in states_to_run:
+        group_label = state_labels[target_state]
         for fom_type in ["S/sqrt(B)", "S/sqrt(S+B)"]:
             source_cuts = target_state if target_state != "etac_2s" else ETAC_2S_PROXY
-            note = "" if target_state != "etac_2s" else f"cuts from {ETAC_2S_PROXY} (no MC)"
+
+            if getattr(config, "optimization", {}).get("state_dependent", False):
+                note = "" if target_state != "etac_2s" else f"cuts from {ETAC_2S_PROXY} (no MC)"
+            else:
+                group_desc = (
+                    "J/psi + eta_c(1S)" if target_state == "jpsi" else "chi_c0 + chi_c1 + eta_c(2S)"
+                )
+                note = f"Grouped cuts ({group_desc})"
+
             logger.info(f"\n{'='*60}")
             logger.info(
-                f"Fitting with {target_state!r} optimal cuts for {fom_type}"
-                + (f" (using {ETAC_2S_PROXY} cuts)" if note else "")
+                f"Fitting with {group_label!r} optimal cuts for {fom_type}"
+                + (f" (using {ETAC_2S_PROXY} proxy cuts)" if "no MC" in note else "")
             )
             logger.info(f"{'='*60}")
 
@@ -112,7 +128,7 @@ def perform_final_fit(
                 n_before = len(events)
                 n_after = len(data_cut[year])
                 logger.info(
-                    f"  {year}: {n_before} → {n_after} events after {source_cuts} ({fom_type}) cuts"
+                    f"  {year}: {n_before} → {n_after} events after {group_label} ({fom_type}) cuts"
                 )
 
             fitter = MassFitter(config)
@@ -120,15 +136,15 @@ def perform_final_fit(
                 # plot_tag puts all plots for this state's cuts in a dedicated subdir
                 # sanitize fom_type for filename (replace / with _)
                 safe_fom = fom_type.replace("/", "_").replace("+", "plus")
-                plot_tag = f"{target_state}_{safe_fom}_cuts"
+                plot_tag = f"{group_label}_{safe_fom}_cuts"
                 fit_results = fitter.perform_fit(data_cut, fit_combined=True, plot_tag=plot_tag)
             except Exception as e:
-                logger.error(f"Fit failed for state {target_state} ({fom_type}): {e}")
+                logger.error(f"Fit failed for {group_label} ({fom_type}): {e}")
                 continue
 
             # Extract yields for each charmonium state from the combined fit
             combined_yields = fit_results.get("yields", {}).get("combined", {})
-            row = {"target_state": target_state, "FoM_type": fom_type, "note": note}
+            row = {"target_state": group_label, "FoM_type": fom_type, "note": note}
             for fit_state in FIT_STATES:
                 if fit_state in combined_yields:
                     s_val, s_err = combined_yields[fit_state]
@@ -137,7 +153,7 @@ def perform_final_fit(
                     row[f"{fit_state}_yield"] = "—"
             all_fit_rows.append(row)
 
-            result_key = f"{target_state} ({fom_type})"
+            result_key = f"{group_label} ({fom_type})"
             all_fit_results_json[result_key] = {
                 fs: {"yield": combined_yields[fs][0], "error": combined_yields[fs][1]}
                 for fs in FIT_STATES
