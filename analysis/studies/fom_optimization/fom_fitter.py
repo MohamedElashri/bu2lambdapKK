@@ -669,7 +669,7 @@ class MassFitter:
             pull_rms = (pull_rms / n_pulls - pull_mean * pull_mean) ** 0.5
 
         # Add fit info box to the left of legend - fancy style with two columns
-        fit_info_left = ROOT.TPaveText(0.40, 0.60, 0.58, 0.90, "NDC")  # type: ignore
+        fit_info_left = ROOT.TPaveText(0.40, 0.55, 0.58, 0.90, "NDC")  # type: ignore
         fit_info_left.SetBorderSize(2)
         fit_info_left.SetLineColor(ROOT.kBlue)  # type: ignore
         fit_info_left.SetFillColor(ROOT.kWhite)  # type: ignore
@@ -679,7 +679,7 @@ class MassFitter:
         fit_info_left.SetTextSize(0.032)
         fit_info_left.SetTextColor(ROOT.kBlack)  # type: ignore
 
-        fit_info_right = ROOT.TPaveText(0.58, 0.60, 0.76, 0.90, "NDC")  # type: ignore
+        fit_info_right = ROOT.TPaveText(0.58, 0.55, 0.76, 0.90, "NDC")  # type: ignore
         fit_info_right.SetBorderSize(2)
         fit_info_right.SetLineColor(ROOT.kBlue)  # type: ignore
         fit_info_right.SetFillColor(ROOT.kWhite)  # type: ignore
@@ -731,6 +731,16 @@ class MassFitter:
         fit_info_right.AddText(f"N_{{tot}} = {total_events:.0f}")
         fit_info_right.AddText(f"#sigma_{{res}} = {sigma_res:.1f} #pm {sigma_res_err:.1f} MeV")
         fit_info_right.AddText(f"Pull: #mu = {pull_mean:.2f}, #sigma = {pull_rms:.2f}")
+
+        # Compute chi2 and ndof
+        n_params = fit_result.floatParsFinal().getSize() if fit_result is not None else 0
+        n_bins = int((self.fit_range[1] - self.fit_range[0]) / self.bin_width)
+        ndof = max(1, n_bins - n_params)
+
+        # ROOT frame.chiSquare(n_params) returns chi2 / ndof
+        chi2_ndof_ratio = frame.chiSquare(n_params)
+        chi2 = chi2_ndof_ratio * ndof
+        fit_info_right.AddText(f"#chi^{{2}} / ndf = {chi2:.1f} / {ndof} = {chi2_ndof_ratio:.2f}")
 
         fit_info_left.Draw()
         fit_info_right.Draw()
