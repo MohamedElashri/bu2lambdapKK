@@ -54,20 +54,18 @@ def perform_final_fit(config: StudyConfig, model, cut_results: dict, ml_data: di
         return events[mask]
 
     # Decide which cuts to loop over based on optimization strategy
-    states_to_run = ["jpsi", "chic1"]
-    state_labels = {"jpsi": "High_Yield", "chic1": "Low_Yield"}
+    groups_to_run = ["High_Yield", "Low_Yield"]
 
     all_fit_rows = []
 
-    for target_state in states_to_run:
-        group_label = state_labels[target_state]
+    for group in groups_to_run:
         for fom_type in ["S/sqrt(B)", "S/sqrt(S+B)"]:
 
             note = "Grouped cuts (MVA)"
-            thr = cut_results[target_state][fom_type]["best_cut"]
+            thr = cut_results[group][fom_type]["best_cut"]
 
             logger.info(f"\n{'='*60}")
-            logger.info(f"Fitting with {group_label!r} BDT cut > {thr:.4f} for {fom_type}")
+            logger.info(f"Fitting with {group!r} BDT cut > {thr:.4f} for {fom_type}")
             logger.info(f"{'='*60}")
 
             # Apply this state's BDT cut to every year
@@ -81,7 +79,7 @@ def perform_final_fit(config: StudyConfig, model, cut_results: dict, ml_data: di
             fitter = MassFitter(config)
             try:
                 safe_fom = fom_type.replace("/", "_").replace("+", "plus")
-                plot_tag = f"{group_label}_{safe_fom}_bdt_cut"
+                plot_tag = f"{group}_{safe_fom}_bdt_cut"
                 fit_results = fitter.perform_fit(data_cut, fit_combined=True, plot_tag=plot_tag)
 
                 # Extract total yields
@@ -91,7 +89,7 @@ def perform_final_fit(config: StudyConfig, model, cut_results: dict, ml_data: di
                         err = state_data["error"]
                         all_fit_rows.append(
                             {
-                                "Optimized for": group_label,
+                                "Optimized for": group,
                                 "FoM Type": fom_type,
                                 "State Fitted": fit_state,
                                 "Yield": val,
@@ -101,7 +99,7 @@ def perform_final_fit(config: StudyConfig, model, cut_results: dict, ml_data: di
                         )
 
             except Exception as e:
-                logger.error(f"Fit failed for {group_label} ({fom_type}): {e}")
+                logger.error(f"Fit failed for {group} ({fom_type}): {e}")
 
     # Process results
     if all_fit_rows:

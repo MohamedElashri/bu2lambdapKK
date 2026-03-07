@@ -77,6 +77,8 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
 
     state_windows = {}
     n_expected = {}
+    mc_truth_expected = {}  # Store true signal count from MC
+    mc_truth_scaling = {}  # Store scaling factor for true MC to match data expected
     for state in ALL_STATES:
         sr = signal_regions.get(state, signal_regions.get(state.lower(), {}))
         c, w = sr.get("center", 0), sr.get("window", 0)
@@ -96,15 +98,68 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
         b_est = ((d_low + d_high) / 2.0) * b_sig_width
         n_expected[state] = max(n_sr - b_est, 1.0)
 
+        # Calculate MC Truth Signal Yield if branches available
+        evts = mc_prepared.get(state, None)
+        if evts is not None and "Bu_TRUEID" in evts.fields:
+            # Check TRUEID branches:
+            # B+ -> 521, p -> 2212, K- -> 321
+            true_b = np.abs(evts["Bu_TRUEID"]) == 521
+            true_p = np.abs(evts["p_TRUEID"]) == 2212 if "p_TRUEID" in evts.fields else True
+            true_k1 = np.abs(evts["h1_TRUEID"]) == 321 if "h1_TRUEID" in evts.fields else True
+            true_k2 = np.abs(evts["h2_TRUEID"]) == 321 if "h2_TRUEID" in evts.fields else True
+
+            is_true_sig = true_b & true_p & true_k1 & true_k2
+            total_true = float(ak.sum(is_true_sig))
+            mc_truth_expected[state] = int(total_true)
+            mc_truth_scaling[state] = n_expected[state] / total_true if total_true > 0 else 0.0
+        else:
+            mc_truth_expected[state] = 0
+            mc_truth_scaling[state] = 0.0
+
     # 4) Scan threshold
     thresholds = np.linspace(0.01, 0.99, 99)
-    foms_to_compute = ["S/sqrt(B)", "S/sqrt(S+B)"]
+
+    # Option A Logic: Optimize globally for high yield vs low yield groups
+    # Rather than best cut per state, we compute a single optimal cut for HIGH_YIELD
+    # and a single optimal cut for LOW_YIELD
+
     best_results = {
-        state: {
-            f: {"best_fom": -np.inf, "best_cut": 0, "eps": 0, "s": 0, "b": 0}
-            for f in foms_to_compute
-        }
-        for state in ALL_STATES
+        "High_Yield": {
+            "S/sqrt(B)": {
+                "best_fom": -np.inf,
+                "best_cut": 0,
+                "s": 0,
+                "b": 0,
+                "true_s": 0,
+                "true_s_scaled": 0,
+            },
+            "S/sqrt(S+B)": {
+                "best_fom": -np.inf,
+                "best_cut": 0,
+                "s": 0,
+                "b": 0,
+                "true_s": 0,
+                "true_s_scaled": 0,
+            },
+        },
+        "Low_Yield": {
+            "S/sqrt(B)": {
+                "best_fom": -np.inf,
+                "best_cut": 0,
+                "s": 0,
+                "b": 0,
+                "true_s": 0,
+                "true_s_scaled": 0,
+            },
+            "S/sqrt(S+B)": {
+                "best_fom": -np.inf,
+                "best_cut": 0,
+                "s": 0,
+                "b": 0,
+                "true_s": 0,
+                "true_s_scaled": 0,
+            },
+        },
     }
 
     def fom1(s, b):
@@ -113,7 +168,10 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
     def fom2(s, b):
         return s / np.sqrt(s + b) if (s + b) > 0 else 0
 
-    history = {state: {fom: [] for fom in foms_to_compute} for state in ALL_STATES}
+    history = {
+        group: {fom: [] for fom in ["S/sqrt(B)", "S/sqrt(S+B)"]}
+        for group in ["High_Yield", "Low_Yield"]
+    }
 
     for thr in thresholds:
         data_mask = data_bdt_score > thr
@@ -130,7 +188,7 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
             d_h = n_high / b_high_sb_width
             b_est = ((d_l + d_h) / 2.0) * b_sig_width
 
-            state_s_b[state] = (s_est, b_est, eps)
+            state_s_b[state] = (s_est, b_est)
 
         # High Yield Group
         s_high = sum(state_s_b[st][0] for st in HIGH_YIELD)
@@ -138,21 +196,66 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
         val_high1 = fom1(s_high, b_high)
         val_high2 = fom2(s_high, b_high)
 
-        for st in HIGH_YIELD:
-            history[st]["S/sqrt(B)"].append(val_high1)
-            history[st]["S/sqrt(S+B)"].append(val_high2)
-            if val_high1 > best_results[st]["S/sqrt(B)"]["best_fom"]:
-                best_results[st]["S/sqrt(B)"]["best_fom"] = val_high1
-                best_results[st]["S/sqrt(B)"]["best_cut"] = thr
-                best_results[st]["S/sqrt(B)"]["eps"] = state_s_b[st][2]
-                best_results[st]["S/sqrt(B)"]["s"] = state_s_b[st][0]
-                best_results[st]["S/sqrt(B)"]["b"] = state_s_b[st][1]
-            if val_high2 > best_results[st]["S/sqrt(S+B)"]["best_fom"]:
-                best_results[st]["S/sqrt(S+B)"]["best_fom"] = val_high2
-                best_results[st]["S/sqrt(S+B)"]["best_cut"] = thr
-                best_results[st]["S/sqrt(S+B)"]["eps"] = state_s_b[st][2]
-                best_results[st]["S/sqrt(S+B)"]["s"] = state_s_b[st][0]
-                best_results[st]["S/sqrt(S+B)"]["b"] = state_s_b[st][1]
+        history["High_Yield"]["S/sqrt(B)"].append(val_high1)
+        history["High_Yield"]["S/sqrt(S+B)"].append(val_high2)
+
+        if val_high1 > best_results["High_Yield"]["S/sqrt(B)"]["best_fom"]:
+            best_results["High_Yield"]["S/sqrt(B)"]["best_fom"] = val_high1
+            best_results["High_Yield"]["S/sqrt(B)"]["best_cut"] = thr
+            best_results["High_Yield"]["S/sqrt(B)"]["s"] = s_high
+            best_results["High_Yield"]["S/sqrt(B)"]["b"] = b_high
+            best_results["High_Yield"]["S/sqrt(B)"]["true_s"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                for st in HIGH_YIELD
+            )
+            best_results["High_Yield"]["S/sqrt(B)"]["true_s_scaled"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                * mc_truth_scaling[st]
+                for st in HIGH_YIELD
+            )
+
+        if val_high2 > best_results["High_Yield"]["S/sqrt(S+B)"]["best_fom"]:
+            best_results["High_Yield"]["S/sqrt(S+B)"]["best_fom"] = val_high2
+            best_results["High_Yield"]["S/sqrt(S+B)"]["best_cut"] = thr
+            best_results["High_Yield"]["S/sqrt(S+B)"]["s"] = s_high
+            best_results["High_Yield"]["S/sqrt(S+B)"]["b"] = b_high
+            best_results["High_Yield"]["S/sqrt(S+B)"]["true_s"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                for st in HIGH_YIELD
+            )
+            best_results["High_Yield"]["S/sqrt(S+B)"]["true_s_scaled"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                * mc_truth_scaling[st]
+                for st in HIGH_YIELD
+            )
 
         # Low Yield Group
         s_low = sum(state_s_b[st][0] for st in LOW_YIELD)
@@ -160,37 +263,81 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
         val_low1 = fom1(s_low, b_low)
         val_low2 = fom2(s_low, b_low)
 
-        for st in LOW_YIELD:
-            history[st]["S/sqrt(B)"].append(val_low1)
-            history[st]["S/sqrt(S+B)"].append(val_low2)
-            if val_low1 > best_results[st]["S/sqrt(B)"]["best_fom"]:
-                best_results[st]["S/sqrt(B)"]["best_fom"] = val_low1
-                best_results[st]["S/sqrt(B)"]["best_cut"] = thr
-                best_results[st]["S/sqrt(B)"]["eps"] = state_s_b[st][2]
-                best_results[st]["S/sqrt(B)"]["s"] = state_s_b[st][0]
-                best_results[st]["S/sqrt(B)"]["b"] = state_s_b[st][1]
-            if val_low2 > best_results[st]["S/sqrt(S+B)"]["best_fom"]:
-                best_results[st]["S/sqrt(S+B)"]["best_fom"] = val_low2
-                best_results[st]["S/sqrt(S+B)"]["best_cut"] = thr
-                best_results[st]["S/sqrt(S+B)"]["eps"] = state_s_b[st][2]
-                best_results[st]["S/sqrt(S+B)"]["s"] = state_s_b[st][0]
-                best_results[st]["S/sqrt(S+B)"]["b"] = state_s_b[st][1]
+        history["Low_Yield"]["S/sqrt(B)"].append(val_low1)
+        history["Low_Yield"]["S/sqrt(S+B)"].append(val_low2)
+
+        if val_low1 > best_results["Low_Yield"]["S/sqrt(B)"]["best_fom"]:
+            best_results["Low_Yield"]["S/sqrt(B)"]["best_fom"] = val_low1
+            best_results["Low_Yield"]["S/sqrt(B)"]["best_cut"] = thr
+            best_results["Low_Yield"]["S/sqrt(B)"]["s"] = s_low
+            best_results["Low_Yield"]["S/sqrt(B)"]["b"] = b_low
+            best_results["Low_Yield"]["S/sqrt(B)"]["true_s"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                for st in LOW_YIELD
+            )
+            best_results["Low_Yield"]["S/sqrt(B)"]["true_s_scaled"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                * mc_truth_scaling[st]
+                for st in LOW_YIELD
+            )
+
+        if val_low2 > best_results["Low_Yield"]["S/sqrt(S+B)"]["best_fom"]:
+            best_results["Low_Yield"]["S/sqrt(S+B)"]["best_fom"] = val_low2
+            best_results["Low_Yield"]["S/sqrt(S+B)"]["best_cut"] = thr
+            best_results["Low_Yield"]["S/sqrt(S+B)"]["s"] = s_low
+            best_results["Low_Yield"]["S/sqrt(S+B)"]["b"] = b_low
+            best_results["Low_Yield"]["S/sqrt(S+B)"]["true_s"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                for st in LOW_YIELD
+            )
+            best_results["Low_Yield"]["S/sqrt(S+B)"]["true_s_scaled"] = sum(
+                np.sum(
+                    (mc_bdt_scores.get(st, np.array([])) > thr)
+                    & (
+                        (np.abs(mc_prepared[st]["Bu_TRUEID"]) == 521)
+                        if "Bu_TRUEID" in mc_prepared[st].fields
+                        else True
+                    )
+                )
+                * mc_truth_scaling[st]
+                for st in LOW_YIELD
+            )
 
     # Plot FoMs vs Threshold
     plot_dir = Path("analysis_output/plots/mva")
-    for group, group_states in [("High_Yield", HIGH_YIELD), ("Low_Yield", LOW_YIELD)]:
-        st = group_states[0]  # They share the same FoM calculation
+    for group in ["High_Yield", "Low_Yield"]:
         plt.figure(figsize=(8, 6))
-        plt.plot(thresholds, history[st]["S/sqrt(B)"], label="S/sqrt(B)")
-        plt.plot(thresholds, history[st]["S/sqrt(S+B)"], label="S/sqrt(S+B)")
+        plt.plot(thresholds, history[group]["S/sqrt(B)"], label="S/sqrt(B)")
+        plt.plot(thresholds, history[group]["S/sqrt(S+B)"], label="S/sqrt(S+B)")
         plt.axvline(
-            best_results[st]["S/sqrt(B)"]["best_cut"],
+            best_results[group]["S/sqrt(B)"]["best_cut"],
             color="blue",
             linestyle="--",
             label="Max S/sqrt(B)",
         )
         plt.axvline(
-            best_results[st]["S/sqrt(S+B)"]["best_cut"],
+            best_results[group]["S/sqrt(S+B)"]["best_cut"],
             color="orange",
             linestyle="--",
             label="Max S/sqrt(S+B)",
@@ -208,33 +355,37 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
     tables_dir.mkdir(exist_ok=True, parents=True)
     rows = []
 
-    # We also need Proxy logic for etac_2s (copying chic1)
-    results_ordered = []
-    for st in ALL_STATES:
+    foms_to_compute = ["S/sqrt(B)", "S/sqrt(S+B)"]
+    for group in ["High_Yield", "Low_Yield"]:
         for f in foms_to_compute:
-            results_ordered.append((st, f, best_results[st][f]))
-    for f in foms_to_compute:
-        results_ordered.append(("etac_2s", f, best_results["chic1"][f]))
-
-    for st, f, r in results_ordered:
-        rows.append(
-            {
-                "state": st,
-                "FoM_type": f,
-                "optimal_bdt_cut": r["best_cut"],
-                "FoM_score": r["best_fom"],
-                "S_expected": r["s"],
-                "B_estimated": r["b"],
-                "efficiency": r["eps"],
-            }
-        )
+            r = best_results[group][f]
+            rows.append(
+                {
+                    "Group": group,
+                    "FoM_type": f,
+                    "optimal_bdt_cut": r["best_cut"],
+                    "FoM_score": r["best_fom"],
+                    "S_expected": r["s"],
+                    "S_true_scaled": r["true_s_scaled"],
+                    "S_true_raw": r["true_s"],
+                    "B_estimated": r["b"],
+                }
+            )
 
     df = pd.DataFrame(rows)
     with open(tables_dir / "mva_optimization_results.md", "w") as f:
-        f.write("# BDT Threshold Optimization Results\n\n")
+        f.write("# BDT Threshold Optimization Results (Grouped A)\n\n")
         f.write(df.to_markdown(index=False))
         f.write("\n\n> **Notes:**\n")
-        f.write("> - `eta_c(2S)` inherits `chi_c1` optimal cuts (no MC available).\n")
+        f.write("> - `High_Yield` applies to J/psi and eta_c(1S).\n")
+        f.write("> - `Low_Yield` applies to chi_c0, chi_c1, and eta_c(2S).\n")
+        f.write("> - `S_expected` is estimated via sideband subtraction on data.\n")
+        f.write(
+            "> - `S_true_raw` is the exact number of truth-matched signal events passing the cut in MC.\n"
+        )
+        f.write(
+            "> - `S_true_scaled` is `S_true_raw` scaled by the ratio of data yield / total MC yield to be comparable with `S_expected`.\n"
+        )
 
     logger.info(f"Optimal BDT Cuts:\n{df.to_string()}")
 

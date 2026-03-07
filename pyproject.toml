@@ -24,7 +24,10 @@ dependencies = [
   "tomli",
   "tomli_w",
   "snakemake",
-  "root>=0.1a10"
+  "root>=0.1a10",
+  "lightgbm>=4.6.0",
+  "catboost>=1.2.10",
+  "scikit-learn>=1.8.0"
 ]
 description = "Snakemake-based analysis pipeline for Bu → Λ p K K decay"
 name = "bu2lambdapkk-analysis"

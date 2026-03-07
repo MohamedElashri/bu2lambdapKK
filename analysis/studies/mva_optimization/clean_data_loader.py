@@ -102,6 +102,11 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
             logger.warning(f"Missing branches in {filepath}: {missing}")
             branches_to_load = [b for b in branches_to_load if b in all_branches]
 
+        # Add TRUEID branches for MC
+        if is_mc:
+            trueid_branches = [b for b in all_branches if "TRUEID" in b]
+            branches_to_load.extend(trueid_branches)
+
         events = tree.arrays(branches_to_load, library="ak")
 
     # Standardize branch names for downstream
