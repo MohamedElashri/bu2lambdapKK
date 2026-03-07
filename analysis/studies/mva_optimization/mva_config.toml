@@ -1,0 +1,68 @@
+[fitting]
+argus_endpoint_offset = 200.0
+bin_width = 5.0
+use_binned_fit = true
+
+[mass_windows]
+bu_corrected = [5255.0, 5305.0]
+charmonium_fit_range = [2800.0, 4000.0]
+
+[optimization]
+b_high_sideband = [5330.0, 5410.0]
+b_low_sideband = [5150.0, 5230.0]
+b_signal_region = [5255.0, 5305.0]
+charmonium_region = [2900.0, 3800.0]
+no_charmonium_mass = [4000.0, 6000.0]
+
+[paths]
+data_base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+magnets = ["MD", "MU"]
+mc_base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc"
+mc_states = ["jpsi", "etac", "chic0", "chic1"]
+track_types = ["LL", "DD"]
+years = ["2016", "2017", "2018"]
+
+[pdg]
+masses = {jpsi = 3096.9, etac_1s = 2984.1, chic0 = 3414.71, chic1 = 3510.67, etac_2s = 3637.8}
+widths = {jpsi = 0.0926, etac_1s = 30.5, chic0 = 10.6, chic1 = 0.88, etac_2s = 11.6}
+
+[signal_regions.chic0]
+center = 3414.71
+window = 21.0
+
+[signal_regions.chic1]
+center = 3510.67
+window = 20.0
+
+[signal_regions.etac]
+center = 2983.9
+window = 64.0
+
+[signal_regions.etac_2s]
+center = 3637.8
+window = 23.2
+
+[signal_regions.jpsi]
+center = 3096.916
+window = 15.0
+
+[xgboost]
+features = [
+  "Bu_DTF_chi2",
+  "Bu_FDCHI2_OWNPV",
+  "Bu_IPCHI2_OWNPV",
+  "Bu_PT",
+  "p_ProbNNp",
+  "h1_ProbNNk",
+  "h2_ProbNNk"
+]
+random_state = 42
+test_size = 0.3
+
+[xgboost.hyperparameters]
+colsample_bytree = 0.8
+eval_metric = "logloss"
+learning_rate = 0.1
+max_depth = 4
+n_estimators = 200
+subsample = 0.8

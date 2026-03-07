@@ -1,0 +1,13 @@
+# MVA Optimization Snakefile
+
+rule all:
+    input:
+        "mva_optimization_completed.txt"
+
+rule run_mva_study:
+    output:
+        "mva_optimization_completed.txt"
+    shell:
+        """
+        python main.py
+        """
