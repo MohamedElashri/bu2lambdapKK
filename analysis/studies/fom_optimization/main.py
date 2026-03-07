@@ -2,6 +2,7 @@
 Main entry point for FoM Optimization Study
 """
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -13,10 +14,6 @@ if str(project_root) not in sys.path:
 import logging
 
 from config_loader import StudyConfig
-
-output_dir = project_root / "analysis_output"
-output_dir.mkdir(parents=True, exist_ok=True)
-report_file = output_dir / "fom_optimization_report.txt"
 
 
 class DualOutput:
@@ -38,17 +35,8 @@ class DualOutput:
         self.file.close()
 
 
-sys.stdout = DualOutput(report_file)
-
-for handler in logging.root.handlers[:]:
-    logging.root.removeHandler(handler)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(message)s",
-    handlers=[logging.FileHandler(report_file, mode="a"), logging.StreamHandler(sys.stdout.stdout)],
-)
-logger = logging.getLogger(__name__)
+# Logger will be initialized inside main()
+logger = None
 
 from data_preparation import load_and_prepare_data
 from final_fit import perform_final_fit
@@ -57,9 +45,56 @@ from signal_extraction import extract_signal_and_validate
 
 
 def main():
-    logger.info("Starting FoM Optimization Study...")
+    parser = argparse.ArgumentParser(description="FoM Optimization Study")
+    parser.add_argument(
+        "--option",
+        type=str,
+        choices=["A", "B", "C"],
+        default="A",
+        help="Optimization option (A: Grouped, B: Per-State, C: Sequential)",
+    )
+    args = parser.parse_args()
+
+    # Dynamic output directory based on option
+    output_dir = project_root / "analysis_output" / f"option_{args.option}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    report_file = output_dir / "fom_optimization_report.txt"
+
+    # Initialize logging and dual output
+    global logger
+    sys.stdout = DualOutput(report_file)
+
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s",
+        handlers=[
+            logging.FileHandler(report_file, mode="a"),
+            logging.StreamHandler(sys.stdout.stdout),
+        ],
+    )
+    logger = logging.getLogger(__name__)
+
+    logger.info(f"Starting FoM Optimization Study with Option {args.option}...")
 
     config = StudyConfig()
+
+    # Override config based on option
+    if args.option == "A":
+        config.optimization["method"] = "mc_based"
+        config.optimization["state_dependent"] = False
+    elif args.option == "B":
+        config.optimization["method"] = "mc_based"
+        config.optimization["state_dependent"] = True
+    elif args.option == "C":
+        config.optimization["method"] = "mc_based_sequential"
+        config.optimization["state_dependent"] = False
+
+    logger.info(
+        f"Configuration: method={config.optimization['method']}, state_dependent={config.optimization['state_dependent']}"
+    )
 
     # ---------------------------------------------------------
     # Steps 1, 2, 3: Data & MC Loading + Pre-selections
