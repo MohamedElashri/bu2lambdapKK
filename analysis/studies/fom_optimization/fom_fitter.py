@@ -7,7 +7,6 @@ MODIFIED: plot_fit_result method updated to match official LHCb publication styl
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import awkward as ak
@@ -887,9 +886,9 @@ class MassFitter:
         # Save plot — each state's cuts go in their own subdirectory
         canvas.cd()
         if plot_tag:
-            plot_dir = Path("analysis_output/plots/fits") / plot_tag
+            plot_dir = self.config.output_dir / "plots" / "fits" / plot_tag
         else:
-            plot_dir = Path("analysis_output/plots/fits")
+            plot_dir = self.config.output_dir / "plots" / "fits"
         plot_dir.mkdir(exist_ok=True, parents=True)
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))

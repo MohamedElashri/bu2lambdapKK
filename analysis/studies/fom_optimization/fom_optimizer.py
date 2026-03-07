@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 import awkward as ak
@@ -436,7 +435,7 @@ class SelectionOptimizer:
         ax.grid(True, alpha=0.3)
 
         # Save
-        plot_dir = Path("analysis_output/plots/optimization")
+        plot_dir = self.config.output_dir / "plots" / "optimization"
         plot_dir.mkdir(exist_ok=True, parents=True)
 
         filename = f"fom_scan_{category}_{var_name}_{state}.pdf"
@@ -498,7 +497,7 @@ class SelectionOptimizer:
         ax.grid(True, alpha=0.3, color="white", linewidth=0.5)
 
         # Save
-        plot_dir = Path("analysis_output/plots/optimization") / "2d_scans"
+        plot_dir = self.config.output_dir / "plots" / "optimization" / "2d_scans"
         plot_dir.mkdir(exist_ok=True, parents=True)
 
         filename = f"fom_2d_{var1['category']}_{var1['var_name']}_vs_{var2['category']}_{var2['var_name']}_{state}.pdf"
@@ -528,7 +527,7 @@ class SelectionOptimizer:
         summary = summary[col_order]
 
         # Save as markdown and CSV
-        output_dir = Path("analysis_output/tables")
+        output_dir = self.config.output_dir / "tables"
 
         summary.to_csv(output_dir / "optimized_cuts_summary.csv")
         summary.to_markdown(output_dir / "optimized_cuts_summary.md")
@@ -903,11 +902,10 @@ class SelectionOptimizer:
 
         # -- Save per-state summary table as markdown and JSON --
         import json
-        from pathlib import Path
 
-        output_dir = Path("analysis_output/results")
+        output_dir = self.config.output_dir / "results"
         output_dir.mkdir(exist_ok=True, parents=True)
-        tables_dir = Path("analysis_output/tables")
+        tables_dir = self.config.output_dir / "tables"
         tables_dir.mkdir(exist_ok=True, parents=True)
 
         # Rich per-state summary
@@ -1393,11 +1391,10 @@ class SelectionOptimizer:
             df_results = pd.concat([df_results, etac_2s_cuts], ignore_index=True)
 
         import json
-        from pathlib import Path
 
-        output_dir = Path("analysis_output/results")
+        output_dir = self.config.output_dir / "results"
         output_dir.mkdir(exist_ok=True, parents=True)
-        tables_dir = Path("analysis_output/tables")
+        tables_dir = self.config.output_dir / "tables"
         tables_dir.mkdir(exist_ok=True, parents=True)
 
         state_summary_rows = []

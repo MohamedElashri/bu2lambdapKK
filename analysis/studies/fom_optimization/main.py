@@ -79,7 +79,7 @@ def main():
 
     logger.info(f"Starting FoM Optimization Study with Option {args.option}...")
 
-    config = StudyConfig()
+    config = StudyConfig(output_dir=output_dir)
 
     # Override config based on option
     if args.option == "A":

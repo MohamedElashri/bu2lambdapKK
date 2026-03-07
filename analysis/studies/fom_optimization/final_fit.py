@@ -9,7 +9,6 @@ For each state:
 
 import json
 import logging
-from pathlib import Path
 from typing import Dict
 
 import awkward as ak
@@ -71,9 +70,9 @@ def perform_final_fit(
     """
     logger.info("Starting per-state final fits...")
 
-    output_dir = Path("analysis_output/results")
+    output_dir = config.output_dir / "results"
     output_dir.mkdir(exist_ok=True, parents=True)
-    tables_dir = Path("analysis_output/tables")
+    tables_dir = config.output_dir / "tables"
     tables_dir.mkdir(exist_ok=True, parents=True)
 
     # -----------------------------------------------------------------

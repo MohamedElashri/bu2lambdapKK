@@ -8,7 +8,6 @@ Validation: S/delta_S ≈ S/sqrt(S+B) within 20% per state
 
 import json
 import logging
-from pathlib import Path
 from typing import Dict
 
 import awkward as ak
@@ -150,7 +149,7 @@ def extract_signal_and_validate(
     logger.info(f"Overall: {overall}")
 
     # ---------- Save JSON ----------
-    output_dir = Path("analysis_output/results")
+    output_dir = config.output_dir / "results"
     output_dir.mkdir(exist_ok=True, parents=True)
     payload = {
         "per_state": per_state_metrics,
@@ -159,10 +158,10 @@ def extract_signal_and_validate(
     }
     with open(output_dir / "signal_extraction_metrics.json", "w") as f:
         json.dump(payload, f, indent=4)
-    logger.info("✓ Saved: analysis_output/results/signal_extraction_metrics.json")
+    logger.info(f"✓ Saved: {output_dir / 'signal_extraction_metrics.json'}")
 
     # --- Save markdown table ---
-    tables_dir = Path("analysis_output/tables")
+    tables_dir = config.output_dir / "tables"
     tables_dir.mkdir(exist_ok=True, parents=True)
     md_path = tables_dir / "validation_results.md"
     with open(md_path, "w") as mdf:

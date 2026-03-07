@@ -9,7 +9,8 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Script Settings
-MAIN_SCRIPT="analysis/studies/fom_optimization/main.py"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+MAIN_SCRIPT="${SCRIPT_DIR}/main.py"
 PROJECT_ROOT=$(pwd)
 
 # Function to run a specific optimization option

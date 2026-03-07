@@ -269,7 +269,7 @@ def main():
         data_vals=data_vecs["PID_product"],
         mc_vals_by_state={s: mc_vecs["PID_product"][s] for s in mc_by_state},
         phsp_vals=phsp_vecs["PID_product"],
-        out=Path("analysis_output/plots/pid_product_distribution.pdf"),
+        out=config.output_dir / "plots" / "pid_product_distribution.pdf",
     )
 
     # ── Plot 2: individual PIDs ──
@@ -280,7 +280,7 @@ def main():
         data_by_branch=ind_data,
         mc_by_branch=ind_mc,
         phsp_by_branch=ind_phsp,
-        out=Path("analysis_output/plots/pid_individual_distribution.pdf"),
+        out=config.output_dir / "plots" / "pid_individual_distribution.pdf",
     )
 
     logger.info("All done.")
