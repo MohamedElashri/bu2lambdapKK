@@ -212,7 +212,14 @@ root_typing
 
 ## slides
 slides
-
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.tex
+analysis/studies/mva_optimization/comparison/*
 ## root files (templates)
 *.root
 
@@ -232,3 +239,7 @@ match_mc_files.py
 
 ## mva
 catboost_info/
+*.npz
+tmva_yields.json
+*.xml
+*.C
