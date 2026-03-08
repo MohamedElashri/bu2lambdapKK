@@ -12,7 +12,9 @@ import xgboost as xgb
 from catboost import CatBoostClassifier
 from config_loader import StudyConfig
 from scipy.stats import ks_2samp
+from sklearn.ensemble import AdaBoostClassifier
 from sklearn.metrics import auc, roc_curve
+from sklearn.tree import DecisionTreeClassifier
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -177,6 +179,18 @@ def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgb
         # Note: CatBoost takes sample_weight inside fit
         model.fit(X_train, y_train, sample_weight=w_train, eval_set=[(X_test, y_test)])
 
+    elif model_type == "adaboost":
+        dt = DecisionTreeClassifier(
+            max_depth=6, min_samples_leaf=0.025, random_state=config.xgboost.get("random_state", 42)
+        )
+        model = AdaBoostClassifier(
+            estimator=dt,
+            n_estimators=350,
+            learning_rate=0.5,
+            random_state=config.xgboost.get("random_state", 42),
+        )
+        model.fit(X_train, y_train, sample_weight=w_train)
+
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
 
@@ -216,18 +230,20 @@ def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgb
 
 
 def train_and_evaluate_bdt(config: StudyConfig, ml_data: dict):
-    # Train and compare XGBoost, LightGBM, and CatBoost
+    # Train and compare XGBoost, LightGBM, CatBoost, and AdaBoost
     logger.info("Starting Multi-Algorithm evaluation...")
 
     xgb_model, xgb_auc = train_and_evaluate_model(config, ml_data, model_type="xgboost")
     lgb_model, lgb_auc = train_and_evaluate_model(config, ml_data, model_type="lightgbm")
     cb_model, cb_auc = train_and_evaluate_model(config, ml_data, model_type="catboost")
+    ab_model, ab_auc = train_and_evaluate_model(config, ml_data, model_type="adaboost")
 
     logger.info("=" * 50)
     logger.info("Algorithm Comparison (Single Train/Test Split AUC):")
     logger.info(f"XGBoost  : {xgb_auc:.4f}")
     logger.info(f"LightGBM : {lgb_auc:.4f}")
     logger.info(f"CatBoost : {cb_auc:.4f}")
+    logger.info(f"AdaBoost : {ab_auc:.4f}")
     logger.info("=" * 50)
 
     # We return the CatBoost model as primary, keeping XGBoost as backup
