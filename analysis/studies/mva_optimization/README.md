@@ -25,6 +25,7 @@ Because the current `uv` environment relies on the PyPI `root` package which is 
 **Step 1: Export data, run TMVA, and generate plots**
 Activate an environment with full ROOT + TMVA support (The wheels published on PyPi for `ROOT` does not have `TMVA`), then run:
 ```bash
+cd tmva
 conda activate bphysics
 python run_tmva.py
 ```
