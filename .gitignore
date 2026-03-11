@@ -243,3 +243,4 @@ catboost_info/
 tmva_yields.json
 *.xml
 *.C
+output

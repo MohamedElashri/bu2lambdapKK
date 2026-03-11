@@ -23,7 +23,7 @@ The script `run_tmva.py` uses the exact same data preparation pipeline (`data_pr
 Because the current `uv` environment relies on the PyPI `root` package which is currently missing the `libTMVA.so` compiled library, you need to run `run_tmva.py` in an environment where a full ROOT installation is available (e.g., your conda `bphysics` environment).
 
 **Step 1: Export data, run TMVA, and generate plots**
-Activate an environment with full ROOT + TMVA support, then run:
+Activate an environment with full ROOT + TMVA support (The wheels published on PyPi for `ROOT` does not have `TMVA`), then run:
 ```bash
 conda activate bphysics
 python run_tmva.py
