@@ -10,6 +10,7 @@ project_root = Path(__file__).resolve().parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+import json
 import logging
 
 from config_loader import StudyConfig
@@ -18,8 +19,14 @@ from data_preparation import load_and_prepare_data
 from mva_fitter import perform_final_fit
 from mva_trainer import train_and_evaluate_bdt
 
+from utils.presentation_utils import (
+    analyze_feature_importance_and_impact,
+    generate_final_comparison_summary,
+    plot_top_features_separation,
+)
+
 # output_dir inside the study itself
-output_dir = Path("analysis_output")
+output_dir = Path("../output")
 output_dir.mkdir(parents=True, exist_ok=True)
 report_file = output_dir / "mva_optimization_report.txt"
 
@@ -56,6 +63,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def load_tuned_params():
+    best_params_path = Path("../output/models/optuna_catboost_best_params.json")
+    catboost_params = {
+        "random_seed": 42,
+        "learning_rate": 0.05,
+        "iterations": 350,
+        "depth": 6,
+        "verbose": False,
+    }
+    if best_params_path.exists():
+        with open(best_params_path, "r") as f:
+            tuned_params = json.load(f)
+        for k, v in tuned_params.items():
+            catboost_params[k] = v
+    return catboost_params
+
+
 def main():
     logger.info("Starting MVA Optimization Study...")
 
@@ -72,6 +96,23 @@ def main():
 
     logger.info(f"Step 4: Performing final mass fits with cut(s) {optimal_cut}...")
     fit_results = perform_final_fit(config, model, optimal_cut, ml_data)
+
+    logger.info("Step 5: Generating Presentation Artifacts (Phase 2, 3, 4)...")
+
+    # Phase 2: Feature impact
+    catboost_params = load_tuned_params()
+    top_2_idx = analyze_feature_importance_and_impact(
+        model, ml_data, catboost_params, Path("../output/tables/feature_impact_table.md")
+    )
+
+    # Phase 3: Separation Visualization
+    plot_top_features_separation(ml_data, top_2_idx, Path("../output/plots"))
+
+    # Phase 4: Final Comparison Summary
+    generate_final_comparison_summary(
+        Path("../output/tables/mva_optimization_results.md"),
+        Path("../output/tables/final_comparison_summary.md"),
+    )
 
     with open("../mva_optimization_completed.txt", "w") as f:
         f.write("Completed\n")

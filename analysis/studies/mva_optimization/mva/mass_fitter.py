@@ -887,9 +887,9 @@ class MassFitter:
         # Save plot — each state's cuts go in their own subdirectory
         canvas.cd()
         if plot_tag:
-            plot_dir = Path("analysis_output/plots/fits") / plot_tag
+            plot_dir = Path("../output/plots/fits") / plot_tag
         else:
-            plot_dir = Path("analysis_output/plots/fits")
+            plot_dir = Path("../output/plots/fits")
         plot_dir.mkdir(exist_ok=True, parents=True)
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))

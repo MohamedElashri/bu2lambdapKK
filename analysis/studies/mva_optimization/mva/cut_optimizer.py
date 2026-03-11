@@ -325,7 +325,8 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
             )
 
     # Plot FoMs vs Threshold
-    plot_dir = Path("analysis_output/plots/mva")
+    plot_dir = Path("../output/plots/mva")
+    plot_dir.mkdir(parents=True, exist_ok=True)
     for group in ["High_Yield", "Low_Yield"]:
         plt.figure(figsize=(8, 6))
         plt.plot(thresholds, history[group]["S/sqrt(B)"], label="S/sqrt(B)")
@@ -351,7 +352,7 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
         plt.close()
 
     # Create summary table
-    tables_dir = Path("analysis_output/tables")
+    tables_dir = Path("../output/tables")
     tables_dir.mkdir(exist_ok=True, parents=True)
     rows = []
 

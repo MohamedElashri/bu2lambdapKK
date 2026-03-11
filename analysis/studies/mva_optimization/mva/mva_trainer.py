@@ -2,6 +2,7 @@
 MVA Trainer with XGBoost, LightGBM, CatBoost
 """
 
+import json
 import logging
 from pathlib import Path
 
@@ -168,14 +169,26 @@ def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgb
         )
 
     elif model_type == "catboost":
-        model = CatBoostClassifier(
-            scale_pos_weight=scale_pos_weight,
-            random_seed=config.xgboost.get("random_state", 42),
-            learning_rate=0.05,
-            iterations=350,
-            depth=6,
-            verbose=False,
-        )
+        # Load best params if available
+        best_params_path = Path("../output/models/optuna_catboost_best_params.json")
+        catboost_params = {
+            "scale_pos_weight": scale_pos_weight,
+            "random_seed": config.xgboost.get("random_state", 42),
+            "learning_rate": 0.05,
+            "iterations": 350,
+            "depth": 6,
+            "verbose": False,
+        }
+
+        if best_params_path.exists():
+            logger.info(f"Loading tuned CatBoost params from {best_params_path}")
+            with open(best_params_path, "r") as f:
+                tuned_params = json.load(f)
+            # Update with tuned params
+            for k, v in tuned_params.items():
+                catboost_params[k] = v
+
+        model = CatBoostClassifier(**catboost_params)
         # Note: CatBoost takes sample_weight inside fit
         model.fit(X_train, y_train, sample_weight=w_train, eval_set=[(X_test, y_test)])
 
@@ -203,7 +216,7 @@ def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgb
 
     logger.info(f"{model_type.upper()} Test AUC: {roc_auc:.4f}")
 
-    plot_dir = Path("analysis_output/plots/mva")
+    plot_dir = Path("../output/plots/mva")
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generating evaluation plots...")
@@ -218,7 +231,7 @@ def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgb
         model_name=model_type,
     )
 
-    model_dir = Path("analysis_output/models")
+    model_dir = Path("../output/models")
     model_dir.mkdir(parents=True, exist_ok=True)
 
     if model_type == "xgboost":

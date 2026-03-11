@@ -115,7 +115,7 @@ def perform_final_fit(config: StudyConfig, model, cut_results: dict, ml_data: di
         pivot_df.columns = [f"{col[1]} ({col[0]})" for col in pivot_df.columns]
         pivot_df = pivot_df.reset_index()
 
-        output_dir = Path("analysis_output/tables")
+        output_dir = Path("../output/tables")
         output_dir.mkdir(exist_ok=True, parents=True)
 
         md_file = output_dir / "mva_final_fit_results.md"

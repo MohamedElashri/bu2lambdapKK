@@ -2,11 +2,23 @@
 
 rule all:
     input:
+        "output/models/optuna_catboost_best_params.json",
         "mva_optimization_completed.txt",
         "tmva_optimization_completed.txt",
         "comparison/mva_vs_tmva.pdf"
 
+rule tune_catboost:
+    output:
+        "output/models/optuna_catboost_best_params.json"
+    shell:
+        """
+        cd mva
+        uv run python tune_catboost.py
+        """
+
 rule run_mva_study:
+    input:
+        "output/models/optuna_catboost_best_params.json"
     output:
         "mva_optimization_completed.txt"
     shell:
