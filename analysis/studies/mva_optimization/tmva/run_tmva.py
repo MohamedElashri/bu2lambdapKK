@@ -12,7 +12,7 @@ from pathlib import Path
 
 import uproot
 
-# Ensure script is run from TMVA directory so dataset is created inside TMVA folder
+# Ensure script is run from tmva directory so dataset is created inside tmva folder
 script_dir = Path(__file__).resolve().parent
 os.chdir(str(script_dir))
 
@@ -21,15 +21,50 @@ project_root = script_dir.parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-# The Python MVA modules are now in the 'mva' directory, next to 'TMVA'
+# The Python MVA modules are now in the 'mva' directory, next to 'tmva'
 mva_opt_dir = script_dir.parent / "mva"
 if str(mva_opt_dir) not in sys.path:
     sys.path.insert(0, str(mva_opt_dir))
 
 from config_loader import StudyConfig
 from data_preparation import load_and_prepare_data
+from tmva_utils.presentation_utils import extract_summary, save_tmva_plots_with_root
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+# Setup dual output to file and stdout
+output_dir = script_dir.parent / "output" / "tmva"
+output_dir.mkdir(parents=True, exist_ok=True)
+report_file = output_dir / "tmva_optimization_report.txt"
+
+
+class DualOutput:
+    def __init__(self, filename):
+        self.file = open(filename, "w")
+        self.stdout = sys.stdout
+        self.stderr = sys.stderr
+
+    def write(self, data):
+        self.file.write(data)
+        self.stdout.write(data)
+        self.file.flush()
+
+    def flush(self):
+        self.file.flush()
+        self.stdout.flush()
+
+    def __del__(self):
+        self.file.close()
+
+
+sys.stdout = DualOutput(report_file)
+
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(message)s",
+    handlers=[logging.FileHandler(report_file, mode="a"), logging.StreamHandler(sys.stdout.stdout)],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -140,9 +175,6 @@ def main():
     finally:
         os.chdir(str(script_dir))
 
-    output_dir = script_dir / "analysis_output"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     root_file_path = output_dir / "tmva_input.root"
     export_data_to_root(ml_data, root_file_path)
 
@@ -154,6 +186,14 @@ def main():
             raise ImportError("TMVA not found in current ROOT installation.")
 
         run_tmva(root_file_path, output_dir, ml_data["features"])
+
+        logger.info("Step: Generating Presentation Artifacts (Phase 2, 3, 4) for TMVA...")
+        save_tmva_plots_with_root(output_dir / "TMVA_Output.root", output_dir / "plots")
+        extract_summary(output_dir / "tmva_raw.log", output_dir / "tmva_summary.md")
+
+        with open(script_dir.parent / "tmva_optimization_completed.txt", "w") as f:
+            f.write("Completed\n")
+
     except ImportError as e:
         logger.error(f"Cannot run TMVA: {e}")
         logger.warning(
@@ -167,14 +207,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    logger.info("Saving TMVA plots and summary to disk...")
-    plot_script = script_dir / "plot_tmva.py"
-    if plot_script.exists():
-        import subprocess
-
-        try:
-            subprocess.run([sys.executable, str(plot_script)], check=True, cwd=str(script_dir))
-            logger.info("Plots and summary saved to TMVA/analysis_output/")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to generate plots and summary: {e}")

@@ -29,11 +29,12 @@ rule run_mva_study:
 
 rule run_tmva_study:
     output:
-        "tmva_optimization_completed.txt"
+        "tmva_optimization_completed.txt",
+        "output/tmva/tmva_summary.md"
     shell:
         """
-        # Run inside the TMVA directory to ensure output drops exactly there
-        cd TMVA
+        # Run inside the tmva directory
+        cd tmva
 
         # Check if we can import ROOT in the current environment
         # Only run TMVA if the TMVA class can be accessed natively
@@ -46,6 +47,8 @@ rule run_tmva_study:
             echo "TMVA study requires a full ROOT installation."
             echo "To run this step properly, please run snakemake inside an environment with ROOT (like conda bphysics)."
             echo "Creating a dummy completion file to allow the pipeline to proceed."
+            mkdir -p ../output/tmva
+            touch ../output/tmva/tmva_summary.md
             touch ../tmva_optimization_completed.txt
         fi
         """
