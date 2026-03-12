@@ -1,0 +1,15 @@
+import sys
+from pathlib import Path
+
+# Add analysis modules to path
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+rule all:
+    input:
+        "output/tis_tos_results.txt"
+
+rule run_tis_tos:
+    output:
+        "output/tis_tos_results.txt"
+    shell:
+        "uv run python tis_tos_study.py > {output} && cat {output}"
