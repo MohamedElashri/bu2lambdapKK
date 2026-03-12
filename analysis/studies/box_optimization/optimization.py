@@ -6,8 +6,8 @@ import logging
 
 import awkward as ak
 import pandas as pd
+from box_optimizer import SelectionOptimizer
 from config_loader import StudyConfig
-from fom_optimizer import SelectionOptimizer
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

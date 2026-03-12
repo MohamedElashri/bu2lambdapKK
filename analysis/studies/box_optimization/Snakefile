@@ -1,0 +1,37 @@
+# Snakefile for Box Cut Optimization Standalone Study
+#
+# Usage:
+#   uv run snakemake -j1
+
+rule all:
+    input:
+        "box_optimization_completed_A.txt",
+        "box_optimization_completed_B.txt",
+        "box_optimization_completed_C.txt"
+
+rule run_box_study_A:
+    output:
+        "box_optimization_completed_A.txt"
+    shell:
+        """
+        python main.py --option A
+        mv box_optimization_completed.txt box_optimization_completed_A.txt
+        """
+
+rule run_box_study_B:
+    output:
+        "box_optimization_completed_B.txt"
+    shell:
+        """
+        python main.py --option B
+        mv box_optimization_completed.txt box_optimization_completed_B.txt
+        """
+
+rule run_box_study_C:
+    output:
+        "box_optimization_completed_C.txt"
+    shell:
+        """
+        python main.py --option C
+        mv box_optimization_completed.txt box_optimization_completed_C.txt
+        """

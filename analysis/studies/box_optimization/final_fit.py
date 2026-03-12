@@ -13,8 +13,8 @@ from typing import Dict
 
 import awkward as ak
 import pandas as pd
+from box_fitter import MassFitter
 from config_loader import StudyConfig
-from fom_fitter import MassFitter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -28,11 +28,11 @@ ETAC_2S_PROXY = "chic1"
 
 
 def apply_cuts_for_state(
-    events: ak.Array, cuts_df: pd.DataFrame, state: str, fom_type: str
+    events: ak.Array, cuts_df: pd.DataFrame, state: str, box_type: str
 ) -> ak.Array:
     """Apply optimized cuts for a given state and FoM type. Falls back to chic1 for etac_2s."""
     lookup_state = state if state != "etac_2s" else ETAC_2S_PROXY
-    state_cuts = cuts_df[(cuts_df["state"] == lookup_state) & (cuts_df["FoM_type"] == fom_type)]
+    state_cuts = cuts_df[(cuts_df["state"] == lookup_state) & (cuts_df["FoM_type"] == box_type)]
     if state_cuts.empty:
         logger.warning(f"No cuts found for state {lookup_state}, returning uncut events.")
         return events
@@ -102,7 +102,7 @@ def perform_final_fit(
 
     for target_state in states_to_run:
         group_label = state_labels[target_state]
-        for fom_type in ["S/sqrt(B)", "S/sqrt(S+B)"]:
+        for box_type in ["S/sqrt(B)", "S/sqrt(S+B)"]:
             source_cuts = target_state if target_state != "etac_2s" else ETAC_2S_PROXY
 
             if getattr(config, "optimization", {}).get("state_dependent", False):
@@ -115,7 +115,7 @@ def perform_final_fit(
 
             logger.info(f"\n{'='*60}")
             logger.info(
-                f"Fitting with {group_label!r} optimal cuts for {fom_type}"
+                f"Fitting with {group_label!r} optimal cuts for {box_type}"
                 + (f" (using {ETAC_2S_PROXY} proxy cuts)" if "no MC" in note else "")
             )
             logger.info(f"{'='*60}")
@@ -123,27 +123,27 @@ def perform_final_fit(
             # Apply this state's cuts to every year
             data_cut = {}
             for year, events in data_prepared.items():
-                data_cut[year] = apply_cuts_for_state(events, cuts_df, target_state, fom_type)
+                data_cut[year] = apply_cuts_for_state(events, cuts_df, target_state, box_type)
                 n_before = len(events)
                 n_after = len(data_cut[year])
                 logger.info(
-                    f"  {year}: {n_before} → {n_after} events after {group_label} ({fom_type}) cuts"
+                    f"  {year}: {n_before} → {n_after} events after {group_label} ({box_type}) cuts"
                 )
 
             fitter = MassFitter(config)
             try:
                 # plot_tag puts all plots for this state's cuts in a dedicated subdir
-                # sanitize fom_type for filename (replace / with _)
-                safe_fom = fom_type.replace("/", "_").replace("+", "plus")
+                # sanitize box_type for filename (replace / with _)
+                safe_fom = box_type.replace("/", "_").replace("+", "plus")
                 plot_tag = f"{group_label}_{safe_fom}_cuts"
                 fit_results = fitter.perform_fit(data_cut, fit_combined=True, plot_tag=plot_tag)
             except Exception as e:
-                logger.error(f"Fit failed for {group_label} ({fom_type}): {e}")
+                logger.error(f"Fit failed for {group_label} ({box_type}): {e}")
                 continue
 
             # Extract yields for each charmonium state from the combined fit
             combined_yields = fit_results.get("yields", {}).get("combined", {})
-            row = {"target_state": group_label, "FoM_type": fom_type, "note": note}
+            row = {"target_state": group_label, "FoM_type": box_type, "note": note}
             for fit_state in FIT_STATES:
                 if fit_state in combined_yields:
                     s_val, s_err = combined_yields[fit_state]
@@ -152,7 +152,7 @@ def perform_final_fit(
                     row[f"{fit_state}_yield"] = "—"
             all_fit_rows.append(row)
 
-            result_key = f"{group_label} ({fom_type})"
+            result_key = f"{group_label} ({box_type})"
             all_fit_results_json[result_key] = {
                 fs: {"yield": combined_yields[fs][0], "error": combined_yields[fs][1]}
                 for fs in FIT_STATES

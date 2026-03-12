@@ -13,12 +13,15 @@ import logging
 import sys
 from pathlib import Path
 
+# Add the parent directory (box_optimization) and its parent to sys.path
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import awkward as ak
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-
-sys.path.insert(0, str(Path(__file__).parent))
 from clean_data_loader import load_all_data, load_all_mc, load_and_preprocess
 from config_loader import StudyConfig
 
@@ -239,7 +242,7 @@ def load_phsp(mc_base: Path, years, track_types) -> ak.Array:
 
 
 def main():
-    config = StudyConfig("fom_config.toml")
+    config = StudyConfig("box_config.toml")
     years = config.paths["years"]
     tt = config.paths.get("track_types", ["LL", "DD"])
     data_base = Path(config.paths["data_base_path"])

@@ -26,7 +26,7 @@ run_study() {
     echo -e "${YELLOW}Start time:${NC} $(date)"
 
     # Run the python script
-    python "$MAIN_SCRIPT" --option "$option"
+    uv run python "$MAIN_SCRIPT" --option "$option"
     exit_code=$?
 
     end_time=$(date +%s)
@@ -43,8 +43,13 @@ run_study() {
     fi
 }
 
-echo -e "${BLUE}Starting FOM Optimization Automation Suite${NC}"
+echo -e "${BLUE}Starting Full Box Cut Optimization Study (Options A, B, C)${NC}"
 echo -e "${BLUE}Project Root: ${YELLOW}${PROJECT_ROOT}${NC}"
+echo ""
+echo "Output will be saved to:"
+echo "  - output/option_A/"
+echo "  - output/option_B/"
+echo "  - output/option_C/"
 echo ""
 
 overall_start=$(date +%s)

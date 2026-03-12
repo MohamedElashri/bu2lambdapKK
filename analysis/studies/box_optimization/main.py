@@ -1,5 +1,5 @@
 """
-Main entry point for FoM Optimization Study
+Main entry point for Box Cut Optimization Study
 """
 
 import argparse
@@ -45,7 +45,7 @@ from signal_extraction import extract_signal_and_validate
 
 
 def main():
-    parser = argparse.ArgumentParser(description="FoM Optimization Study")
+    parser = argparse.ArgumentParser(description="Box Cut Optimization Study")
     parser.add_argument(
         "--option",
         type=str,
@@ -56,9 +56,10 @@ def main():
     args = parser.parse_args()
 
     # Dynamic output directory based on option
-    output_dir = project_root / "analysis_output" / f"option_{args.option}"
+    base_dir = Path(__file__).resolve().parent
+    output_dir = base_dir / "output" / f"option_{args.option}"
     output_dir.mkdir(parents=True, exist_ok=True)
-    report_file = output_dir / "fom_optimization_report.txt"
+    report_file = output_dir / "box_optimization_report.txt"
 
     # Initialize logging and dual output
     global logger
@@ -77,7 +78,7 @@ def main():
     )
     logger = logging.getLogger(__name__)
 
-    logger.info(f"Starting FoM Optimization Study with Option {args.option}...")
+    logger.info(f"Starting Box Cut Optimization Study with Option {args.option}...")
 
     config = StudyConfig(output_dir=output_dir)
 
@@ -121,7 +122,7 @@ def main():
     fit_results = perform_final_fit(config, data_prepared, optimal_cuts_df)
 
     # Touch Snakemake completion file
-    with open("fom_optimization_completed.txt", "w") as f:
+    with open("box_optimization_completed.txt", "w") as f:
         f.write("Completed\n")
 
     logger.info("Study completed successfully.")

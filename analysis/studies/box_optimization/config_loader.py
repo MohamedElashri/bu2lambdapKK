@@ -4,12 +4,12 @@ import tomli
 
 
 class StudyConfig:
-    def __init__(self, config_file="fom_config.toml", output_dir=None):
+    def __init__(self, config_file="box_config.toml", output_dir=None):
         self.config_path = Path(__file__).resolve().parent / config_file
         with open(self.config_path, "rb") as f:
             self.data = tomli.load(f)
 
-        self.output_dir = Path(output_dir) if output_dir else Path("analysis_output")
+        self.output_dir = Path(output_dir) if output_dir else Path("output")
 
         self.paths = self.data.get("paths", {})
         self.mass_windows = self.data.get("mass_windows", {})

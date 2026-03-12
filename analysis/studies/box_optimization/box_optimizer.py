@@ -204,14 +204,14 @@ class SelectionOptimizer:
         return n_sig / np.sqrt(n_bkg + n_sig)
 
     @staticmethod
-    def fom_s_over_sqrt_b(n_sig: float, n_bkg: float) -> float:
+    def box_s_over_sqrt_b(n_sig: float, n_bkg: float) -> float:
         """FoM1 = S / sqrt(B) — optimal when B >> S (high-yield states)."""
         if n_bkg <= 0:
             return 0.0
         return n_sig / np.sqrt(n_bkg)
 
     @staticmethod
-    def fom_s_over_sqrt_s_plus_b(n_sig: float, n_bkg: float) -> float:
+    def box_s_over_sqrt_s_plus_b(n_sig: float, n_bkg: float) -> float:
         """FoM2 = S / sqrt(S + B) — Punzi FOM for low-yield states."""
         denom = np.sqrt(max(n_sig + n_bkg, 0.0))
         if denom <= 0:
@@ -221,8 +221,8 @@ class SelectionOptimizer:
     def get_fom_for_state(self, state: str) -> tuple[str, Any]:
         """Return (fom_name, fom_func) appropriate for the given state's yield regime."""
         if state in self.HIGH_YIELD_STATES:
-            return "S/sqrt(B)", self.fom_s_over_sqrt_b
-        return "S/sqrt(S+B)", self.fom_s_over_sqrt_s_plus_b
+            return "S/sqrt(B)", self.box_s_over_sqrt_b
+        return "S/sqrt(S+B)", self.box_s_over_sqrt_s_plus_b
 
     def define_signal_region(self, state: str) -> tuple[float, float]:
         """Get mass window for counting signal events in FOM"""
@@ -776,8 +776,8 @@ class SelectionOptimizer:
                             continue
                         sig_estimate, bkg_estimate, epsilon = state_s_b[state]
 
-                        fom1 = self.fom_s_over_sqrt_b(sig_estimate, bkg_estimate)
-                        fom2 = self.fom_s_over_sqrt_s_plus_b(sig_estimate, bkg_estimate)
+                        fom1 = self.box_s_over_sqrt_b(sig_estimate, bkg_estimate)
+                        fom2 = self.box_s_over_sqrt_s_plus_b(sig_estimate, bkg_estimate)
                         vals = {"S/sqrt(B)": fom1, "S/sqrt(S+B)": fom2}
 
                         for fom_type, fom_val in vals.items():
@@ -794,8 +794,8 @@ class SelectionOptimizer:
                     s_high = sum(state_s_b.get(st, (0, 0, 0))[0] for st in self.HIGH_YIELD_STATES)
                     b_high = sum(state_s_b.get(st, (0, 0, 0))[1] for st in self.HIGH_YIELD_STATES)
 
-                    fom1_high = self.fom_s_over_sqrt_b(s_high, b_high)
-                    fom2_high = self.fom_s_over_sqrt_s_plus_b(s_high, b_high)
+                    fom1_high = self.box_s_over_sqrt_b(s_high, b_high)
+                    fom2_high = self.box_s_over_sqrt_s_plus_b(s_high, b_high)
 
                     for state in self.HIGH_YIELD_STATES:
                         if state not in state_s_b:
@@ -817,8 +817,8 @@ class SelectionOptimizer:
                     s_low = sum(state_s_b.get(st, (0, 0, 0))[0] for st in self.LOW_YIELD_STATES)
                     b_low = sum(state_s_b.get(st, (0, 0, 0))[1] for st in self.LOW_YIELD_STATES)
 
-                    fom1_low = self.fom_s_over_sqrt_b(s_low, b_low)
-                    fom2_low = self.fom_s_over_sqrt_s_plus_b(s_low, b_low)
+                    fom1_low = self.box_s_over_sqrt_b(s_low, b_low)
+                    fom2_low = self.box_s_over_sqrt_s_plus_b(s_low, b_low)
 
                     for state in self.LOW_YIELD_STATES:
                         if state not in state_s_b:
@@ -949,9 +949,9 @@ class SelectionOptimizer:
         summary_df = pd.DataFrame(state_summary_rows)
 
         # Save markdown table
-        md_path = tables_dir / "fom_optimization_results.md"
+        md_path = tables_dir / "box_optimization_results.md"
         with open(md_path, "w") as mdf:
-            mdf.write("# FoM Optimization Results\n\n")
+            mdf.write("# Box Cut Optimization Results\n\n")
             mdf.write(summary_df.to_markdown(index=False))
             mdf.write("\n\n> **Notes:**\n")
             mdf.write("> - `eta_c(2S)`: No MC yet; inherits `chi_c1` optimal cuts.\n")
@@ -961,7 +961,7 @@ class SelectionOptimizer:
         print(f"\n✓ Saved optimization table: {md_path}")
 
         # Save JSON
-        json_path = output_dir / "fom_optimization_results.json"
+        json_path = output_dir / "box_optimization_results.json"
         with open(json_path, "w") as jf:
             json.dump(state_summary_rows, jf, indent=4)
         print(f"✓ Saved optimization JSON:  {json_path}")
@@ -1210,9 +1210,9 @@ class SelectionOptimizer:
 
                         # Group High FoM
                         if fom_type == "S/sqrt(B)":
-                            val_high = self.fom_s_over_sqrt_b(s_high, b_high)
+                            val_high = self.box_s_over_sqrt_b(s_high, b_high)
                         else:
-                            val_high = self.fom_s_over_sqrt_s_plus_b(s_high, b_high)
+                            val_high = self.box_s_over_sqrt_s_plus_b(s_high, b_high)
 
                         for state in self.HIGH_YIELD_STATES:
                             entry = best_results[state][fom_type]
@@ -1278,9 +1278,9 @@ class SelectionOptimizer:
                             low_b[state] = bkg_est
 
                         if fom_type == "S/sqrt(B)":
-                            val_low = self.fom_s_over_sqrt_b(s_low, b_low)
+                            val_low = self.box_s_over_sqrt_b(s_low, b_low)
                         else:
-                            val_low = self.fom_s_over_sqrt_s_plus_b(s_low, b_low)
+                            val_low = self.box_s_over_sqrt_s_plus_b(s_low, b_low)
 
                         for state in self.LOW_YIELD_STATES:
                             entry = best_results[state][fom_type]
@@ -1429,9 +1429,9 @@ class SelectionOptimizer:
 
         summary_df = pd.DataFrame(state_summary_rows)
 
-        md_path = tables_dir / "fom_optimization_results.md"
+        md_path = tables_dir / "box_optimization_results.md"
         with open(md_path, "w") as mdf:
-            mdf.write("# FoM Optimization Results (Sequential - Option C)\n\n")
+            mdf.write("# Box Cut Optimization Results (Sequential - Option C)\n\n")
             mdf.write(summary_df.to_markdown(index=False))
             mdf.write("\n\n> **Notes:**\n")
             mdf.write("> - `eta_c(2S)`: No MC yet; inherits `chi_c1` optimal cuts.\n")
@@ -1439,7 +1439,7 @@ class SelectionOptimizer:
                 "> - Optimization computed BOTH FoMs for Grouped High vs Low yields in two sequential steps.\n"
             )
 
-        json_path = output_dir / "fom_optimization_results.json"
+        json_path = output_dir / "box_optimization_results.json"
         with open(json_path, "w") as jf:
             json.dump(state_summary_rows, jf, indent=4)
 

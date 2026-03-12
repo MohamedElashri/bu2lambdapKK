@@ -12,9 +12,9 @@ from typing import Dict
 
 import awkward as ak
 import numpy as np
+from box_fitter import MassFitter
+from box_optimizer import SelectionOptimizer
 from config_loader import StudyConfig
-from fom_fitter import MassFitter
-from fom_optimizer import SelectionOptimizer
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
