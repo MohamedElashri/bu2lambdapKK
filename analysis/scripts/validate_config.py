@@ -22,12 +22,9 @@ try:
     config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
     print("Configuration loaded successfully!")
 
-    # Create output directories
+    # Create root output directory if it doesn't exist
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-    (out_path / "tables").mkdir(parents=True, exist_ok=True)
-    (out_path / "plots").mkdir(parents=True, exist_ok=True)
-    (out_path / "results").mkdir(parents=True, exist_ok=True)
 
 except Exception as e:
     print(f"Configuration validation failed: {e}")
