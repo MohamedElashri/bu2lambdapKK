@@ -1,0 +1,63 @@
+# Generator Level Efficiencies (eps_gen) for each state, year, and polarity
+# Extracted from official LHCb MC production
+# If missing (like etac_2s for now), a placeholder of 0.22 is used
+
+[Jpsi.2016]
+MD = {eff = 0.21089, err = 0.00050}
+MU = {eff = 0.21012, err = 0.00048}
+
+[Jpsi.2017]
+MD = {eff = 0.21132, err = 0.00050}
+MU = {eff = 0.21047, err = 0.00049}
+
+[Jpsi.2018]
+MD = {eff = 0.21073, err = 0.00047}
+MU = {eff = 0.21072, err = 0.00047}
+
+[chic0.2016]
+MD = {eff = 0.21133, err = 0.00050}
+MU = {eff = 0.20917, err = 0.00048}
+
+[chic0.2017]
+MD = {eff = 0.21070, err = 0.00050}
+MU = {eff = 0.21087, err = 0.00048}
+
+[chic0.2018]
+MD = {eff = 0.21044, err = 0.00049}
+MU = {eff = 0.21088, err = 0.00048}
+
+[chic1.2016]
+MD = {eff = 0.21063, err = 0.00050}
+MU = {eff = 0.21014, err = 0.00049}
+
+[chic1.2017]
+MD = {eff = 0.21043, err = 0.00050}
+MU = {eff = 0.21006, err = 0.00048}
+
+[chic1.2018]
+MD = {eff = 0.20997, err = 0.00050}
+MU = {eff = 0.21149, err = 0.00047}
+
+[etac.2016]
+MD = {eff = 0.21217, err = 0.00050}
+MU = {eff = 0.21299, err = 0.00049}
+
+[etac.2017]
+MD = {eff = 0.21257, err = 0.00051}
+MU = {eff = 0.21202, err = 0.00049}
+
+[etac.2018]
+MD = {eff = 0.21212, err = 0.00048}
+MU = {eff = 0.21235, err = 0.00047}
+
+[etac_2s.2016]
+MD = {eff = 0.22000, err = 0.00050}
+MU = {eff = 0.22000, err = 0.00050}
+
+[etac_2s.2017]
+MD = {eff = 0.22000, err = 0.00050}
+MU = {eff = 0.22000, err = 0.00050}
+
+[etac_2s.2018]
+MD = {eff = 0.22000, err = 0.00050}
+MU = {eff = 0.22000, err = 0.00050}

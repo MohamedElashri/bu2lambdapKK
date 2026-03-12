@@ -21,8 +21,42 @@ import tomli
 import uproot
 
 
+def get_gen_eff_from_config(
+    state: str, year: str, polarity: str, gen_config: dict
+) -> tuple[float, float]:
+    """Extract generator efficiency and error for a specific state, year, polarity."""
+    # Map state names to config keys if necessary
+    state_map = {
+        "chic0": "chic0",
+        "chic1": "chic1",
+        "chic2": "chic2",
+        "etac": "etac",
+        "Jpsi": "Jpsi",
+    }
+    c_state = state_map.get(state, state)
+
+    # Handle missing states like chic2 using generic placeholder if not in config
+    if c_state not in gen_config:
+        return 0.22, 0.0005
+
+    y_key = f"20{year}"
+    if y_key not in gen_config[c_state]:
+        return 0.22, 0.0005
+
+    if polarity not in gen_config[c_state][y_key]:
+        return 0.22, 0.0005
+
+    data = gen_config[c_state][y_key][polarity]
+    return data.get("eff", 0.22), data.get("err", 0.0005)
+
+
 @dataclass
 class EfficiencyResult:
+    # Generator info
+    gen_eff: float = 0.22
+    gen_err: float = 0.0005
+
+    # Raw counts
     n_total: int = 0
     n_gen: int = 0  # Placeholder for generated count
     n_reco_str: int = 0
@@ -57,6 +91,9 @@ class EfficiencyResult:
     def eff_gen(self) -> float:
         # Placeholder: assume 1.0 or implement lookup from MC report
         return 0.22  # Placeholder 22% for gen
+
+    def get_err_gen(self) -> float:
+        return self.gen_err
 
     @property
     def eff_reco_str(self) -> float:
@@ -114,9 +151,11 @@ def get_luminosity_weights(config: dict) -> Dict[str, float]:
     return {year: float(lumi) / total_lumi for year, lumi in lumi_config.items()}
 
 
-def calculate_efficiencies_for_file(file_path: str, category: str = "LL") -> EfficiencyResult:
+def calculate_efficiencies_for_file(
+    file_path: str, category: str = "LL", gen_eff: float = 0.22, gen_err: float = 0.0005
+) -> EfficiencyResult:
     """Calculate the efficiency steps for a single MC file for a given Lambda category."""
-    result = EfficiencyResult()
+    result = EfficiencyResult(gen_eff=gen_eff, gen_err=gen_err)
 
     try:
         f = uproot.open(file_path)
@@ -437,8 +476,13 @@ def main():
     try:
         with open(f"{args.config_dir}/data.toml", "rb") as f:
             data_config = tomli.load(f)
-        with open(f"{args.config_dir}/luminosity.toml", "rb") as f:
-            lumi_config = {"luminosity": tomli.load(f)}
+        with open(f"{args.config_dir}/selection.toml", "rb") as f:
+            sel_config = tomli.load(f)
+        try:
+            with open(f"{args.config_dir}/generator_effs.toml", "rb") as f:
+                gen_config = tomli.load(f)
+        except Exception:
+            gen_config = {}
     except Exception as e:
         print(f"Error loading configs: {e}")
         return
@@ -463,7 +507,14 @@ def main():
 
                 for pol in polarities:
                     file_path = f"{mc_base}/{state}/{state}_{year}_{pol}.root"
-                    res = calculate_efficiencies_for_file(file_path, category=category)
+
+                    g_eff, g_err = get_gen_eff_from_config(state, year, pol, gen_config)
+                    year_res.gen_eff = g_eff  # For simplicity, since MD/MU effs are almost identical, just take the last one or average later
+                    year_res.gen_err = g_err
+
+                    res = calculate_efficiencies_for_file(
+                        file_path, category=category, gen_eff=g_eff, gen_err=g_err
+                    )
 
                     year_res.n_total += res.n_total
                     year_res.n_reco_str += res.n_reco_str
@@ -527,7 +578,7 @@ def main():
                         "eff_total": year_res.eff_total,
                     },
                     "errors": {
-                        "err_gen": 0.0004,  # Placeholder error
+                        "err_gen": year_res.get_err_gen(),
                         "err_reco_str": year_res.get_err_reco_str(),
                         "err_trig": year_res.get_err_trig(),
                         "err_pre": year_res.get_err_pre(),
