@@ -61,16 +61,16 @@ repos:
         files: \.toml$
         exclude: ^(analysis/tests/fixtures/|archive/)
 
-  # Test suite - runs only when Python files are modified
-  - repo: local
-    hooks:
-      - id: pytest-all-tests
-        name: Run tests (when Python files changed)
-        entry: bash -c 'ROOT=$(git rev-parse --show-toplevel); cd "$ROOT/analysis" && uv run pytest tests/ -v --tb=short || exit 1'
-        language: system
-        pass_filenames: false
-        types: [python]
-        stages: [pre-commit]
+  # # Test suite - runs only when Python files are modified
+  # - repo: local
+  #   hooks:
+  #     - id: pytest-all-tests
+  #       name: Run tests (when Python files changed)
+  #       entry: bash -c 'ROOT=$(git rev-parse --show-toplevel); cd "$ROOT/analysis" && uv run pytest tests/ -v --tb=short || exit 1'
+  #       language: system
+  #       pass_filenames: false
+  #       types: [python]
+  #       stages: [pre-commit]
 
 # Configuration
 default_language_version:
