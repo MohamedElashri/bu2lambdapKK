@@ -304,6 +304,65 @@ def print_trigger_markdown_table(
         file_handle.write(output_str)
 
 
+def print_cancellation_table(
+    states: List[str], categories: List[str], years: List[str], results: dict, file_handle=None
+):
+    output_str = "\n### Efficiency Ratio Relative to J/ψ (Cancellation Test)\n\n"
+    output_str += "If the ratio is close to 1.00, the efficiency cancels out perfectly in the branching fraction measurement.\n\n"
+
+    # We will compute the ratio of each step's efficiency to J/psi
+    for cat in categories:
+        output_str += f"#### {cat} Category\n\n"
+
+        # We'll use Run2 (weighted average) if we calculate it, but currently we just have per year.
+        # Let's just output 2016, 2017, 2018 for now.
+        header = "| State / Step | " + " | ".join([f"20{y}" for y in years]) + " |"
+        sep = "|---|" + "|".join(["---" for _ in years]) + "|"
+        output_str += header + "\n" + sep + "\n"
+
+        steps = [
+            ("ε_gen", "eff_gen"),
+            ("ε_strip+reco", "eff_reco_str"),
+            ("ε_trig", "eff_trig"),
+            ("ε_presel", "eff_pre"),
+            ("ε_tot", "eff_total"),
+        ]
+
+        for state in [s for s in states if s != "Jpsi"]:
+            for step_label, step_key in steps:
+                row_str = f"| **{state}** {step_label} |"
+
+                for year in years:
+                    jpsi_data = results["Jpsi"][cat][f"20{year}"]["efficiencies"]
+                    jpsi_err = results["Jpsi"][cat][f"20{year}"]["errors"]
+
+                    state_data = results[state][cat][f"20{year}"]["efficiencies"]
+                    state_err = results[state][cat][f"20{year}"]["errors"]
+
+                    val_jpsi = jpsi_data[step_key]
+                    val_state = state_data[step_key]
+
+                    err_jpsi = jpsi_err[step_key.replace("eff_", "err_")]
+                    err_state = state_err[step_key.replace("eff_", "err_")]
+
+                    if val_jpsi > 0:
+                        ratio = val_state / val_jpsi
+                        # simple error propagation for ratio A/B = R -> dR = R * sqrt((dA/A)^2 + (dB/B)^2)
+                        rel_err_jpsi = err_jpsi / val_jpsi if val_jpsi > 0 else 0
+                        rel_err_state = err_state / val_state if val_state > 0 else 0
+                        ratio_err = ratio * np.sqrt(rel_err_jpsi**2 + rel_err_state**2)
+
+                        row_str += f" {ratio:.3f} ± {ratio_err:.3f} |"
+                    else:
+                        row_str += " N/A |"
+                output_str += row_str + "\n"
+            output_str += "|---|---|---|---|\n"  # separator between states
+
+    print(output_str, end="")
+    if file_handle:
+        file_handle.write(output_str)
+
+
 def print_markdown_table(
     state: str, categories: List[str], years: List[str], results: dict, file_handle=None
 ):
@@ -466,6 +525,8 @@ def main():
         for state in states:
             print_markdown_table(state, categories, years, results, md_file)
             print_trigger_markdown_table(state, categories, years, results, md_file)
+
+        print_cancellation_table(states, categories, years, results, md_file)
 
     print(f"\nResults saved to {args.output} and {md_output_path}")
 
