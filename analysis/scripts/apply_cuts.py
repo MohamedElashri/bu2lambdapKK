@@ -143,9 +143,7 @@ elif opt_type == "mva":
         )
 
 # Save final cut results
-cache.save(
-    "final_data", data_final, dependencies=dependencies, description="Data after final cuts"
-)
+cache.save("final_data", data_final, dependencies=dependencies, description="Data after final cuts")
 cache.save("final_mc", mc_final, dependencies=dependencies, description="MC after final cuts")
 
 # Write summary

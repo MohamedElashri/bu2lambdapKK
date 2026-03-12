@@ -62,7 +62,9 @@ data_dict = load_all_data(data_base_path, years, track_types)
 logger.info("\n[Loading MC - Signal States]")
 mc_dict = load_all_mc(mc_base_path, states, years, track_types)
 
-cache.save("preprocessed_data", data_dict, dependencies=dependencies, description="Data Pre-processed")
+cache.save(
+    "preprocessed_data", data_dict, dependencies=dependencies, description="Data Pre-processed"
+)
 cache.save("preprocessed_mc", mc_dict, dependencies=dependencies, description="MC Pre-processed")
 
 logger.info("\n✓ Step 2 complete: Data and signal MC loaded successfully")
