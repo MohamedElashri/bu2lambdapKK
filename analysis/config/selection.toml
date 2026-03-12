@@ -3,7 +3,6 @@
 optimization_type = "mva"
 use_pretrained_mva = true
 
-
 [fitting]
 argus_endpoint_offset = 200.0
 bin_width = 5.0

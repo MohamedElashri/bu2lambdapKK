@@ -23,8 +23,13 @@ clean-cache:
 	@echo "Removing cache directory..."
 	rm -rf cache
 
+# Clean catboost info
+clean-catboost:
+	@echo "Removing catboost info directory..."
+	rm -rf catboost_info
+
 # Clean everything (output and cache)
-clean: clean-output clean-cache
+clean: clean-output clean-cache clean-catboost
 	@echo "Removing .snakemake internal directory..."
 	rm -rf .snakemake
 
@@ -45,7 +50,8 @@ help:
 	@echo "  make run          : Run the complete analysis pipeline (default)"
 	@echo "  make rerun        : Force a complete re-run from scratch"
 	@echo "  make dry-run      : Show what would be run without actually executing"
-	@echo "  make clean        : Remove all outputs, cache, and internal snakemake files"
+	@echo "  make clean        : Remove all outputs, cache, catboost info, and internal snakemake files"
 	@echo "  make clean-output : Remove only the analysis_output directory"
 	@echo "  make clean-cache  : Remove only the cache directory"
+	@echo "  make clean-catboost : Remove only the catboost info directory"
 	@echo "  make show-dag     : Generate a PDF of the Snakemake DAG (requires graphviz)"

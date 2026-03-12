@@ -62,14 +62,14 @@ out_path.mkdir(parents=True, exist_ok=True)
 
 if opt_type == "box":
     logger.info("Running Box Optimization")
-    
+
     # We need to concatenate the years for optimization
     data_combined = ak.concatenate(list(data_dict.values()))
     data_comb_dict = {"combined": data_combined}
 
     # SelectionOptimizer expects mc_data dictionary grouped by state
     optimizer = BoxOptimizer(data=data_comb_dict, config=config, mc_data=mc_dict)
-    
+
     if getattr(config, "optimization", {}).get("method") == "mc_based_sequential":
         logger.info("Using Sequential Optimization Method (Option C)")
         optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based_sequential()
@@ -79,10 +79,10 @@ if opt_type == "box":
 
     # Save optimized cuts
     cuts_file = out_path / "optimized_cuts.json"
-    
+
     # Convert DF to dict for JSON serialization
-    results_dict = optimized_cuts_df.to_dict(orient='records')
-    
+    results_dict = optimized_cuts_df.to_dict(orient="records")
+
     with open(cuts_file, "w") as f:
         json.dump(results_dict, f, indent=2)
     logger.info(f"Box Optimization complete. Saved cuts to {cuts_file}")
@@ -90,17 +90,22 @@ if opt_type == "box":
 elif opt_type == "mva":
     # Check for pre-trained tuned model
     use_pretrained = config.data.get("cut_application", {}).get("use_pretrained_mva", True)
-    tuned_model_path = project_root / "studies" / "mva_optimization" / "output" / "models" / "catboost_bdt.cbm"
-    
+    tuned_model_path = (
+        project_root / "studies" / "mva_optimization" / "output" / "models" / "catboost_bdt.cbm"
+    )
+
     if use_pretrained and tuned_model_path.exists():
-        logger.info(f"Found pre-trained tuned CatBoost model at {tuned_model_path}. Loading it instead of re-training.")
+        logger.info(
+            f"Found pre-trained tuned CatBoost model at {tuned_model_path}. Loading it instead of re-training."
+        )
         from catboost import CatBoostClassifier
+
         model = CatBoostClassifier()
         model.load_model(str(tuned_model_path))
-        
+
         # Save copy of the model to main output
         model.save_model(str(Path(output_dir) / "mva_model.cbm"))
-        
+
         features = config.data.get("xgboost", {}).get(
             "features",
             [
@@ -113,17 +118,19 @@ elif opt_type == "mva":
                 "h2_ProbNNk",
             ],
         )
-        optimal_threshold = 0.5 # Default threshold
-        
+        optimal_threshold = 0.5  # Default threshold
+
         cuts_file = out_path / "optimized_cuts.json"
         with open(cuts_file, "w") as f:
             json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
-            
+
         logger.info(f"MVA loading complete. Threshold: {optimal_threshold}. Saved to {cuts_file}")
 
     else:
         if use_pretrained:
-            logger.warning("Pre-trained model requested but not found. Running MVA Optimization (CatBoost) from scratch.")
+            logger.warning(
+                "Pre-trained model requested but not found. Running MVA Optimization (CatBoost) from scratch."
+            )
         else:
             logger.info("Running MVA Optimization (CatBoost) from scratch.")
 
@@ -186,7 +193,9 @@ elif opt_type == "mva":
 
         # Save the model
         model.save_model(str(Path(output_dir) / "mva_model.cbm"))
-        logger.info(f"MVA Optimization complete. Threshold: {optimal_threshold}. Saved to {cuts_file}")
+        logger.info(
+            f"MVA Optimization complete. Threshold: {optimal_threshold}. Saved to {cuts_file}"
+        )
 
 else:
     logger.error(f"Unknown optimization_type: {opt_type}. Must be 'box' or 'mva'.")
