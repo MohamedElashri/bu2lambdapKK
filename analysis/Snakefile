@@ -79,8 +79,8 @@ CONFIG_FILES = [
 rule all:
     input:
         expand(f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv", branch=BRANCHES),
-        expand(f"{OUTPUT_DIR}/{{branch}}/results/final_results.md", branch=BRANCHES),
         f"{OUTPUT_DIR}/comparison/branch_comparison.md",
+        f"{OUTPUT_DIR}/results/bf_products.tex",
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -223,6 +223,18 @@ rule compare_branches:
         report=f"{OUTPUT_DIR}/comparison/branch_comparison.md",
     script:
         "scripts/compare_branches.py"
+
+# ---------------------------------------------------------------------------
+# Step 9: Export final LaTeX tables
+# ---------------------------------------------------------------------------
+rule export_latex_results:
+    input:
+        high_yield=f"{OUTPUT_DIR}/high_yield/tables/branching_fraction_ratios.csv",
+        low_yield=f"{OUTPUT_DIR}/low_yield/tables/branching_fraction_ratios.csv",
+    output:
+        report=f"{OUTPUT_DIR}/results/bf_products.tex",
+    script:
+        "scripts/export_latex_results.py"
 
 # ===========================================================================
 # Convenience targets (not part of the DAG)

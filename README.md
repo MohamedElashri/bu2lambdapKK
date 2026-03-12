@@ -14,21 +14,6 @@ uv run snakemake -j1                  # Run the full pipeline
 See [`analysis/README.md`](analysis/README.md) for full documentation of all pipeline steps,
 configuration options, and output files.
 
-## Repository Structure
-
-```
-├── analysis/          # Snakemake-based analysis pipeline (active)
-│   ├── Snakefile      #   Workflow definition (7 steps)
-│   ├── config/        #   11 TOML configuration files
-│   ├── modules/       #   Core analysis modules
-│   ├── scripts/       #   Snakemake wrapper scripts
-│   └── tests/         #   Test suite
-├── eff/               # Standalone efficiency study scripts
-├── archive/           # Original Makefile-based pipeline (for reference)
-│   └── analysis/      #   Pre-Snakemake code (run_pipeline.py + Makefile)
-└── docs/              # Documentation
-```
-
 ## Pipeline Overview
 
 | Step | Description |
