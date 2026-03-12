@@ -41,13 +41,13 @@ class SelectionOptimizer:
         config: Configuration object
     """
 
-    # State classification for FoM selection (Option B)
+    # State classification for FoM selection
     HIGH_YIELD_STATES = ["jpsi", "etac"]
-    LOW_YIELD_STATES = ["chic0", "chic1"]
-    # States to run the final fit on (includes etac_2s even though no MC for optimization)
-    FIT_STATES = HIGH_YIELD_STATES + LOW_YIELD_STATES + ["etac_2s"]
+    LOW_YIELD_STATES = ["chic0", "chic1", "etac_2s"]
+    # States to run the final fit on
+    FIT_STATES = HIGH_YIELD_STATES + LOW_YIELD_STATES
     # States we can optimize (have MC available)
-    OPTIMIZABLE_STATES = HIGH_YIELD_STATES + LOW_YIELD_STATES
+    OPTIMIZABLE_STATES = ["jpsi", "etac", "chic0", "chic1"]
     # For backward compat in the scan loop
     ALL_STATES = OPTIMIZABLE_STATES
 
@@ -220,8 +220,7 @@ class SelectionOptimizer:
 
     def get_fom_for_state(self, state: str) -> tuple[str, Any]:
         """Return (fom_name, fom_func) appropriate for the given state's yield regime."""
-        if state in self.HIGH_YIELD_STATES:
-            return "S/sqrt(B)", self.box_s_over_sqrt_b
+        # User requested S/sqrt(S+B) for all states
         return "S/sqrt(S+B)", self.box_s_over_sqrt_s_plus_b
 
     def define_signal_region(self, state: str) -> tuple[float, float]:

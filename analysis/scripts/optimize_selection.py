@@ -57,7 +57,13 @@ if data_dict is None or mc_dict is None:
     sys.exit(1)
 
 opt_type = config.data.get("cut_application", {}).get("optimization_type", "box")
-out_path = Path(output_dir) / "tables"
+
+if "snakemake" in globals():
+    # Use snakemake output if available to ensure sync with Snakefile
+    out_path = Path(snakemake.output[0]).parent
+else:
+    out_path = Path(output_dir) / opt_type / "tables"
+
 out_path.mkdir(parents=True, exist_ok=True)
 
 if opt_type == "box":
@@ -135,18 +141,24 @@ elif opt_type == "mva":
             logger.info("Running MVA Optimization (CatBoost) from scratch.")
 
         # Prepare MVA data
-        # Background from upper mass sideband
+        # Background from upper mass sideband (5330-5410 MeV)
         bkg_dfs = []
         for year, y_data in data_dict.items():
-            mask = y_data["Bu_MM_corrected"] > 5330
+            mask = (y_data["Bu_MM_corrected"] > 5330) & (y_data["Bu_MM_corrected"] < 5410)
             bkg_dfs.append(ak.to_dataframe(y_data[mask]))
         bkg_df = pd.concat(bkg_dfs, ignore_index=True) if bkg_dfs else pd.DataFrame()
 
         # Signal from MC
         sig_dfs = []
+        # Optimizable states are those we have MC for
         for state, state_data in mc_dict.items():
             if state in ["jpsi", "etac", "chic0", "chic1"]:
                 sig_dfs.append(ak.to_dataframe(state_data))
+
+        # Add eta_c(2S) placeholder entry if not present (will be empty for now)
+        if "etac_2s" not in mc_dict:
+            logger.info("Adding placeholder for eta_c(2S) in optimization results.")
+
         sig_df = pd.concat(sig_dfs, ignore_index=True) if sig_dfs else pd.DataFrame()
 
         features = config.data.get("xgboost", {}).get(

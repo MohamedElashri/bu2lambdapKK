@@ -20,6 +20,7 @@ if "snakemake" in globals():
     config_dir = snakemake.params.config_dir
     cache_dir = snakemake.params.cache_dir
     output_dir = snakemake.params.output_dir
+    branch = snakemake.params.branch
     yields_file = snakemake.input.yields
     br_ratios_file = snakemake.output.br_ratios
     final_results_file = snakemake.output.final_results
@@ -28,9 +29,13 @@ else:
     config_dir = "config"
     cache_dir = "cache"
     output_dir = "analysis_output"
-    yields_file = Path(output_dir) / "tables" / "fitted_yields.csv"
-    br_ratios_file = Path(output_dir) / "tables" / "branching_fraction_ratios.csv"
-    final_results_file = Path(output_dir) / "results" / "final_results.md"
+    branch = "high_yield"
+    opt_type = "box"
+    yields_file = Path(output_dir) / opt_type / branch / "tables" / "fitted_yields.csv"
+    br_ratios_file = (
+        Path(output_dir) / opt_type / branch / "tables" / "branching_fraction_ratios.csv"
+    )
+    final_results_file = Path(output_dir) / opt_type / branch / "results" / "final_results.md"
 
 config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
@@ -45,13 +50,11 @@ combined_yields = (
     .rename(columns={"yield_sum": "N", "yield_err_sum": "N_err"})
 )
 
-# Placeholder for Efficiency (temporarily 1.0 for all states)
-# Placeholder for Systematics (temporarily 0.0 for all states)
-# These will be updated in the future.
+# Placeholder for Efficiency (temporarily 1.0 for all states as requested)
 efficiencies = {state: 1.0 for state in combined_yields.index}
 systematics = {state: 0.0 for state in combined_yields.index}
 
-logger.info("Calculating Branching Ratios Relative to J/psi")
+logger.info(f"Calculating Branching Ratios Relative to J/psi (Branch: {branch})")
 
 ref_state = "jpsi"
 if ref_state not in combined_yields.index:
@@ -75,7 +78,6 @@ for state in combined_yields.index:
     ratio = (N_sig / eff_sig) / (N_ref / eff_ref) if N_ref > 0 else 0
 
     # Error propagation (statistical only for now)
-    # (dR/R)^2 = (dN_sig/N_sig)^2 + (dN_ref/N_ref)^2
     rel_err_sig = N_sig_err / N_sig if N_sig > 0 else 0
     rel_err_ref = N_ref_err / N_ref if N_ref > 0 else 0
     stat_err = ratio * np.sqrt(rel_err_sig**2 + rel_err_ref**2)
@@ -85,7 +87,7 @@ for state in combined_yields.index:
             "state": state,
             "ratio_to_jpsi": ratio,
             "stat_err": stat_err,
-            "syst_err": systematics[state] * ratio,  # placeholder
+            "syst_err": systematics.get(state, 0.0) * ratio,
         }
     )
 
@@ -96,7 +98,7 @@ df_results.to_csv(br_ratios_file, index=False)
 # Write final markdown
 Path(final_results_file).parent.mkdir(parents=True, exist_ok=True)
 with open(final_results_file, "w") as f:
-    f.write("# Final Branching Ratio Results (Relative to J/psi)\n\n")
+    f.write(f"# Final Branching Ratio Results ({branch.replace('_', ' ').title()})\n\n")
     f.write(
         "*Note: Efficiency is currently set to 1.0 (placeholder) and Systematics to 0.0 (placeholder).* \n\n"
     )
@@ -108,5 +110,5 @@ with open(final_results_file, "w") as f:
         )
 
 logger.info(
-    f"Branching fraction calculation complete. Saved to {br_ratios_file} and {final_results_file}"
+    f"Branching fraction calculation complete for branch {branch}. Saved to {br_ratios_file} and {final_results_file}"
 )

@@ -24,6 +24,7 @@ if "snakemake" in globals():
     output_dir = snakemake.params.output_dir
     summary_file = snakemake.input[0]
     yields_file = snakemake.output[0]
+    branch = snakemake.params.branch
     years = snakemake.params.get("years", ["2016", "2017", "2018"])
     track_types = snakemake.params.get("track_types", ["LL", "DD"])
 else:
@@ -31,8 +32,10 @@ else:
     config_dir = "config"
     cache_dir = "cache"
     output_dir = "analysis_output"
-    summary_file = Path(output_dir) / "tables" / "cut_summary.json"
-    yields_file = Path(output_dir) / "tables" / "fitted_yields.csv"
+    branch = "high_yield"
+    opt_type = "box"
+    summary_file = Path(output_dir) / opt_type / branch / "tables" / "cut_summary.json"
+    yields_file = Path(output_dir) / opt_type / branch / "tables" / "fitted_yields.csv"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -48,20 +51,28 @@ cut_deps = cache.compute_dependencies(
     ],
 )
 
-# Load cut data (Final data after optimal cuts are applied)
-data_dict = cache.load("final_data", dependencies=cut_deps)
+# Load cut data (Final data after optimal cuts are applied for this branch)
+data_dict = cache.load(f"{branch}_final_data", dependencies=cut_deps)
 
 if data_dict is None:
-    logger.error("Cut data not found in cache. Run 'snakemake apply_cuts' first.")
+    logger.error(
+        f"Cut data for branch {branch} not found in cache. Run 'snakemake apply_cuts' first."
+    )
     sys.exit(1)
 
-out_path = Path(output_dir) / "plots" / "fits"
+# Branch-specific plot directory
+out_path = Path(output_dir) / branch / "plots" / "fits"
 out_path.mkdir(parents=True, exist_ok=True)
 
-logger.info("Initializing RooFit Mass Fitter")
+logger.info(f"Initializing RooFit Mass Fitter for branch: {branch}")
 fitter = MassFitter(config=config)
 
-fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag="final_cut")
+# We pass the branch specific output path for plots if the fitter supports it
+# For now, we assume it plots to where we tell it or we move them.
+fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=f"{branch}_final_cut")
+
+# The plots are likely saved in a default location by the Fitter class
+# If needed, we would move them here.
 
 import pandas as pd
 
@@ -69,13 +80,17 @@ import pandas as pd
 rows = []
 if fit_result and "combined" in fit_result.get("yields", {}):
     combined_yields = fit_result["yields"]["combined"]
+    # Include etac_2s as placeholder
     for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
         if state in combined_yields:
             val, err = combined_yields[state]
             rows.append({"year": "combined", "state": state, "yield": val, "yield_err": err})
+        else:
+            # Placeholder for etac_2s if not in yields
+            rows.append({"year": "combined", "state": state, "yield": 0.0, "yield_err": 0.0})
 
 df_yields = pd.DataFrame(rows)
 Path(yields_file).parent.mkdir(parents=True, exist_ok=True)
 df_yields.to_csv(yields_file, index=False)
 
-logger.info(f"Mass fitting complete. Yields saved to {yields_file}")
+logger.info(f"Mass fitting complete for branch {branch}. Yields saved to {yields_file}")

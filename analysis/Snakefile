@@ -25,6 +25,24 @@ STATES = config.get("states", ["jpsi", "etac", "chic0", "chic1"])
 USE_MANUAL_CUTS = config.get("use_manual_cuts", False)
 NO_CACHE = config.get("no_cache", False)
 
+import re
+from pathlib import Path
+
+# Load optimization type from selection.toml
+selection_path = Path(CONFIG_DIR) / "selection.toml"
+OPT_METHOD = "box" # Default
+try:
+    with open(selection_path, "r") as f:
+        content = f.read()
+        # Look for optimization_type in [cut_application] section
+        match = re.search(r'optimization_type\s*=\s*"([^"]+)"', content)
+        if match:
+            OPT_METHOD = match.group(1)
+except Exception as e:
+    print(f"Warning: Could not read {selection_path}: {e}. Defaulting to 'box'")
+
+BRANCHES = ["high_yield", "low_yield"]
+
 # ---------------------------------------------------------------------------
 # Config file list (all 11 TOML files)
 # ---------------------------------------------------------------------------
@@ -49,8 +67,8 @@ CONFIG_FILES = [
 # ---------------------------------------------------------------------------
 rule all:
     input:
-        f"{OUTPUT_DIR}/tables/branching_fraction_ratios.csv",
-        f"{OUTPUT_DIR}/results/final_results.md",
+        expand(f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/branching_fraction_ratios.csv", branch=BRANCHES),
+        expand(f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/results/final_results.md", branch=BRANCHES),
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -92,7 +110,7 @@ rule optimize_selection:
     input:
         f"{OUTPUT_DIR}/.data_loaded",
     output:
-        f"{OUTPUT_DIR}/tables/optimized_cuts.json",
+        f"{OUTPUT_DIR}/{OPT_METHOD}/tables/optimized_cuts.json",
     params:
         use_manual_cuts=USE_MANUAL_CUTS,
         no_cache=NO_CACHE,
@@ -108,10 +126,11 @@ rule optimize_selection:
 rule apply_cuts:
     input:
         data_loaded=f"{OUTPUT_DIR}/.data_loaded",
-        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
+        cuts=f"{OUTPUT_DIR}/{OPT_METHOD}/tables/optimized_cuts.json",
     output:
-        f"{OUTPUT_DIR}/tables/cut_summary.json",
+        summary=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/cut_summary.json",
     params:
+        branch="{branch}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
@@ -124,10 +143,11 @@ rule apply_cuts:
 # ---------------------------------------------------------------------------
 rule mass_fitting:
     input:
-        f"{OUTPUT_DIR}/tables/cut_summary.json",
+        f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/cut_summary.json",
     output:
-        f"{OUTPUT_DIR}/tables/fitted_yields.csv",
+        f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/fitted_yields.csv",
     params:
+        branch="{branch}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
@@ -140,12 +160,13 @@ rule mass_fitting:
 # ---------------------------------------------------------------------------
 rule efficiency_calculation:
     input:
-        summary=f"{OUTPUT_DIR}/tables/cut_summary.json",
-        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
+        summary=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/cut_summary.json",
+        cuts=f"{OUTPUT_DIR}/{OPT_METHOD}/tables/optimized_cuts.json",
     output:
-        efficiencies=f"{OUTPUT_DIR}/tables/efficiencies.csv",
-        ratios=f"{OUTPUT_DIR}/tables/efficiency_ratios.csv",
+        efficiencies=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiencies.csv",
+        ratios=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiency_ratios.csv",
     params:
+        branch="{branch}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
@@ -158,13 +179,14 @@ rule efficiency_calculation:
 # ---------------------------------------------------------------------------
 rule branching_ratios:
     input:
-        yields=f"{OUTPUT_DIR}/tables/fitted_yields.csv",
-        efficiencies=f"{OUTPUT_DIR}/tables/efficiencies.csv",
-        ratios=f"{OUTPUT_DIR}/tables/efficiency_ratios.csv",
+        yields=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/fitted_yields.csv",
+        efficiencies=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiencies.csv",
+        ratios=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiency_ratios.csv",
     output:
-        br_ratios=f"{OUTPUT_DIR}/tables/branching_fraction_ratios.csv",
-        final_results=f"{OUTPUT_DIR}/results/final_results.md",
+        br_ratios=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/branching_fraction_ratios.csv",
+        final_results=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/results/final_results.md",
     params:
+        branch="{branch}",
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
         output_dir=OUTPUT_DIR,

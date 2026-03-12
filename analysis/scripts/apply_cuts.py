@@ -22,7 +22,8 @@ if "snakemake" in globals():
     cache_dir = snakemake.params.cache_dir
     output_dir = snakemake.params.output_dir
     cuts_file = snakemake.input.cuts
-    summary_file = snakemake.output[0]
+    summary_file = snakemake.output.summary
+    branch = snakemake.params.branch
     years = snakemake.params.get("years", ["2016", "2017", "2018"])
     track_types = snakemake.params.get("track_types", ["LL", "DD"])
 else:
@@ -30,8 +31,10 @@ else:
     config_dir = "config"
     cache_dir = "cache"
     output_dir = "analysis_output"
-    cuts_file = Path(output_dir) / "tables" / "optimized_cuts.json"
-    summary_file = Path(output_dir) / "tables" / "cut_summary.json"
+    branch = "high_yield"  # Default for testing
+    opt_type = "box"  # Default for testing
+    cuts_file = Path(output_dir) / opt_type / "tables" / "optimized_cuts.json"
+    summary_file = Path(output_dir) / opt_type / branch / "tables" / "cut_summary.json"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -71,28 +74,30 @@ data_final = {}
 mc_final = {}
 
 if opt_type == "box":
-    logger.info("Applying Box Cuts")
-    # For option A, the cuts are in optimized_cuts under option A results.
-    # Group A: jpsi, etac (High) -> S/sqrt(B)
-    # Group B: chic0, chic1 (Low) -> S/sqrt(S+B)
-    high_yield_states = ["jpsi", "etac"]
-    low_yield_states = ["chic0", "chic1"]
+    logger.info(f"Applying Box Cuts for branch: {branch}")
 
-    # We will use chic1 cuts for data by default.
-    data_cuts = optimized_cuts["chic1"]["S/sqrt(S+B)"]["cuts"]
+    # Identify which state's cuts to use for the whole branch
+    # Branch high_yield uses jpsi cuts; branch low_yield uses chic1 cuts.
+    target_state = "jpsi" if branch == "high_yield" else "chic1"
 
-    # Apply to MC
+    # Find cuts for target_state
+    branch_cuts = None
+    for entry in optimized_cuts:
+        if entry["state"] == target_state:
+            branch_cuts = entry["cuts"]
+            break
+
+    if branch_cuts is None:
+        logger.error(f"Could not find cuts for state {target_state} in {cuts_file}")
+        sys.exit(1)
+
+    # Apply identical cuts to MC and Data per state
+    # 1. Apply to MC
     for state, state_data in mc_dict.items():
-        if state in high_yield_states:
-            cuts = optimized_cuts[state]["S/sqrt(B)"]["cuts"]
-        elif state in low_yield_states:
-            cuts = optimized_cuts[state]["S/sqrt(S+B)"]["cuts"]
-        else:  # etac_2s or fallback
-            cuts = optimized_cuts["chic1"]["S/sqrt(S+B)"]["cuts"]
-
         mask = ak.ones_like(state_data["Bu_MM"], dtype=bool)
-        for var, cut_val in cuts.items():
-            if var == "Bu_DTF_chi2" or var == "Bu_IPCHI2_OWNPV":
+        for var, cut_val in branch_cuts.items():
+            # Heuristic for cut direction if not explicitly saved:
+            if any(x in var for x in ["chi2", "IP", "FD"]):
                 mask = mask & (state_data[var] < cut_val)
             else:
                 mask = mask & (state_data[var] > cut_val)
@@ -100,11 +105,11 @@ if opt_type == "box":
         mc_final[state] = state_data[mask]
         logger.info(f"MC {state} passed cuts: {len(mc_final[state])} / {len(state_data)}")
 
-    # Apply to Data (same cuts for all data, we use the low yield chic1 S/sqrt(S+B) cuts as baseline)
+    # 2. Apply to Data (same branch cuts for all data)
     for year, y_data in data_dict.items():
         mask = ak.ones_like(y_data["Bu_MM"], dtype=bool)
-        for var, cut_val in data_cuts.items():
-            if var == "Bu_DTF_chi2" or var == "Bu_IPCHI2_OWNPV":
+        for var, cut_val in branch_cuts.items():
+            if any(x in var for x in ["chi2", "IP", "FD"]):
                 mask = mask & (y_data[var] < cut_val)
             else:
                 mask = mask & (y_data[var] > cut_val)
@@ -113,7 +118,7 @@ if opt_type == "box":
         logger.info(f"Data {year} passed cuts: {len(data_final[year])} / {len(y_data)}")
 
 elif opt_type == "mva":
-    logger.info("Applying MVA Cuts")
+    logger.info(f"Applying MVA Cuts (Branch: {branch})")
     threshold = optimized_cuts.get("mva_threshold", 0.5)
     features = optimized_cuts.get("features", [])
 
@@ -122,7 +127,8 @@ elif opt_type == "mva":
     model = CatBoostClassifier()
     model.load_model(str(Path(output_dir) / "mva_model.cbm"))
 
-    # Apply to MC
+    # Apply identical MVA threshold to MC and Data
+    # 1. Apply to MC
     for state, state_data in mc_dict.items():
         df = ak.to_dataframe(state_data)[features]
         preds = model.predict_proba(df)[:, 1]
@@ -132,7 +138,7 @@ elif opt_type == "mva":
             f"MC {state} passed MVA > {threshold}: {len(mc_final[state])} / {len(state_data)}"
         )
 
-    # Apply to Data
+    # 2. Apply to Data
     for year, y_data in data_dict.items():
         df = ak.to_dataframe(y_data)[features]
         preds = model.predict_proba(df)[:, 1]
@@ -142,17 +148,27 @@ elif opt_type == "mva":
             f"Data {year} passed MVA > {threshold}: {len(data_final[year])} / {len(y_data)}"
         )
 
-# Save final cut results
-cache.save("final_data", data_final, dependencies=dependencies, description="Data after final cuts")
-cache.save("final_mc", mc_final, dependencies=dependencies, description="MC after final cuts")
+# Save final cut results with branch-specific prefix
+cache.save(
+    f"{branch}_final_data",
+    data_final,
+    dependencies=dependencies,
+    description=f"Data after {branch} cuts",
+)
+cache.save(
+    f"{branch}_final_mc", mc_final, dependencies=dependencies, description=f"MC after {branch} cuts"
+)
 
 # Write summary
 summary = {
     "optimization_type": opt_type,
+    "branch": branch,
     "mc_yields": {k: len(v) for k, v in mc_final.items()},
     "data_yields": {k: len(v) for k, v in data_final.items()},
 }
 
+summary_path = Path(summary_file)
+summary_path.parent.mkdir(parents=True, exist_ok=True)
 with open(summary_file, "w") as f:
     json.dump(summary, f, indent=2)
 
