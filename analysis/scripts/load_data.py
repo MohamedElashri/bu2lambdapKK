@@ -43,8 +43,8 @@ dependencies = cache.compute_dependencies(
 )
 
 if not no_cache:
-    data_dict = cache.load("step2_data", dependencies=dependencies)
-    mc_dict = cache.load("step2_mc", dependencies=dependencies)
+    data_dict = cache.load("preprocessed_data", dependencies=dependencies)
+    mc_dict = cache.load("preprocessed_mc", dependencies=dependencies)
 
     if data_dict is not None and mc_dict is not None:
         logger.info("✓ Loaded cached data and signal MC")
@@ -62,7 +62,7 @@ data_dict = load_all_data(data_base_path, years, track_types)
 logger.info("\n[Loading MC - Signal States]")
 mc_dict = load_all_mc(mc_base_path, states, years, track_types)
 
-cache.save("step2_data", data_dict, dependencies=dependencies, description="Data Pre-processed")
-cache.save("step2_mc", mc_dict, dependencies=dependencies, description="MC Pre-processed")
+cache.save("preprocessed_data", data_dict, dependencies=dependencies, description="Data Pre-processed")
+cache.save("preprocessed_mc", mc_dict, dependencies=dependencies, description="MC Pre-processed")
 
 logger.info("\n✓ Step 2 complete: Data and signal MC loaded successfully")

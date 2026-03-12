@@ -73,7 +73,7 @@ rule load_data:
     input:
         f"{OUTPUT_DIR}/.config_validated",
     output:
-        touch(f"{OUTPUT_DIR}/.step2_complete"),
+        touch(f"{OUTPUT_DIR}/.data_loaded"),
     params:
         years=YEARS,
         track_types=TRACK_TYPES,
@@ -90,7 +90,7 @@ rule load_data:
 # ---------------------------------------------------------------------------
 rule optimize_selection:
     input:
-        f"{OUTPUT_DIR}/.step2_complete",
+        f"{OUTPUT_DIR}/.data_loaded",
     output:
         f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     params:
@@ -107,10 +107,10 @@ rule optimize_selection:
 # ---------------------------------------------------------------------------
 rule apply_cuts:
     input:
-        step2=f"{OUTPUT_DIR}/.step2_complete",
+        data_loaded=f"{OUTPUT_DIR}/.data_loaded",
         cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     output:
-        f"{OUTPUT_DIR}/tables/step4_summary.json",
+        f"{OUTPUT_DIR}/tables/cut_summary.json",
     params:
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
@@ -124,9 +124,9 @@ rule apply_cuts:
 # ---------------------------------------------------------------------------
 rule mass_fitting:
     input:
-        f"{OUTPUT_DIR}/tables/step4_summary.json",
+        f"{OUTPUT_DIR}/tables/cut_summary.json",
     output:
-        f"{OUTPUT_DIR}/tables/step5_yields.csv",
+        f"{OUTPUT_DIR}/tables/fitted_yields.csv",
     params:
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
@@ -140,7 +140,7 @@ rule mass_fitting:
 # ---------------------------------------------------------------------------
 rule efficiency_calculation:
     input:
-        summary=f"{OUTPUT_DIR}/tables/step4_summary.json",
+        summary=f"{OUTPUT_DIR}/tables/cut_summary.json",
         cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     output:
         efficiencies=f"{OUTPUT_DIR}/tables/efficiencies.csv",
@@ -158,7 +158,7 @@ rule efficiency_calculation:
 # ---------------------------------------------------------------------------
 rule branching_ratios:
     input:
-        yields=f"{OUTPUT_DIR}/tables/step5_yields.csv",
+        yields=f"{OUTPUT_DIR}/tables/fitted_yields.csv",
         efficiencies=f"{OUTPUT_DIR}/tables/efficiencies.csv",
         ratios=f"{OUTPUT_DIR}/tables/efficiency_ratios.csv",
     output:

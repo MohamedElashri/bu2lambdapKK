@@ -31,7 +31,7 @@ else:
     cache_dir = "cache"
     output_dir = "analysis_output"
     cuts_file = Path(output_dir) / "tables" / "optimized_cuts.json"
-    summary_file = Path(output_dir) / "tables" / "step4_summary.json"
+    summary_file = Path(output_dir) / "tables" / "cut_summary.json"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -39,7 +39,7 @@ config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
-step2_deps = cache.compute_dependencies(
+preprocessed_deps = cache.compute_dependencies(
     config_files=list(Path(config_dir).glob("*.toml")),
     code_files=[
         project_root / "modules" / "clean_data_loader.py",
@@ -54,9 +54,9 @@ dependencies = cache.compute_dependencies(
     ],
 )
 
-# Load step 2 data
-data_dict = cache.load("step2_data", dependencies=step2_deps)
-mc_dict = cache.load("step2_mc", dependencies=step2_deps)
+# Load preprocessed data
+data_dict = cache.load("preprocessed_data", dependencies=preprocessed_deps)
+mc_dict = cache.load("preprocessed_mc", dependencies=preprocessed_deps)
 
 if data_dict is None or mc_dict is None:
     logger.error("Step 2 data not found in cache. Run 'snakemake load_data' first.")
@@ -142,11 +142,11 @@ elif opt_type == "mva":
             f"Data {year} passed MVA > {threshold}: {len(data_final[year])} / {len(y_data)}"
         )
 
-# Save final step 4 results
+# Save final cut results
 cache.save(
-    "step4_data_final", data_final, dependencies=dependencies, description="Data after final cuts"
+    "final_data", data_final, dependencies=dependencies, description="Data after final cuts"
 )
-cache.save("step4_mc_final", mc_final, dependencies=dependencies, description="MC after final cuts")
+cache.save("final_mc", mc_final, dependencies=dependencies, description="MC after final cuts")
 
 # Write summary
 summary = {

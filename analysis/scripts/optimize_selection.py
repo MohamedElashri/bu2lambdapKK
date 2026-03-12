@@ -39,7 +39,7 @@ config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
-step2_deps = cache.compute_dependencies(
+preprocessed_deps = cache.compute_dependencies(
     config_files=list(Path(config_dir).glob("*.toml")),
     code_files=[
         project_root / "modules" / "clean_data_loader.py",
@@ -48,9 +48,9 @@ step2_deps = cache.compute_dependencies(
     extra_params={"years": years, "track_types": track_types},
 )
 
-# Load step 2 data
-data_dict = cache.load("step2_data", dependencies=step2_deps)
-mc_dict = cache.load("step2_mc", dependencies=step2_deps)
+# Load preprocessed data
+data_dict = cache.load("preprocessed_data", dependencies=preprocessed_deps)
+mc_dict = cache.load("preprocessed_mc", dependencies=preprocessed_deps)
 
 if data_dict is None or mc_dict is None:
     logger.error("Step 2 data not found in cache. Run 'snakemake load_data' first.")

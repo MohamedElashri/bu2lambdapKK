@@ -31,8 +31,8 @@ else:
     config_dir = "config"
     cache_dir = "cache"
     output_dir = "analysis_output"
-    summary_file = Path(output_dir) / "tables" / "step4_summary.json"
-    yields_file = Path(output_dir) / "tables" / "step5_yields.csv"
+    summary_file = Path(output_dir) / "tables" / "cut_summary.json"
+    yields_file = Path(output_dir) / "tables" / "fitted_yields.csv"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -40,19 +40,19 @@ config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
-# Re-compute dependencies matching step 4 apply cuts
-step4_deps = cache.compute_dependencies(
+# Re-compute dependencies matching apply cuts
+cut_deps = cache.compute_dependencies(
     config_files=list(Path(config_dir).glob("*.toml")),
     code_files=[
         project_root / "scripts" / "apply_cuts.py",
     ],
 )
 
-# Load step 4 data (Final data after optimal cuts are applied)
-data_dict = cache.load("step4_data_final", dependencies=step4_deps)
+# Load cut data (Final data after optimal cuts are applied)
+data_dict = cache.load("final_data", dependencies=cut_deps)
 
 if data_dict is None:
-    logger.error("Step 4 data not found in cache. Run 'snakemake apply_cuts' first.")
+    logger.error("Cut data not found in cache. Run 'snakemake apply_cuts' first.")
     sys.exit(1)
 
 out_path = Path(output_dir) / "plots" / "fits"
@@ -65,7 +65,7 @@ fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag="final_cu
 
 import pandas as pd
 
-# Extract yields to save to step5_yields.csv
+# Extract yields to save to fitted_yields.csv
 rows = []
 if fit_result and "combined" in fit_result.get("yields", {}):
     combined_yields = fit_result["yields"]["combined"]
@@ -78,4 +78,4 @@ df_yields = pd.DataFrame(rows)
 Path(yields_file).parent.mkdir(parents=True, exist_ok=True)
 df_yields.to_csv(yields_file, index=False)
 
-logger.info(f"Step 5 mass fitting complete. Yields saved to {yields_file}")
+logger.info(f"Mass fitting complete. Yields saved to {yields_file}")

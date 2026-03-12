@@ -29,7 +29,7 @@ else:
     config_dir = "config"
     cache_dir = "cache"
     output_dir = "analysis_output"
-    summary_file = Path(output_dir) / "tables" / "step4_summary.json"
+    summary_file = Path(output_dir) / "tables" / "cut_summary.json"
     cuts_file = Path(output_dir) / "tables" / "optimized_cuts.json"
     eff_file = Path(output_dir) / "tables" / "efficiencies.csv"
     ratios_file = Path(output_dir) / "tables" / "efficiency_ratios.csv"
@@ -39,16 +39,16 @@ config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
 # Re-compute dependencies
-step4_deps = cache.compute_dependencies(
+cut_deps = cache.compute_dependencies(
     config_files=list(Path(config_dir).glob("*.toml")),
     code_files=[
         project_root / "scripts" / "apply_cuts.py",
     ],
 )
 
-mc_final = cache.load("step4_mc_final", dependencies=step4_deps)
+mc_final = cache.load("final_mc", dependencies=cut_deps)
 mc_generated = cache.load(
-    "step2_mc_generated_counts",
+    "mc_generated_counts",
     dependencies=cache.compute_dependencies(
         config_files=list(Path(config_dir).glob("*.toml")),
         code_files=[
@@ -60,7 +60,7 @@ mc_generated = cache.load(
 )
 
 if mc_final is None:
-    logger.error("Step 4 data not found in cache. Run 'snakemake apply_cuts' first.")
+    logger.error("Cut data not found in cache. Run 'snakemake apply_cuts' first.")
     sys.exit(1)
 
 # For now, we are calculating a placeholder efficiency (setting it to 1.0 everywhere)
@@ -88,4 +88,4 @@ for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
 df_ratios = pd.DataFrame(ratios_rows)
 df_ratios.to_csv(ratios_file, index=False)
 
-logger.info(f"Step 6 efficiency calculation complete. Saved to {eff_file} and {ratios_file}")
+logger.info(f"Efficiency calculation complete. Saved to {eff_file} and {ratios_file}")

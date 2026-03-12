@@ -28,7 +28,7 @@ else:
     config_dir = "config"
     cache_dir = "cache"
     output_dir = "analysis_output"
-    yields_file = Path(output_dir) / "tables" / "step5_yields.csv"
+    yields_file = Path(output_dir) / "tables" / "fitted_yields.csv"
     br_ratios_file = Path(output_dir) / "tables" / "branching_fraction_ratios.csv"
     final_results_file = Path(output_dir) / "results" / "final_results.md"
 
