@@ -41,7 +41,6 @@ CONFIG_FILES = [
         "paths.toml",
         "luminosity.toml",
         "branching_fractions.toml",
-        "particles.toml",
     ]
 ]
 
@@ -52,8 +51,6 @@ rule all:
     input:
         f"{OUTPUT_DIR}/tables/branching_fraction_ratios.csv",
         f"{OUTPUT_DIR}/results/final_results.md",
-        f"{OUTPUT_DIR}/tables/yield_consistency.csv",
-        f"{OUTPUT_DIR}/plots/yield_consistency_check.pdf",
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -95,7 +92,7 @@ rule optimize_selection:
     input:
         f"{OUTPUT_DIR}/.step2_complete",
     output:
-        f"{OUTPUT_DIR}/tables/optimized_cuts.csv",
+        f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     params:
         use_manual_cuts=USE_MANUAL_CUTS,
         no_cache=NO_CACHE,
@@ -111,7 +108,7 @@ rule optimize_selection:
 rule apply_cuts:
     input:
         step2=f"{OUTPUT_DIR}/.step2_complete",
-        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.csv",
+        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     output:
         f"{OUTPUT_DIR}/tables/step4_summary.json",
     params:
@@ -144,7 +141,7 @@ rule mass_fitting:
 rule efficiency_calculation:
     input:
         summary=f"{OUTPUT_DIR}/tables/step4_summary.json",
-        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.csv",
+        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     output:
         efficiencies=f"{OUTPUT_DIR}/tables/efficiencies.csv",
         ratios=f"{OUTPUT_DIR}/tables/efficiency_ratios.csv",
@@ -167,8 +164,6 @@ rule branching_ratios:
     output:
         br_ratios=f"{OUTPUT_DIR}/tables/branching_fraction_ratios.csv",
         final_results=f"{OUTPUT_DIR}/results/final_results.md",
-        consistency_csv=f"{OUTPUT_DIR}/tables/yield_consistency.csv",
-        consistency_plot=f"{OUTPUT_DIR}/plots/yield_consistency_check.pdf",
     params:
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
