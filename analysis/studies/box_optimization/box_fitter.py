@@ -105,8 +105,15 @@ class MassFitter:
             ROOT.RooRealVar for mass observable
         """
         if self.mass_var is None:
+            # Use labels from config if available (Phase 5 refactor)
+            labels_cfg = getattr(self.config, "labels", {})
+            obs_name = labels_cfg.get("mass_observable_name", "M_LpKm")
+            obs_label = labels_cfg.get(
+                "mass_observable_label", "M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]"
+            )
+
             self.mass_var = ROOT.RooRealVar(  # type: ignore
-                "M_LpKm", "M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]", self.fit_range[0], self.fit_range[1]
+                obs_name, obs_label, self.fit_range[0], self.fit_range[1]
             )
             # Set binning for plotting and binned fits
             self.mass_var.setBins(self.nbins)  # type: ignore
@@ -527,25 +534,17 @@ class MassFitter:
     ) -> None:
         """
         Plot fit result with official LHCb publication style
-
-        Creates LHCb-style two-panel plot with:
-        - Upper panel: fit with data, model components
-        - Lower panel: pull distribution
-        - Data points with error bars
-        - Total fit curve (solid blue)
-        - Signal components (solid red lines)
-        - Background component (dashed gray)
-        - Compact legend in upper right
-        - Year label on plot
-        - Dynamic particle labels positioned above peaks
-
-        Args:
-            year: Year string (or "combined")
-            mass_var: Observable mass variable
-            dataset: RooDataSet or RooDataHist with data
-            model: Total PDF
-            yields: Dictionary of yield parameters
         """
+        # Load plotting config (Phase 5 refactor)
+        fitting_cfg = getattr(self.config, "fitting", {})
+        plotting_cfg = fitting_cfg.get("plotting", {})
+        labels_cfg = fitting_cfg.get("labels", {})
+
+        plot_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
+        state_labels = plotting_cfg.get("labels", {})
+        state_masses = plotting_cfg.get("mass_positions", {})
+        label_multipliers = plotting_cfg.get("label_multipliers", {})
+
         # Create RooPlot (no title, we'll add it as text)
         frame = mass_var.frame(ROOT.RooFit.Title(""))  # type: ignore
 
@@ -567,8 +566,8 @@ class MassFitter:
             ROOT.RooFit.LineStyle(ROOT.kSolid),  # type: ignore
         )
 
-        # Plot all signal components in red (solid lines, matching official style)
-        for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
+        # Plot signal components
+        for state in plot_states:
             component_name = f"pdf_signal_{state}"
             model.plotOn(
                 frame,
@@ -657,7 +656,6 @@ class MassFitter:
 
         # Get pull values from histogram
         for i in range(pull_hist.GetN()):
-            x = pull_hist.GetPointX(i)
             y = pull_hist.GetPointY(i)
             if abs(y) < 10:  # Exclude outliers
                 pull_mean += y
@@ -689,46 +687,31 @@ class MassFitter:
         fit_info_right.SetTextSize(0.032)
         fit_info_right.SetTextColor(ROOT.kBlack)  # type: ignore
 
-        # Get fit statistics (top 10 most important quantities)
-        total_events = sum(y.getVal() for y in yields.values())
-        n_jpsi = yields["jpsi"].getVal()
-        n_jpsi_err = yields["jpsi"].getError()
-        n_etac = yields["etac"].getVal()
-        n_etac_err = yields["etac"].getError()
-        n_chic0 = yields["chic0"].getVal()
-        n_chic0_err = yields["chic0"].getError()
-        n_chic1 = yields["chic1"].getVal()
-        n_chic1_err = yields["chic1"].getError()
-        n_etac2s = yields["etac_2s"].getVal()
-        n_etac2s_err = yields["etac_2s"].getError()
+        # Header labels from config
+        y_header = labels_cfg.get("yields_header", "#bf{Yields}")
+        i_header = labels_cfg.get("fit_info_header", "#bf{Fit Info}")
+
+        # Left column - yields
+        fit_info_left.AddText(y_header)
+        for state in plot_states:
+            if state in yields:
+                val = yields[state].getVal()
+                err = yields[state].getError()
+                l_tex = state_labels.get(state, state)
+                fit_info_left.AddText(f"N_{{{l_tex}}} = {val:.0f} #pm {err:.0f}")
+
+        # Right column - fit info
         n_bkg = yields["background"].getVal()
         n_bkg_err = yields["background"].getError()
         sigma_res = self.resolution.getVal()  # type: ignore
         sigma_res_err = self.resolution.getError()  # type: ignore
+        n_signal = sum(yields[s].getVal() for s in plot_states if s in yields)
+        total_events_fit = n_signal + n_bkg
 
-        # Left column - yields
-        fit_info_left.AddText("#bf{Yields}")
-        fit_info_left.AddText(f"N_{{J/#psi}} = {n_jpsi:.0f} #pm {n_jpsi_err:.0f}")
-        fit_info_left.AddText(f"N_{{#eta_{{c}}}} = {n_etac:.0f} #pm {n_etac_err:.0f}")
-        fit_info_left.AddText(f"N_{{#chi_{{c0}}}} = {n_chic0:.0f} #pm {n_chic0_err:.0f}")
-        fit_info_left.AddText(f"N_{{#chi_{{c1}}}} = {n_chic1:.0f} #pm {n_chic1_err:.0f}")
-        fit_info_left.AddText(f"N_{{#eta_{{c}}(2S)}} = {n_etac2s:.0f} #pm {n_etac2s_err:.0f}")
-
-        # Right column - fit info
-        # Calculate fit quality metrics
-        n_signal = n_jpsi + n_etac + n_chic0 + n_chic1 + n_etac2s
-
-        # Get fit quality from fit result if available
-        fit_status = "N/A"
-        edm = -1
-        if fit_result is not None:
-            fit_status = "OK" if fit_result.status() == 0 else "FAILED"
-            edm = fit_result.edm()
-
-        fit_info_right.AddText("#bf{Fit Info}")
+        fit_info_right.AddText(i_header)
         fit_info_right.AddText(f"N_{{bkg}} = {n_bkg:.0f} #pm {n_bkg_err:.0f}")
         fit_info_right.AddText(f"N_{{sig}} = {n_signal:.0f}")
-        fit_info_right.AddText(f"N_{{tot}} = {total_events:.0f}")
+        fit_info_right.AddText(f"N_{{tot}} = {total_events_fit:.0f}")
         fit_info_right.AddText(f"#sigma_{{res}} = {sigma_res:.1f} #pm {sigma_res_err:.1f} MeV")
         fit_info_right.AddText(f"Pull: #mu = {pull_mean:.2f}, #sigma = {pull_rms:.2f}")
 
@@ -736,8 +719,6 @@ class MassFitter:
         n_params = fit_result.floatParsFinal().getSize() if fit_result is not None else 0
         n_bins = int((self.fit_range[1] - self.fit_range[0]) / self.bin_width)
         ndof = max(1, n_bins - n_params)
-
-        # ROOT frame.chiSquare(n_params) returns chi2 / ndof
         chi2_ndof_ratio = frame.chiSquare(n_params)
         chi2 = chi2_ndof_ratio * ndof
         fit_info_right.AddText(f"#chi^{{2}} / ndf = {chi2:.1f} / {ndof} = {chi2_ndof_ratio:.2f}")
@@ -754,12 +735,10 @@ class MassFitter:
         legend.SetTextFont(132)  # Times-like font for professional look
         legend.SetMargin(0.15)
 
-        # Add legend entries (simplified, matching official style)
-        legend.AddEntry("data", "Data", "l")  # Use line instead of lep for smaller indicator
+        legend.AddEntry("data", "Data", "l")
         legend.AddEntry("total", "Full model", "l")
-        legend.AddEntry("jpsi", "Signal", "l")  # All signals shown as one entry
+        legend.AddEntry(plot_states[0], "Signal", "l")
         legend.AddEntry("background", "Background", "l")
-
         legend.Draw()
 
         # Dynamically position state labels ABOVE peaks
@@ -768,73 +747,22 @@ class MassFitter:
         state_text.SetTextSize(0.04)
         state_text.SetTextAlign(21)  # Center-aligned, bottom-aligned
 
-        # Define states to label with their LaTeX names
-        states_to_label = {
-            "etac": ("#eta_{c}", 2983.9),  # ηc(1S)
-            "jpsi": ("J/#psi", 3096.9),  # J/ψ
-            "chic0": ("#chi_{c0}", 3414.1),  # χc0
-            "chic1": ("#chi_{c1}", 3510.7),  # χc1
-            "etac_2s": ("#eta_{c}(2S)", 3637.6),  # ηc(2S)
-        }
+        for state in plot_states:
+            label = state_labels.get(state, state)
+            mass_pdg = state_masses.get(state, 0.0)
+            if mass_pdg == 0.0:
+                continue
 
-        # Evaluate model at each state's mass to get peak height
-        for state, (label, mass_pdg) in states_to_label.items():
-            # Set mass variable to this state's mass
             mass_var.setVal(mass_pdg)
-
-            # Get the total PDF value at this mass (normalized to bin content)
             norm_set = ROOT.RooArgSet(mass_var)
             pdf_value = model.getVal(norm_set)
 
-            # Convert PDF value to plot coordinates (multiply by number of events and bin width)
-            total_events = sum(y.getVal() for y in yields.values())
-            bin_content = pdf_value * total_events * self.bin_width
+            bin_content = pdf_value * total_events_fit * self.bin_width
 
-            # Position label well above the peak to avoid error bars overlap
-            # Individual settings for each particle and year
-            # Format: {state: {"combined": mult, "2016": mult, "2017": mult, "2018": mult}}
-            label_multipliers = {
-                "etac": {
-                    "combined": 1.30,  # ηc(1S) combined
-                    "2016": 1.55,  # ηc(1S) 2016
-                    "2017": 1.30,  # ηc(1S) 2017
-                    "2018": 1.40,  # ηc(1S) 2018
-                },
-                "jpsi": {
-                    "combined": 1.15,  # J/ψ combined
-                    "2016": 1.30,  # J/ψ 2016
-                    "2017": 1.30,  # J/ψ 2017
-                    "2018": 1.10,  # J/ψ 2018
-                },
-                "chic0": {
-                    "combined": 1.65,  # χc0 combined
-                    "2016": 1.90,  # χc0 2016
-                    "2017": 1.90,  # χc0 2017
-                    "2018": 1.90,  # χc0 2018
-                },
-                "chic1": {
-                    "combined": 1.40,  # χc1 combined
-                    "2016": 1.90,  # χc1 2016
-                    "2017": 1.90,  # χc1 2017
-                    "2018": 1.90,  # χc1 2018
-                },
-                "etac_2s": {
-                    "combined": 1.55,  # ηc(2S) combined
-                    "2016": 2.00,  # ηc(2S) 2016
-                    "2017": 1.90,  # ηc(2S) 2017
-                    "2018": 1.90,  # ηc(2S) 2018
-                },
-            }
+            mult_map = label_multipliers.get(state, {})
+            mult = mult_map.get(year, mult_map.get("combined", 1.30))
+            label_y = bin_content * mult
 
-            # Get the appropriate multiplier for this state and year
-            # Use default multiplier for unknown years (e.g., test data)
-            if year in label_multipliers[state]:
-                label_y = bin_content * label_multipliers[state][year]
-            else:
-                # Default to combined multiplier for unknown years
-                label_y = bin_content * label_multipliers[state].get("combined", 1.30)
-
-            # Don't place label if peak is too small (less than 5% of max)
             if bin_content > y_max * 0.05:
                 state_text.DrawLatex(mass_pdg, label_y, label)
 

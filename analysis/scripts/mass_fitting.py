@@ -78,13 +78,16 @@ import pandas as pd
 rows = []
 if fit_result and "combined" in fit_result.get("yields", {}):
     combined_yields = fit_result["yields"]["combined"]
-    # Include etac_2s as placeholder
-    for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
+    # Get states from config (Phase 5 refactor)
+    plotting_cfg = config.fitting.get("plotting", {})
+    all_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
+
+    for state in all_states:
         if state in combined_yields:
             val, err = combined_yields[state]
             rows.append({"year": "combined", "state": state, "yield": val, "yield_err": err})
         else:
-            # Placeholder for etac_2s if not in yields
+            # Placeholder for states not in yields (like etac_2s)
             rows.append({"year": "combined", "state": state, "yield": 0.0, "yield_err": 0.0})
 
 df_yields = pd.DataFrame(rows)

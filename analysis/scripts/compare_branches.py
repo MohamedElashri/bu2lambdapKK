@@ -98,16 +98,25 @@ def compare_branches(high_path_prefix, low_path_prefix, output_file):
     if high_br is not None and low_br is not None:
         report.append("## Branching Fraction Ratio Comparison\n")
         merged_br = pd.merge(high_br, low_br, on="state", suffixes=("_high", "_low"))
+
+        # Check for column names (Phase 5 refactor uses ratio_to_ref)
+        col_high = (
+            "ratio_to_ref_high"
+            if "ratio_to_ref_high" in merged_br.columns
+            else "ratio_to_jpsi_high"
+        )
+        col_low = (
+            "ratio_to_ref_low" if "ratio_to_ref_low" in merged_br.columns else "ratio_to_jpsi_low"
+        )
+
         merged_br["diff_percent"] = (
-            (merged_br["ratio_to_jpsi_low"] - merged_br["ratio_to_jpsi_high"])
-            / merged_br["ratio_to_jpsi_high"]
-            * 100
+            (merged_br[col_low] - merged_br[col_high]) / merged_br[col_high] * 100
         )
 
         table_cols = [
             "state",
-            "ratio_to_jpsi_high",
-            "ratio_to_jpsi_low",
+            col_high,
+            col_low,
             "bf_product_high",
             "bf_product_low",
             "diff_percent",

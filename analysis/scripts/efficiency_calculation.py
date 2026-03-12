@@ -57,11 +57,15 @@ if mc_final is None:
     )
     sys.exit(1)
 
-# As requested, we maintain a placeholder efficiency of 1.0 for now.
+# Get states from config (Phase 5 refactor)
+plotting_cfg = config.fitting.get("plotting", {})
+all_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
+ref_state = plotting_cfg.get("ref_state", "jpsi")
+
 logger.info(f"Calculating Efficiencies for branch {branch} (using placeholder 1.0 as requested)")
 
 eff_rows = []
-for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
+for state in all_states:
     eff_rows.append(
         {"state": state, "efficiency": 1.0, "efficiency_err": 0.0, "note": "Placeholder"}
     )
@@ -70,11 +74,11 @@ df_eff = pd.DataFrame(eff_rows)
 Path(eff_file).parent.mkdir(parents=True, exist_ok=True)
 df_eff.to_csv(eff_file, index=False)
 
-# Ratios relative to J/psi
+# Ratios relative to ref_state from config
 ratios_rows = []
-for state in ["jpsi", "etac", "chic0", "chic1", "etac_2s"]:
+for state in all_states:
     ratios_rows.append(
-        {"state": state, "ratio_to_jpsi": 1.0, "ratio_err": 0.0, "note": "Placeholder"}
+        {"state": state, "ratio_to_ref": 1.0, "ratio_err": 0.0, "note": "Placeholder"}
     )
 
 df_ratios = pd.DataFrame(ratios_rows)

@@ -69,19 +69,22 @@ combined_yields = (
 )
 
 # Placeholder for Efficiency (temporarily 1.0 for all states as requested)
-efficiencies = {state: 1.0 for state in combined_yields.index}
-systematics = {state: 0.0 for state in combined_yields.index}
+# Get plotting/labels config (Phase 5 refactor)
+plotting_cfg = config.fitting.get("plotting", {})
+state_labels = plotting_cfg.get("labels", {})
+ref_state = plotting_cfg.get("ref_state", "jpsi")
+ref_label = state_labels.get(ref_state, "J/psi")
 
-logger.info(f"Calculating Branching Ratios Relative to J/psi (Branch: {branch})")
+logger.info(f"Calculating Branching Ratios Relative to {ref_label} (Branch: {branch})")
 
-ref_state = "jpsi"
 if ref_state not in combined_yields.index:
-    logger.error(f"Reference state {ref_state} not found in yields!")
+    logger.error(f"Reference state {ref_state} ({ref_label}) not found in yields!")
     sys.exit(1)
 
 N_ref = combined_yields.loc[ref_state, "N"]
 N_ref_err = combined_yields.loc[ref_state, "N_err"]
-eff_ref = efficiencies[ref_state]
+# Placeholder for Efficiency (temporarily 1.0 for all states as requested)
+eff_ref = 1.0
 
 results = []
 for state in combined_yields.index:
@@ -90,7 +93,7 @@ for state in combined_yields.index:
 
     N_sig = combined_yields.loc[state, "N"]
     N_sig_err = combined_yields.loc[state, "N_err"]
-    eff_sig = efficiencies[state]
+    eff_sig = 1.0  # Placeholder
 
     # R = (N_sig / eff_sig) / (N_ref / eff_ref)
     ratio = (N_sig / eff_sig) / (N_ref / eff_ref) if N_ref > 0 else 0
@@ -112,11 +115,11 @@ for state in combined_yields.index:
     results.append(
         {
             "state": state,
-            "ratio_to_jpsi": ratio,
+            "ratio_to_ref": ratio,
             "ratio_stat_err": ratio_stat_err,
             "bf_product": bf_product,
             "bf_product_err": bf_product_err,
-            "syst_err": systematics.get(state, 0.0) * ratio,
+            "syst_err": 0.0 * ratio,  # Placeholder
         }
     )
 
@@ -131,11 +134,12 @@ with open(final_results_file, "w") as f:
     f.write(
         "*Note: Efficiency is currently set to 1.0 (placeholder) and Systematics to 0.0 (placeholder).* \n\n"
     )
-    f.write("| State | Ratio to J/psi | Ratio Stat Err | BF Product | Err |\n")
+    f.write(f"| State | Ratio to {ref_label} | Ratio Stat Err | BF Product | Err |\n")
     f.write("|-------|----------------|----------------|------------|-----|\n")
     for _, row in df_results.iterrows():
+        l_tex = state_labels.get(row["state"], row["state"])
         f.write(
-            f"| {row['state']:<7} | {row['ratio_to_jpsi']:.5f} | ± {row['ratio_stat_err']:.5f} | {row['bf_product']:.2e} | ± {row['bf_product_err']:.2e} |\n"
+            f"| {l_tex:<7} | {row['ratio_to_ref']:.5f} | ± {row['ratio_stat_err']:.5f} | {row['bf_product']:.2e} | ± {row['bf_product_err']:.2e} |\n"
         )
 
 logger.info(

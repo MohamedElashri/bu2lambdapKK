@@ -52,6 +52,37 @@ Fitting Strategy:
 - Tolerance: Standard value for physics analyses
 """
 
+[labels]
+fit_info_header = "#bf{Fit Info}"
+mass_observable_label = "M(#bar{#Lambda}pK^{-}) [MeV/c^{2}]"
+mass_observable_name = "M_LpKm"
+yields_header = "#bf{Yields}"
+
+[plotting]
+ref_state = "jpsi"
+states = ["jpsi", "etac", "chic0", "chic1", "etac_2s"]
+
+[plotting.label_multipliers]
+chic0 = {combined = 3.50, 2016 = 4.00, 2017 = 3.50, 2018 = 3.50}
+chic1 = {combined = 5.00, 2016 = 5.50, 2017 = 5.00, 2018 = 5.00}
+etac = {combined = 1.30, 2016 = 1.55, 2017 = 1.30, 2018 = 1.30}
+etac_2s = {combined = 3.00, 2016 = 3.50, 2017 = 3.00, 2018 = 3.00}
+jpsi = {combined = 1.15, 2016 = 1.15, 2017 = 1.15, 2018 = 1.15}
+
+[plotting.labels]
+chic0 = "#chi_{c0}"
+chic1 = "#chi_{c1}"
+etac = "#eta_{c}"
+etac_2s = "#eta_{c}(2S)"
+jpsi = "J/#psi"
+
+[plotting.mass_positions]
+chic0 = 3414.1
+chic1 = 3510.7
+etac = 2983.9
+etac_2s = 3637.6
+jpsi = 3096.9
+
 [shared_parameters]
 share_background_shape = false  # Background can vary per year (different run conditions)
 # Parameters shared across years to increase statistics
