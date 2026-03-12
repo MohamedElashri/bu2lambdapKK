@@ -69,6 +69,7 @@ rule all:
     input:
         expand(f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/branching_fraction_ratios.csv", branch=BRANCHES),
         expand(f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/results/final_results.md", branch=BRANCHES),
+        f"{OUTPUT_DIR}/{OPT_METHOD}/comparison/branch_comparison.md",
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -193,6 +194,18 @@ rule branching_ratios:
     script:
         "scripts/branching_ratios.py"
 
+
+# ---------------------------------------------------------------------------
+# Step 8: Branch comparison
+# ---------------------------------------------------------------------------
+rule compare_branches:
+    input:
+        high_yield=f"{OUTPUT_DIR}/{OPT_METHOD}/high_yield/results/final_results.md",
+        low_yield=f"{OUTPUT_DIR}/{OPT_METHOD}/low_yield/results/final_results.md",
+    output:
+        report=f"{OUTPUT_DIR}/{OPT_METHOD}/comparison/branch_comparison.md",
+    script:
+        "scripts/compare_branches.py"
 
 # ===========================================================================
 # Convenience targets (not part of the DAG)

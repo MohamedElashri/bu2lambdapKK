@@ -38,7 +38,27 @@ else:
     final_results_file = Path(output_dir) / opt_type / branch / "results" / "final_results.md"
 
 config_path = Path(config_dir) / "selection.toml"
+physics_path = Path(config_dir) / "physics.toml"
+
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+
+# Load physics constants
+with open(physics_path, "rb") as f:
+    physics_data = tomli.load(f)
+pdg_bf = physics_data.get("pdg_branching_fractions", {})
+
+br_bu_jpsi_k = pdg_bf.get("bu_to_jpsi_k", {}).get("value", 1.0)
+br_bu_jpsi_k_err = pdg_bf.get("bu_to_jpsi_k", {}).get("error", 0.0)
+br_jpsi_lpkk = pdg_bf.get("jpsi_to_lpkk", {}).get("value", 1.0)
+br_jpsi_lpkk_err = pdg_bf.get("jpsi_to_lpkk", {}).get("error", 0.0)
+
+# Normalization factor: Br(B+ -> J/psi K+) * Br(J/psi -> p K- Lambda)
+norm_factor = br_bu_jpsi_k * br_jpsi_lpkk
+norm_factor_rel_err = (
+    np.sqrt((br_bu_jpsi_k_err / br_bu_jpsi_k) ** 2 + (br_jpsi_lpkk_err / br_jpsi_lpkk) ** 2)
+    if norm_factor > 0
+    else 0
+)
 
 # Load yields
 df_yields = pd.read_csv(yields_file)
@@ -80,13 +100,24 @@ for state in combined_yields.index:
     # Error propagation (statistical only for now)
     rel_err_sig = N_sig_err / N_sig if N_sig > 0 else 0
     rel_err_ref = N_ref_err / N_ref if N_ref > 0 else 0
-    stat_err = ratio * np.sqrt(rel_err_sig**2 + rel_err_ref**2)
+    ratio_stat_err = ratio * np.sqrt(rel_err_sig**2 + rel_err_ref**2)
+
+    # Absolute Branching Fraction: B(B+ -> X K+) * B(X -> p K- Lambda)
+    absolute_br = ratio * norm_factor
+    # Propagate ratio error and normalization error
+    absolute_br_err = (
+        absolute_br * np.sqrt((ratio_stat_err / ratio) ** 2 + norm_factor_rel_err**2)
+        if ratio > 0
+        else 0
+    )
 
     results.append(
         {
             "state": state,
             "ratio_to_jpsi": ratio,
-            "stat_err": stat_err,
+            "ratio_stat_err": ratio_stat_err,
+            "absolute_br": absolute_br,
+            "absolute_br_err": absolute_br_err,
             "syst_err": systematics.get(state, 0.0) * ratio,
         }
     )
@@ -102,11 +133,11 @@ with open(final_results_file, "w") as f:
     f.write(
         "*Note: Efficiency is currently set to 1.0 (placeholder) and Systematics to 0.0 (placeholder).* \n\n"
     )
-    f.write("| State | Ratio to J/psi | Stat Error | Syst Error |\n")
-    f.write("|-------|----------------|------------|------------|\n")
+    f.write("| State | Ratio to J/psi | Ratio Stat Err | Absolute BR | Abs Err |\n")
+    f.write("|-------|----------------|----------------|-------------|---------|\n")
     for _, row in df_results.iterrows():
         f.write(
-            f"| {row['state']:<5} | {row['ratio_to_jpsi']:.5f} | ± {row['stat_err']:.5f} | ± {row['syst_err']:.5f} |\n"
+            f"| {row['state']:<7} | {row['ratio_to_jpsi']:.5f} | ± {row['ratio_stat_err']:.5f} | {row['absolute_br']:.2e} | ± {row['absolute_br_err']:.2e} |\n"
         )
 
 logger.info(

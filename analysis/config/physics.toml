@@ -18,9 +18,9 @@ Many systematic uncertainties cancel in the ratio.
 normalization = "self_normalization"
 
 [pdg_branching_fractions]
-# Known from PDG (for information/future use)
-bu_to_jpsi_k = {value = 1.032e-3, error = 0.034e-3}  # B⁺ → J/ψ K⁺
-bu_to_jpsi_x = {value = 1.09e-2, error = 0.03e-2}  # Inclusive
+# Values (PDG 2024 benchmarks)
+bu_to_jpsi_k = {value = 1.020e-3, error = 0.019e-3}  # B⁺ → J/ψ K⁺
+jpsi_to_lpkk = {value = 8.6e-4, error = 1.1e-4}  # J/ψ → p K⁻ Λ̄ + c.c.
 
 [pdg_masses]
 chic0 = 3414.71  # χc0(1P)

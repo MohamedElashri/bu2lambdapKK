@@ -1,6 +1,6 @@
 [cut_application]
 # Set the desired optimization type ("box" or "mva")
-optimization_type = "mva"
+optimization_type = "box"
 use_pretrained_mva = true
 
 [fitting]
