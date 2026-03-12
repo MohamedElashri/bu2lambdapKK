@@ -1,0 +1,15 @@
+import sys
+from pathlib import Path
+
+# Add analysis modules to path
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+rule all:
+    input:
+        "output/efficiencies.json"
+
+rule calculate_efficiencies:
+    output:
+        "output/efficiencies.json"
+    shell:
+        "uv run python calculate_efficiencies.py --config-dir ../../config --output {output}"
