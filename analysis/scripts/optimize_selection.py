@@ -63,7 +63,7 @@ if "snakemake" in globals():
     # Use snakemake output if available to ensure sync with Snakefile
     out_path = Path(snakemake.output[0]).parent
 else:
-    out_path = Path(output_dir) / opt_type / "tables"
+    out_path = Path(output_dir) / opt_type / "models"
 
 out_path.mkdir(parents=True, exist_ok=True)
 

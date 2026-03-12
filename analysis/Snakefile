@@ -122,7 +122,7 @@ rule optimize_selection:
     input:
         f"{OUTPUT_DIR}/.data_loaded",
     output:
-        f"{OUTPUT_DIR}/tables/optimized_cuts.json",
+        f"{OUTPUT_DIR}/models/optimized_cuts.json",
     params:
         use_manual_cuts=USE_MANUAL_CUTS,
         no_cache=NO_CACHE,
@@ -141,7 +141,7 @@ rule optimize_selection:
 rule apply_cuts:
     input:
         data_loaded=f"{OUTPUT_DIR}/.data_loaded",
-        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
+        cuts=f"{OUTPUT_DIR}/models/optimized_cuts.json",
     output:
         summary=f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
     params:
@@ -179,7 +179,7 @@ rule mass_fitting:
 rule efficiency_calculation:
     input:
         summary=f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
-        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
+        cuts=f"{OUTPUT_DIR}/models/optimized_cuts.json",
     output:
         efficiencies=f"{OUTPUT_DIR}/{{branch}}/tables/efficiencies.csv",
         ratios=f"{OUTPUT_DIR}/{{branch}}/tables/efficiency_ratios.csv",

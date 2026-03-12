@@ -65,13 +65,8 @@ out_path.mkdir(parents=True, exist_ok=True)
 logger.info(f"Initializing RooFit Mass Fitter for branch: {branch}")
 fitter = MassFitter(config=config)
 
-plot_tag = f"{branch}_{opt_method}"
 # We pass the absolute path for plots to the fitter via plot_tag
-fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=plot_tag)
-
-# Move plots to the branch-specific plot directory
-for pdf_file in Path("../output/plots/fits").glob(f"{plot_tag}/mass_fit_*.pdf"):
-    pdf_file.rename(out_path / pdf_file.name)
+fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=str(out_path.absolute()))
 
 import pandas as pd
 
