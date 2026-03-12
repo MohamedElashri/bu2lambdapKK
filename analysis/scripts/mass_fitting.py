@@ -9,10 +9,7 @@ if str(project_root) not in sys.path:
 
 from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
-
-# Import the actual Box Fitter
-sys.path.insert(0, str(project_root / "studies" / "box_optimization"))
-from box_fitter import MassFitter
+from modules.mass_fitter import MassFitter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,13 +22,15 @@ if "snakemake" in globals():
     summary_file = snakemake.input[0]
     yields_file = snakemake.output[0]
     branch = snakemake.params.branch
+    opt_method = snakemake.params.get("opt_method", "box")
     years = snakemake.params.get("years", ["2016", "2017", "2018"])
     track_types = snakemake.params.get("track_types", ["LL", "DD"])
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "analysis_output/box/cache"
-    output_dir = "analysis_output/box"
+    opt_method = "box"
+    cache_dir = f"analysis_output/{opt_method}/cache"
+    output_dir = f"analysis_output/{opt_method}"
     branch = "high_yield"
     summary_file = Path(output_dir) / branch / "tables" / "cut_summary.json"
     yields_file = Path(output_dir) / branch / "tables" / "fitted_yields.csv"
@@ -66,11 +65,13 @@ out_path.mkdir(parents=True, exist_ok=True)
 logger.info(f"Initializing RooFit Mass Fitter for branch: {branch}")
 fitter = MassFitter(config=config)
 
+plot_tag = f"{branch}_{opt_method}"
 # We pass the absolute path for plots to the fitter via plot_tag
-fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=str(out_path.absolute()))
+fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=plot_tag)
 
-# The plots are likely saved in a default location by the Fitter class
-# If needed, we would move them here.
+# Move plots to the branch-specific plot directory
+for pdf_file in Path("../output/plots/fits").glob(f"{plot_tag}/mass_fit_*.pdf"):
+    pdf_file.rename(out_path / pdf_file.name)
 
 import pandas as pd
 

@@ -12,8 +12,7 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from studies.box_optimization.box_optimizer import SelectionOptimizer as BoxOptimizer
-
+from modules.box_optimizer import SelectionOptimizer as BoxOptimizer
 from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
 

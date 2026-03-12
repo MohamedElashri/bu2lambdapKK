@@ -169,6 +169,7 @@ rule mass_fitting:
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
         output_dir=OUTPUT_DIR,
+        opt_method=OPT_METHOD,
     script:
         "scripts/mass_fitting.py"
 
