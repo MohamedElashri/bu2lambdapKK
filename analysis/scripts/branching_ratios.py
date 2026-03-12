@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import tomli
 
 # Ensure the project root is on sys.path
 project_root = Path(__file__).resolve().parent.parent
@@ -27,15 +28,12 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "cache"
-    output_dir = "analysis_output"
+    cache_dir = "analysis_output/box/cache"
+    output_dir = "analysis_output/box"
     branch = "high_yield"
-    opt_type = "box"
-    yields_file = Path(output_dir) / opt_type / branch / "tables" / "fitted_yields.csv"
-    br_ratios_file = (
-        Path(output_dir) / opt_type / branch / "tables" / "branching_fraction_ratios.csv"
-    )
-    final_results_file = Path(output_dir) / opt_type / branch / "results" / "final_results.md"
+    yields_file = Path(output_dir) / branch / "tables" / "fitted_yields.csv"
+    br_ratios_file = Path(output_dir) / branch / "tables" / "branching_fraction_ratios.csv"
+    final_results_file = Path(output_dir) / branch / "results" / "final_results.md"
 
 config_path = Path(config_dir) / "selection.toml"
 physics_path = Path(config_dir) / "physics.toml"
@@ -102,11 +100,11 @@ for state in combined_yields.index:
     rel_err_ref = N_ref_err / N_ref if N_ref > 0 else 0
     ratio_stat_err = ratio * np.sqrt(rel_err_sig**2 + rel_err_ref**2)
 
-    # Absolute Branching Fraction: B(B+ -> X K+) * B(X -> p K- Lambda)
-    absolute_br = ratio * norm_factor
+    # Branching Fraction (BF) Product: B(B+ -> X K+) * B(X -> p K- Lambda)
+    bf_product = ratio * norm_factor
     # Propagate ratio error and normalization error
-    absolute_br_err = (
-        absolute_br * np.sqrt((ratio_stat_err / ratio) ** 2 + norm_factor_rel_err**2)
+    bf_product_err = (
+        bf_product * np.sqrt((ratio_stat_err / ratio) ** 2 + norm_factor_rel_err**2)
         if ratio > 0
         else 0
     )
@@ -116,8 +114,8 @@ for state in combined_yields.index:
             "state": state,
             "ratio_to_jpsi": ratio,
             "ratio_stat_err": ratio_stat_err,
-            "absolute_br": absolute_br,
-            "absolute_br_err": absolute_br_err,
+            "bf_product": bf_product,
+            "bf_product_err": bf_product_err,
             "syst_err": systematics.get(state, 0.0) * ratio,
         }
     )
@@ -133,11 +131,11 @@ with open(final_results_file, "w") as f:
     f.write(
         "*Note: Efficiency is currently set to 1.0 (placeholder) and Systematics to 0.0 (placeholder).* \n\n"
     )
-    f.write("| State | Ratio to J/psi | Ratio Stat Err | Absolute BR | Abs Err |\n")
-    f.write("|-------|----------------|----------------|-------------|---------|\n")
+    f.write("| State | Ratio to J/psi | Ratio Stat Err | BF Product | Err |\n")
+    f.write("|-------|----------------|----------------|------------|-----|\n")
     for _, row in df_results.iterrows():
         f.write(
-            f"| {row['state']:<7} | {row['ratio_to_jpsi']:.5f} | ± {row['ratio_stat_err']:.5f} | {row['absolute_br']:.2e} | ± {row['absolute_br_err']:.2e} |\n"
+            f"| {row['state']:<7} | {row['ratio_to_jpsi']:.5f} | ± {row['ratio_stat_err']:.5f} | {row['bf_product']:.2e} | ± {row['bf_product_err']:.2e} |\n"
         )
 
 logger.info(

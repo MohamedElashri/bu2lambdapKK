@@ -29,12 +29,11 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "cache"
-    output_dir = "analysis_output"
+    cache_dir = "analysis_output/box/cache"
+    output_dir = "analysis_output/box"
     branch = "high_yield"  # Default for testing
-    opt_type = "box"  # Default for testing
-    cuts_file = Path(output_dir) / opt_type / "tables" / "optimized_cuts.json"
-    summary_file = Path(output_dir) / opt_type / branch / "tables" / "cut_summary.json"
+    cuts_file = Path(output_dir) / "tables" / "optimized_cuts.json"
+    summary_file = Path(output_dir) / branch / "tables" / "cut_summary.json"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -144,7 +143,7 @@ elif opt_type == "mva":
     from catboost import CatBoostClassifier
 
     model = CatBoostClassifier()
-    model.load_model(str(Path(output_dir) / "mva_model.cbm"))
+    model.load_model(str(Path(output_dir) / "models" / "mva_model.cbm"))
 
     # Apply identical MVA threshold to MC and Data
     # 1. Apply to MC

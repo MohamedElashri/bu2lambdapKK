@@ -28,14 +28,13 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "cache"
-    output_dir = "analysis_output"
+    cache_dir = "analysis_output/box/cache"
+    output_dir = "analysis_output/box"
     branch = "high_yield"
-    opt_type = "box"
-    summary_file = Path(output_dir) / opt_type / branch / "tables" / "cut_summary.json"
-    cuts_file = Path(output_dir) / opt_type / "tables" / "optimized_cuts.json"
-    eff_file = Path(output_dir) / opt_type / branch / "tables" / "efficiencies.csv"
-    ratios_file = Path(output_dir) / opt_type / branch / "tables" / "efficiency_ratios.csv"
+    summary_file = Path(output_dir) / branch / "tables" / "cut_summary.json"
+    cuts_file = Path(output_dir) / "tables" / "optimized_cuts.json"
+    eff_file = Path(output_dir) / branch / "tables" / "efficiencies.csv"
+    ratios_file = Path(output_dir) / branch / "tables" / "efficiency_ratios.csv"
 
 config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)

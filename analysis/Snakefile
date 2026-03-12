@@ -16,7 +16,7 @@ configfile: "snakemake_config.yaml"
 # ---------------------------------------------------------------------------
 CONFIG_DIR = config.get("config_dir", "config")
 CACHE_DIR = config.get("cache_dir", "cache")
-OUTPUT_DIR = config.get("output_dir", "analysis_output")
+ROOT_OUTPUT_DIR = config.get("output_dir", "analysis_output")
 
 YEARS = config.get("years", ["2016", "2017", "2018"])
 TRACK_TYPES = config.get("track_types", ["LL", "DD"])
@@ -40,6 +40,11 @@ try:
             OPT_METHOD = match.group(1)
 except Exception as e:
     print(f"Warning: Could not read {selection_path}: {e}. Defaulting to 'box'")
+
+# Redefine output and cache directories to be method-specific
+# This ensures that all markers and intermediate files are isolated
+OUTPUT_DIR = f"{ROOT_OUTPUT_DIR}/{OPT_METHOD}"
+CACHE_DIR = f"{OUTPUT_DIR}/cache"
 
 BRANCHES = ["high_yield", "low_yield"]
 
@@ -67,9 +72,9 @@ CONFIG_FILES = [
 # ---------------------------------------------------------------------------
 rule all:
     input:
-        expand(f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/branching_fraction_ratios.csv", branch=BRANCHES),
-        expand(f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/results/final_results.md", branch=BRANCHES),
-        f"{OUTPUT_DIR}/{OPT_METHOD}/comparison/branch_comparison.md",
+        expand(f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv", branch=BRANCHES),
+        expand(f"{OUTPUT_DIR}/{{branch}}/results/final_results.md", branch=BRANCHES),
+        f"{OUTPUT_DIR}/comparison/branch_comparison.md",
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -111,13 +116,15 @@ rule optimize_selection:
     input:
         f"{OUTPUT_DIR}/.data_loaded",
     output:
-        f"{OUTPUT_DIR}/{OPT_METHOD}/tables/optimized_cuts.json",
+        f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     params:
         use_manual_cuts=USE_MANUAL_CUTS,
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
         output_dir=OUTPUT_DIR,
+        years=YEARS,
+        track_types=TRACK_TYPES,
     script:
         "scripts/optimize_selection.py"
 
@@ -127,15 +134,17 @@ rule optimize_selection:
 rule apply_cuts:
     input:
         data_loaded=f"{OUTPUT_DIR}/.data_loaded",
-        cuts=f"{OUTPUT_DIR}/{OPT_METHOD}/tables/optimized_cuts.json",
+        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     output:
-        summary=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/cut_summary.json",
+        summary=f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
     params:
         branch="{branch}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
         output_dir=OUTPUT_DIR,
+        years=YEARS,
+        track_types=TRACK_TYPES,
     script:
         "scripts/apply_cuts.py"
 
@@ -144,9 +153,9 @@ rule apply_cuts:
 # ---------------------------------------------------------------------------
 rule mass_fitting:
     input:
-        f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/cut_summary.json",
+        f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
     output:
-        f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/fitted_yields.csv",
+        f"{OUTPUT_DIR}/{{branch}}/tables/fitted_yields.csv",
     params:
         branch="{branch}",
         no_cache=NO_CACHE,
@@ -161,11 +170,11 @@ rule mass_fitting:
 # ---------------------------------------------------------------------------
 rule efficiency_calculation:
     input:
-        summary=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/cut_summary.json",
-        cuts=f"{OUTPUT_DIR}/{OPT_METHOD}/tables/optimized_cuts.json",
+        summary=f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
+        cuts=f"{OUTPUT_DIR}/tables/optimized_cuts.json",
     output:
-        efficiencies=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiencies.csv",
-        ratios=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiency_ratios.csv",
+        efficiencies=f"{OUTPUT_DIR}/{{branch}}/tables/efficiencies.csv",
+        ratios=f"{OUTPUT_DIR}/{{branch}}/tables/efficiency_ratios.csv",
     params:
         branch="{branch}",
         no_cache=NO_CACHE,
@@ -180,12 +189,12 @@ rule efficiency_calculation:
 # ---------------------------------------------------------------------------
 rule branching_ratios:
     input:
-        yields=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/fitted_yields.csv",
-        efficiencies=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiencies.csv",
-        ratios=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/efficiency_ratios.csv",
+        yields=f"{OUTPUT_DIR}/{{branch}}/tables/fitted_yields.csv",
+        efficiencies=f"{OUTPUT_DIR}/{{branch}}/tables/efficiencies.csv",
+        ratios=f"{OUTPUT_DIR}/{{branch}}/tables/efficiency_ratios.csv",
     output:
-        br_ratios=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/tables/branching_fraction_ratios.csv",
-        final_results=f"{OUTPUT_DIR}/{OPT_METHOD}/{{branch}}/results/final_results.md",
+        br_ratios=f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
+        final_results=f"{OUTPUT_DIR}/{{branch}}/results/final_results.md",
     params:
         branch="{branch}",
         config_dir=CONFIG_DIR,
@@ -200,10 +209,10 @@ rule branching_ratios:
 # ---------------------------------------------------------------------------
 rule compare_branches:
     input:
-        high_yield=f"{OUTPUT_DIR}/{OPT_METHOD}/high_yield/results/final_results.md",
-        low_yield=f"{OUTPUT_DIR}/{OPT_METHOD}/low_yield/results/final_results.md",
+        high_yield=f"{OUTPUT_DIR}/high_yield/results/final_results.md",
+        low_yield=f"{OUTPUT_DIR}/low_yield/results/final_results.md",
     output:
-        report=f"{OUTPUT_DIR}/{OPT_METHOD}/comparison/branch_comparison.md",
+        report=f"{OUTPUT_DIR}/comparison/branch_comparison.md",
     script:
         "scripts/compare_branches.py"
 

@@ -30,8 +30,8 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "cache"
-    output_dir = "analysis_output"
+    cache_dir = "analysis_output/box/cache"
+    output_dir = "analysis_output/box"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -110,7 +110,9 @@ elif opt_type == "mva":
         model.load_model(str(tuned_model_path))
 
         # Save copy of the model to main output
-        model.save_model(str(Path(output_dir) / "mva_model.cbm"))
+        model_dir = Path(output_dir) / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model.save_model(str(model_dir / "mva_model.cbm"))
 
         features = config.data.get("xgboost", {}).get(
             "features",
@@ -204,7 +206,9 @@ elif opt_type == "mva":
             json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
 
         # Save the model
-        model.save_model(str(Path(output_dir) / "mva_model.cbm"))
+        model_dir = Path(output_dir) / "models"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model.save_model(str(model_dir / "mva_model.cbm"))
         logger.info(
             f"MVA Optimization complete. Threshold: {optimal_threshold}. Saved to {cuts_file}"
         )

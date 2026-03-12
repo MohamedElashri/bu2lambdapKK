@@ -7,6 +7,7 @@ MODIFIED: plot_fit_result method updated to match official LHCb publication styl
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import awkward as ak
@@ -782,7 +783,8 @@ class MassFitter:
             mass_var.setVal(mass_pdg)
 
             # Get the total PDF value at this mass (normalized to bin content)
-            pdf_value = model.getVal(ROOT.RooArgSet(mass_var))  # type: ignore
+            norm_set = ROOT.RooArgSet(mass_var)
+            pdf_value = model.getVal(norm_set)
 
             # Convert PDF value to plot coordinates (multiply by number of events and bin width)
             total_events = sum(y.getVal() for y in yields.values())
@@ -883,12 +885,17 @@ class MassFitter:
         line_minus3.SetLineWidth(1)
         line_minus3.Draw()
 
-        # Save plot — each state's cuts go in their own subdirectory
+        # Save plot
         canvas.cd()
         if plot_tag:
-            plot_dir = self.config.output_dir / "plots" / "fits" / plot_tag
+            # Use plot_tag as a subdirectory if provided, or assume it is a full path if absolute
+            if Path(plot_tag).is_absolute():
+                plot_dir = Path(plot_tag)
+            else:
+                plot_dir = self.config.output_dir / "plots" / "fits" / plot_tag
         else:
             plot_dir = self.config.output_dir / "plots" / "fits"
+
         plot_dir.mkdir(exist_ok=True, parents=True)
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))

@@ -30,12 +30,11 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "cache"
-    output_dir = "analysis_output"
+    cache_dir = "analysis_output/box/cache"
+    output_dir = "analysis_output/box"
     branch = "high_yield"
-    opt_type = "box"
-    summary_file = Path(output_dir) / opt_type / branch / "tables" / "cut_summary.json"
-    yields_file = Path(output_dir) / opt_type / branch / "tables" / "fitted_yields.csv"
+    summary_file = Path(output_dir) / branch / "tables" / "cut_summary.json"
+    yields_file = Path(output_dir) / branch / "tables" / "fitted_yields.csv"
     years = ["2016", "2017", "2018"]
     track_types = ["LL", "DD"]
 
@@ -60,16 +59,15 @@ if data_dict is None:
     )
     sys.exit(1)
 
-# Branch-specific plot directory
+# Branch-specific plot directory (Hierarchical: {output_dir}/{branch}/plots/fits)
 out_path = Path(output_dir) / branch / "plots" / "fits"
 out_path.mkdir(parents=True, exist_ok=True)
 
 logger.info(f"Initializing RooFit Mass Fitter for branch: {branch}")
 fitter = MassFitter(config=config)
 
-# We pass the branch specific output path for plots if the fitter supports it
-# For now, we assume it plots to where we tell it or we move them.
-fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=f"{branch}_final_cut")
+# We pass the absolute path for plots to the fitter via plot_tag
+fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=str(out_path.absolute()))
 
 # The plots are likely saved in a default location by the Fitter class
 # If needed, we would move them here.

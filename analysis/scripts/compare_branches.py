@@ -108,8 +108,8 @@ def compare_branches(high_path_prefix, low_path_prefix, output_file):
             "state",
             "ratio_to_jpsi_high",
             "ratio_to_jpsi_low",
-            "absolute_br_high",
-            "absolute_br_low",
+            "bf_product_high",
+            "bf_product_low",
             "diff_percent",
         ]
         report.append(merged_br[table_cols].to_markdown(index=False))
