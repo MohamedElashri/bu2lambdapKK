@@ -29,6 +29,29 @@ class EfficiencyResult:
     n_trig: int = 0
     n_pre: int = 0
 
+    # Store individual trigger line counts
+    n_l0_global_tis: int = 0
+    n_l0_phys_tis: int = 0
+    n_l0_hadron_tis: int = 0
+    n_l0_muon_tis: int = 0
+    n_l0_muon_high_tis: int = 0
+    n_l0_dimuon_tis: int = 0
+    n_l0_photon_tis: int = 0
+    n_l0_electron_tis: int = 0
+    n_l0_hadron_tos: int = 0
+    n_l0_or: int = 0
+
+    n_hlt1_track_mva_tos: int = 0
+    n_hlt1_track_mva_tis: int = 0
+    n_hlt1_two_track_mva_tos: int = 0
+    n_hlt1_two_track_mva_tis: int = 0
+    n_hlt1_or: int = 0
+
+    n_hlt2_topo2_tos: int = 0
+    n_hlt2_topo3_tos: int = 0
+    n_hlt2_topo4_tos: int = 0
+    n_hlt2_or: int = 0
+
     # Calculate efficiencies relative to previous step
     @property
     def eff_gen(self) -> float:
@@ -159,26 +182,49 @@ def calculate_efficiencies_for_file(file_path: str, category: str = "LL") -> Eff
         return result
 
     # STEP 3: Trigger (eff_{tri})
-    l0_tis = (
-        tree["Bu_L0GlobalDecision_TIS"].array()
-        | tree["Bu_L0PhysDecision_TIS"].array()
-        | tree["Bu_L0HadronDecision_TIS"].array()
-        | tree["Bu_L0MuonDecision_TIS"].array()
-        | tree["Bu_L0MuonHighDecision_TIS"].array()
-        | tree["Bu_L0DiMuonDecision_TIS"].array()
-        | tree["Bu_L0PhotonDecision_TIS"].array()
-        | tree["Bu_L0ElectronDecision_TIS"].array()
-    )
+    l0_global_tis = tree["Bu_L0GlobalDecision_TIS"].array()
+    l0_phys_tis = tree["Bu_L0PhysDecision_TIS"].array()
+    l0_hadron_tis = tree["Bu_L0HadronDecision_TIS"].array()
+    l0_muon_tis = tree["Bu_L0MuonDecision_TIS"].array()
+    l0_muon_high_tis = tree["Bu_L0MuonHighDecision_TIS"].array()
+    l0_dimuon_tis = tree["Bu_L0DiMuonDecision_TIS"].array()
+    l0_photon_tis = tree["Bu_L0PhotonDecision_TIS"].array()
+    l0_electron_tis = tree["Bu_L0ElectronDecision_TIS"].array()
+    l0_hadron_tos = tree["Bu_L0HadronDecision_TOS"].array()
 
-    hlt1_tos = (
-        tree["Bu_Hlt1TrackMVADecision_TOS"].array() | tree["Bu_Hlt1TwoTrackMVADecision_TOS"].array()
-    )
+    l0_tis = l0_global_tis | l0_hadron_tos
 
-    hlt2_tos = (
-        tree["Bu_Hlt2Topo2BodyDecision_TOS"].array()
-        | tree["Bu_Hlt2Topo3BodyDecision_TOS"].array()
-        | tree["Bu_Hlt2Topo4BodyDecision_TOS"].array()
-    )
+    hlt1_track_mva_tos = tree["Bu_Hlt1TrackMVADecision_TOS"].array()
+    hlt1_track_mva_tis = tree["Bu_Hlt1TrackMVADecision_TIS"].array()
+
+    hlt1_tos = hlt1_track_mva_tos | hlt1_track_mva_tis
+
+    hlt2_topo2_tos = tree["Bu_Hlt2Topo2BodyDecision_TOS"].array()
+    hlt2_topo3_tos = tree["Bu_Hlt2Topo3BodyDecision_TOS"].array()
+    hlt2_topo4_tos = tree["Bu_Hlt2Topo4BodyDecision_TOS"].array()
+
+    hlt2_tos = hlt2_topo2_tos | hlt2_topo3_tos | hlt2_topo4_tos
+
+    # Fill individual trigger line counts relative to stripping
+    result.n_l0_global_tis = ak.sum(reco_str_mask & l0_global_tis)
+    result.n_l0_phys_tis = ak.sum(reco_str_mask & l0_phys_tis)
+    result.n_l0_hadron_tis = ak.sum(reco_str_mask & l0_hadron_tis)
+    result.n_l0_muon_tis = ak.sum(reco_str_mask & l0_muon_tis)
+    result.n_l0_muon_high_tis = ak.sum(reco_str_mask & l0_muon_high_tis)
+    result.n_l0_dimuon_tis = ak.sum(reco_str_mask & l0_dimuon_tis)
+    result.n_l0_photon_tis = ak.sum(reco_str_mask & l0_photon_tis)
+    result.n_l0_electron_tis = ak.sum(reco_str_mask & l0_electron_tis)
+    result.n_l0_hadron_tos = ak.sum(reco_str_mask & l0_hadron_tos)
+    result.n_l0_or = ak.sum(reco_str_mask & l0_tis)
+
+    result.n_hlt1_track_mva_tos = ak.sum(reco_str_mask & hlt1_track_mva_tos)
+    result.n_hlt1_track_mva_tis = ak.sum(reco_str_mask & hlt1_track_mva_tis)
+    result.n_hlt1_or = ak.sum(reco_str_mask & hlt1_tos)
+
+    result.n_hlt2_topo2_tos = ak.sum(reco_str_mask & hlt2_topo2_tos)
+    result.n_hlt2_topo3_tos = ak.sum(reco_str_mask & hlt2_topo3_tos)
+    result.n_hlt2_topo4_tos = ak.sum(reco_str_mask & hlt2_topo4_tos)
+    result.n_hlt2_or = ak.sum(reco_str_mask & hlt2_tos)
 
     trigger_mask = l0_tis & hlt1_tos & hlt2_tos
     trig_mask_total = reco_str_mask & trigger_mask
@@ -206,6 +252,56 @@ def calculate_efficiencies_for_file(file_path: str, category: str = "LL") -> Eff
     result.n_pre = ak.sum(pre_mask_total)
 
     return result
+
+
+def print_trigger_markdown_table(
+    state: str, categories: List[str], years: List[str], results: dict, file_handle=None
+):
+    output_str = f"\n### {state} Trigger Efficiencies\n\n"
+
+    for cat in categories:
+        output_str += f"#### {state} {cat}\n\n"
+        header = "| Levels(%) | " + " | ".join([f"20{y}" for y in years]) + " |"
+        sep = "|---|" + "|".join(["---" for _ in years]) + "|"
+        output_str += header + "\n" + sep + "\n"
+
+        layout = [
+            ("l0_global_tis", "Bu_L0Global_TIS"),
+            ("l0_hadron_tos", "Bu_L0HadronDecision_TOS"),
+            ("l0_or", "**OR**"),
+            ("hlt1_track_mva_tos", "Bu_Hlt1TrackMVADecision_TOS"),
+            ("hlt1_track_mva_tis", "Bu_Hlt1TrackMVADecision_TIS"),
+            ("hlt1_or", "**OR**"),
+            ("hlt2_topo2_tos", "Bu_Hlt2Topo2BodyDecision_TOS"),
+            ("hlt2_topo3_tos", "Bu_Hlt2Topo3BodyDecision_TOS"),
+            ("hlt2_topo4_tos", "Bu_Hlt2Topo4BodyDecision_TOS"),
+            ("hlt2_or", "**OR**"),
+        ]
+
+        for key, label in layout:
+            row_str = f"| {label} |"
+            for year in years:
+                data = results[state][cat][f"20{year}"]
+                reco_str = data["counts"]["reco_str"]
+                trig_counts = data.get("trigger_counts", {})
+                count = trig_counts.get(key, 0)
+
+                if reco_str > 0:
+                    eff = count / reco_str
+                    err = np.sqrt(eff * (1 - eff) / reco_str)
+                    val_str = f"{eff*100:.2f} ± {err*100:.2f}"
+                    if "**OR**" in label:
+                        val_str = f"**{val_str}**"
+                    row_str += f" {val_str} |"
+                else:
+                    row_str += " 0.00 ± 0.00 |"
+
+            output_str += row_str + "\n"
+        output_str += "\n"
+
+    print(output_str, end="")
+    if file_handle:
+        file_handle.write(output_str)
 
 
 def print_markdown_table(
@@ -277,8 +373,6 @@ def main():
     states = ["Jpsi", "chic0", "chic1", "chic2", "etac"]
     categories = ["LL", "DD"]
 
-    lumi_weights = get_luminosity_weights(lumi_config)
-
     results = {}
 
     for state in states:
@@ -298,6 +392,47 @@ def main():
                     year_res.n_trig += res.n_trig
                     year_res.n_pre += res.n_pre
 
+                    year_res.n_l0_global_tis += res.n_l0_global_tis
+                    year_res.n_l0_phys_tis += res.n_l0_phys_tis
+                    year_res.n_l0_hadron_tis += res.n_l0_hadron_tis
+                    year_res.n_l0_muon_tis += res.n_l0_muon_tis
+                    year_res.n_l0_muon_high_tis += res.n_l0_muon_high_tis
+                    year_res.n_l0_dimuon_tis += res.n_l0_dimuon_tis
+                    year_res.n_l0_photon_tis += res.n_l0_photon_tis
+                    year_res.n_l0_electron_tis += res.n_l0_electron_tis
+                    year_res.n_l0_hadron_tos += res.n_l0_hadron_tos
+                    year_res.n_l0_or += res.n_l0_or
+
+                    year_res.n_hlt1_track_mva_tos += res.n_hlt1_track_mva_tos
+                    year_res.n_hlt1_track_mva_tis += res.n_hlt1_track_mva_tis
+
+                    year_res.n_hlt1_or += res.n_hlt1_or
+
+                    year_res.n_hlt2_topo2_tos += res.n_hlt2_topo2_tos
+                    year_res.n_hlt2_topo3_tos += res.n_hlt2_topo3_tos
+                    year_res.n_hlt2_topo4_tos += res.n_hlt2_topo4_tos
+                    year_res.n_hlt2_or += res.n_hlt2_or
+
+                trig_counts = {
+                    "l0_global_tis": int(year_res.n_l0_global_tis),
+                    "l0_phys_tis": int(year_res.n_l0_phys_tis),
+                    "l0_hadron_tis": int(year_res.n_l0_hadron_tis),
+                    "l0_muon_tis": int(year_res.n_l0_muon_tis),
+                    "l0_muon_high_tis": int(year_res.n_l0_muon_high_tis),
+                    "l0_dimuon_tis": int(year_res.n_l0_dimuon_tis),
+                    "l0_photon_tis": int(year_res.n_l0_photon_tis),
+                    "l0_electron_tis": int(year_res.n_l0_electron_tis),
+                    "l0_hadron_tos": int(year_res.n_l0_hadron_tos),
+                    "l0_or": int(year_res.n_l0_or),
+                    "hlt1_track_mva_tos": int(year_res.n_hlt1_track_mva_tos),
+                    "hlt1_track_mva_tis": int(year_res.n_hlt1_track_mva_tis),
+                    "hlt1_or": int(year_res.n_hlt1_or),
+                    "hlt2_topo2_tos": int(year_res.n_hlt2_topo2_tos),
+                    "hlt2_topo3_tos": int(year_res.n_hlt2_topo3_tos),
+                    "hlt2_topo4_tos": int(year_res.n_hlt2_topo4_tos),
+                    "hlt2_or": int(year_res.n_hlt2_or),
+                }
+
                 results[state][category][full_year] = {
                     "counts": {
                         "total": int(year_res.n_total),
@@ -305,6 +440,7 @@ def main():
                         "trig": int(year_res.n_trig),
                         "pre": int(year_res.n_pre),
                     },
+                    "trigger_counts": trig_counts,
                     "efficiencies": {
                         "eff_gen": year_res.eff_gen,
                         "eff_reco_str": year_res.eff_reco_str,
@@ -329,6 +465,7 @@ def main():
     with open(md_output_path, "w") as md_file:
         for state in states:
             print_markdown_table(state, categories, years, results, md_file)
+            print_trigger_markdown_table(state, categories, years, results, md_file)
 
     print(f"\nResults saved to {args.output} and {md_output_path}")
 
