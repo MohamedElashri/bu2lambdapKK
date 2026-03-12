@@ -28,18 +28,24 @@ NO_CACHE = config.get("no_cache", False)
 import re
 from pathlib import Path
 
-# Load optimization type from selection.toml
+# Determine optimization type (prioritize --config opt_method=... over selection.toml)
 selection_path = Path(CONFIG_DIR) / "selection.toml"
-OPT_METHOD = "box" # Default
-try:
-    with open(selection_path, "r") as f:
-        content = f.read()
-        # Look for optimization_type in [cut_application] section
-        match = re.search(r'optimization_type\s*=\s*"([^"]+)"', content)
-        if match:
-            OPT_METHOD = match.group(1)
-except Exception as e:
-    print(f"Warning: Could not read {selection_path}: {e}. Defaulting to 'box'")
+OPT_METHOD = config.get("opt_method")
+
+if not OPT_METHOD:
+    try:
+        with open(selection_path, "r") as f:
+            content = f.read()
+            match = re.search(r'optimization_type\s*=\s*"([^"]+)"', content)
+            if match:
+                OPT_METHOD = match.group(1)
+    except Exception as e:
+        print(f"Warning: Could not read {selection_path}: {e}. Defaulting to 'box'")
+
+if not OPT_METHOD:
+    OPT_METHOD = "box"
+
+print(f"INFO: Using optimization method: {OPT_METHOD}")
 
 # Redefine output and cache directories to be method-specific
 # This ensures that all markers and intermediate files are isolated
@@ -125,6 +131,7 @@ rule optimize_selection:
         output_dir=OUTPUT_DIR,
         years=YEARS,
         track_types=TRACK_TYPES,
+        opt_method=OPT_METHOD,
     script:
         "scripts/optimize_selection.py"
 

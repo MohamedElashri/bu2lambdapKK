@@ -1,17 +1,27 @@
 .PHONY: all clean run show-dag help
 
+# Optimization method: "box" or "mva" (overridable via command line: make OPT_METHOD=mva)
+OPT_METHOD ?=
+
 # Default target
 all: run
 
 # Run the complete Snakemake pipeline
 run:
-	@echo "Running full analysis pipeline via Snakemake..."
-	uv run snakemake --cores all
+	@echo "Running full analysis pipeline via Snakemake (Method: $(or $(OPT_METHOD),from config))..."
+	uv run snakemake --cores all $(if $(OPT_METHOD),--config opt_method=$(OPT_METHOD))
+
+# Explicit method targets
+box:
+	@$(MAKE) run OPT_METHOD=box
+
+mva:
+	@$(MAKE) run OPT_METHOD=mva
 
 # Force a complete re-run
 rerun:
-	@echo "Forcing a complete re-run of the analysis pipeline..."
-	uv run snakemake --cores all --forceall
+	@echo "Forcing a complete re-run of the analysis pipeline (Method: $(or $(OPT_METHOD),from config))..."
+	uv run snakemake --cores all --forceall $(if $(OPT_METHOD),--config opt_method=$(OPT_METHOD))
 
 # Clean only output files
 clean-output:
@@ -35,14 +45,14 @@ clean: clean-output clean-cache clean-catboost
 
 # Visualize the pipeline DAG (requires graphviz/dot)
 show-dag:
-	@echo "Generating DAG visualization to dag.pdf..."
-	uv run snakemake --dag | dot -Tpdf > dag.pdf
+	@echo "Generating DAG visualization to dag.pdf (Method: $(or $(OPT_METHOD),from config))..."
+	uv run snakemake --dag $(if $(OPT_METHOD),--config opt_method=$(OPT_METHOD)) | dot -Tpdf > dag.pdf
 	@echo "Done. Open dag.pdf to view."
 
 # Dry run
 dry-run:
-	@echo "Performing dry run of the pipeline..."
-	uv run snakemake -n
+	@echo "Performing dry run of the pipeline (Method: $(or $(OPT_METHOD),from config))..."
+	uv run snakemake -n $(if $(OPT_METHOD),--config opt_method=$(OPT_METHOD))
 
 # Help text
 help:

@@ -57,6 +57,8 @@ if data_dict is None or mc_dict is None:
     sys.exit(1)
 
 opt_type = config.data.get("cut_application", {}).get("optimization_type", "box")
+if "snakemake" in globals():
+    opt_type = snakemake.params.get("opt_method", opt_type)
 
 if "snakemake" in globals():
     # Use snakemake output if available to ensure sync with Snakefile
