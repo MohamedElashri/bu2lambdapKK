@@ -102,11 +102,6 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
             logger.warning(f"Missing branches in {filepath}: {missing}")
             branches_to_load = [b for b in branches_to_load if b in all_branches]
 
-        # Add TRUEID branches for MC
-        if is_mc:
-            trueid_branches = [b for b in all_branches if "TRUEID" in b]
-            branches_to_load.extend(trueid_branches)
-
         events = tree.arrays(branches_to_load, library="ak")
 
     # Standardize branch names for downstream
@@ -175,16 +170,27 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
         f"Trigger {filepath.name}: {n_total} -> {len(events)} ({100*len(events)/n_total if n_total>0 else 0:.1f}%)"
     )
 
-    # 2. Data reduction
+    # 2. Data reduction baseline
+    # These exactly match the cuts applied to the data tuples during reduction
+    # so we apply them to both data and MC to ensure identical phase space
     n_before = len(events)
+
+    # In some trees, IPCHI2 might not exist, but it was in the reduction script.
+    # The reduction script had: Bu_FDCHI2_OWNPV>175, Bu_IPCHI2_OWNPV<10, Bu_PT>3000, Delta_Z_mm>2.5, Lp_ProbNNp>0.05, p_ProbNNp>0.05, prodProbKK>0.05
+    # Let's ensure Bu_IPCHI2_OWNPV is in events first
+    if "Bu_IPCHI2_OWNPV" in events.fields:
+        ipchi2_mask = events["Bu_IPCHI2_OWNPV"] < 10.0
+    else:
+        ipchi2_mask = ak.ones_like(events["Bu_MM"], dtype=bool)
+
     mask_red = (
         (events["Bu_FDCHI2_OWNPV"] > 175)
+        & ipchi2_mask
         & (events["Delta_Z_mm"] > 2.5)
         & (events["Lp_ProbNNp"] > 0.05)
         & (events["p_ProbNNp"] > 0.05)
-        & (events["prodProbKK"] > 0.10)
+        & (events["prodProbKK"] > 0.05)
         & (events["Bu_PT"] > 3000)
-        & (events["Bu_DTF_chi2"] < 30)
     )
     events = events[mask_red]
     logger.info(

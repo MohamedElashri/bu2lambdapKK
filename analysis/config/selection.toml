@@ -1,3 +1,11 @@
+[baseline_selection]
+# Cuts applied during initial data tuple reduction (required for consistency in MC)
+bu_fdchi2_min = 175.0
+bu_ipchi2_max = 10.0
+bu_pt_min = 3000.0
+h1_h2_probnnk_prod_min = 0.05
+p_probnnp_min = 0.05
+
 [cut_application]
 # Set the desired optimization type ("box" or "mva")
 optimization_type = "mva"

@@ -234,19 +234,38 @@ def calculate_efficiencies_for_file(file_path: str, category: str = "LL") -> Eff
         return result
 
     # STEP 4: Pre-selection (eff_{pre})
+    # Data reduction baseline cuts
+    bu_fdchi2 = tree["Bu_FDCHI2_OWNPV"].array()
+    bu_ipchi2 = tree["Bu_IPCHI2_OWNPV"].array()
+    bu_pt = tree["Bu_PT"].array()
+    p_probnnp = tree["p_ProbNNp"].array()
+    h1_probnnk = tree["h1_ProbNNk"].array()
+    h2_probnnk = tree["h2_ProbNNk"].array()
+
+    # Lambda selection cuts
     l0_mass = tree["L0_M"].array()
     l0_fdchi2 = tree["L0_FDCHI2_OWNPV"].array()
     l0_end_z = tree["L0_ENDVERTEX_Z"].array()
     bu_end_z = tree["Bu_ENDVERTEX_Z"].array()
     lp_probnnp = tree["Lp_ProbNNp"].array()
 
-    pre_mask = (
+    baseline_mask = (
+        (bu_fdchi2 > 175.0)
+        & (bu_ipchi2 < 10.0)
+        & (bu_pt > 3000.0)
+        & (p_probnnp > 0.05)
+        & ((h1_probnnk * h2_probnnk) > 0.05)
+    )
+
+    lambda_mask = (
         (l0_mass > 1111.0)
         & (l0_mass < 1121.0)
         & (l0_fdchi2 > 250.0)
         & ((l0_end_z - bu_end_z) > 5.0)
         & (lp_probnnp > 0.3)
     )
+
+    pre_mask = baseline_mask & lambda_mask
 
     pre_mask_total = trig_mask_total & pre_mask
     result.n_pre = ak.sum(pre_mask_total)

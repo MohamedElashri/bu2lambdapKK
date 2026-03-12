@@ -185,7 +185,7 @@ def main():
     categories = ["LL", "DD"]
 
     mc_base = "/share/lazy/Mohamed/Bu2LambdaPPP/files/mc/Jpsi"
-    data_base = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
+    data_base = "/share/lazy/Mohamed/Bu2LambdaPPP/rootfiles/reduced"
 
     results = {"data": {}, "mc": {}}
 
@@ -206,7 +206,7 @@ def main():
 
             for pol in polarities:
                 # Data file
-                data_file = f"{data_base}/dataBu2L0barPHH_{year}{pol}.root"
+                data_file = f"{data_base}/dataBu2L0barPHH_{year}{pol}_reduced_PID.root"
                 res_data = analyze_file(data_file, is_data=True, category=category)
                 if res_data:
                     n_tis_data_tot += res_data[0]
