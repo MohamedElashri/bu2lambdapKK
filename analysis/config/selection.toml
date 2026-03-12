@@ -1,6 +1,8 @@
 [cut_application]
 # Set the desired optimization type ("box" or "mva")
 optimization_type = "mva"
+use_pretrained_mva = true
+
 
 [fitting]
 argus_endpoint_offset = 200.0

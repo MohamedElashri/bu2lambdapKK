@@ -53,7 +53,7 @@ data_dict = cache.load("preprocessed_data", dependencies=preprocessed_deps)
 mc_dict = cache.load("preprocessed_mc", dependencies=preprocessed_deps)
 
 if data_dict is None or mc_dict is None:
-    logger.error("Step 2 data not found in cache. Run 'snakemake load_data' first.")
+    logger.error("Preprocessed data not found in cache. Run 'snakemake load_data' first.")
     sys.exit(1)
 
 opt_type = config.data.get("cut_application", {}).get("optimization_type", "box")
@@ -61,78 +61,132 @@ out_path = Path(output_dir) / "tables"
 out_path.mkdir(parents=True, exist_ok=True)
 
 if opt_type == "box":
-    logger.info("Running Box Optimization (Option A - sequential grouped)")
-    optimizer = BoxOptimizer(config_path=str(config_path), output_dir=output_dir)
-    results = optimizer.run_optimization(data_dict, mc_dict, option="A")
+    logger.info("Running Box Optimization")
+    
+    # We need to concatenate the years for optimization
+    data_combined = ak.concatenate(list(data_dict.values()))
+    data_comb_dict = {"combined": data_combined}
+
+    # SelectionOptimizer expects mc_data dictionary grouped by state
+    optimizer = BoxOptimizer(data=data_comb_dict, config=config, mc_data=mc_dict)
+    
+    if getattr(config, "optimization", {}).get("method") == "mc_based_sequential":
+        logger.info("Using Sequential Optimization Method (Option C)")
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based_sequential()
+    else:
+        logger.info("Using Grouped/State-Dependent Optimization Method (Option A/B)")
+        optimized_cuts_df = optimizer.optimize_nd_grid_scan_mc_based()
+
     # Save optimized cuts
     cuts_file = out_path / "optimized_cuts.json"
+    
+    # Convert DF to dict for JSON serialization
+    results_dict = optimized_cuts_df.to_dict(orient='records')
+    
     with open(cuts_file, "w") as f:
-        json.dump(results, f, indent=2)
+        json.dump(results_dict, f, indent=2)
     logger.info(f"Box Optimization complete. Saved cuts to {cuts_file}")
 
 elif opt_type == "mva":
-    logger.info("Running MVA Optimization (CatBoost)")
+    # Check for pre-trained tuned model
+    use_pretrained = config.data.get("cut_application", {}).get("use_pretrained_mva", True)
+    tuned_model_path = project_root / "studies" / "mva_optimization" / "output" / "models" / "catboost_bdt.cbm"
+    
+    if use_pretrained and tuned_model_path.exists():
+        logger.info(f"Found pre-trained tuned CatBoost model at {tuned_model_path}. Loading it instead of re-training.")
+        from catboost import CatBoostClassifier
+        model = CatBoostClassifier()
+        model.load_model(str(tuned_model_path))
+        
+        # Save copy of the model to main output
+        model.save_model(str(Path(output_dir) / "mva_model.cbm"))
+        
+        features = config.data.get("xgboost", {}).get(
+            "features",
+            [
+                "Bu_DTF_chi2",
+                "Bu_FDCHI2_OWNPV",
+                "Bu_IPCHI2_OWNPV",
+                "Bu_PT",
+                "p_ProbNNp",
+                "h1_ProbNNk",
+                "h2_ProbNNk",
+            ],
+        )
+        optimal_threshold = 0.5 # Default threshold
+        
+        cuts_file = out_path / "optimized_cuts.json"
+        with open(cuts_file, "w") as f:
+            json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
+            
+        logger.info(f"MVA loading complete. Threshold: {optimal_threshold}. Saved to {cuts_file}")
 
-    # Prepare MVA data
-    # Background from upper mass sideband
-    bkg_dfs = []
-    for year, y_data in data_dict.items():
-        mask = y_data["Bu_MM_corrected"] > 5330
-        bkg_dfs.append(ak.to_dataframe(y_data[mask]))
-    bkg_df = pd.concat(bkg_dfs, ignore_index=True) if bkg_dfs else pd.DataFrame()
+    else:
+        if use_pretrained:
+            logger.warning("Pre-trained model requested but not found. Running MVA Optimization (CatBoost) from scratch.")
+        else:
+            logger.info("Running MVA Optimization (CatBoost) from scratch.")
 
-    # Signal from MC
-    sig_dfs = []
-    for state, state_data in mc_dict.items():
-        if state in ["jpsi", "etac", "chic0", "chic1"]:
-            sig_dfs.append(ak.to_dataframe(state_data))
-    sig_df = pd.concat(sig_dfs, ignore_index=True) if sig_dfs else pd.DataFrame()
+        # Prepare MVA data
+        # Background from upper mass sideband
+        bkg_dfs = []
+        for year, y_data in data_dict.items():
+            mask = y_data["Bu_MM_corrected"] > 5330
+            bkg_dfs.append(ak.to_dataframe(y_data[mask]))
+        bkg_df = pd.concat(bkg_dfs, ignore_index=True) if bkg_dfs else pd.DataFrame()
 
-    features = config.data.get("xgboost", {}).get(
-        "features",
-        [
-            "Bu_DTF_chi2",
-            "Bu_FDCHI2_OWNPV",
-            "Bu_IPCHI2_OWNPV",
-            "Bu_PT",
-            "p_ProbNNp",
-            "h1_ProbNNk",
-            "h2_ProbNNk",
-        ],
-    )
+        # Signal from MC
+        sig_dfs = []
+        for state, state_data in mc_dict.items():
+            if state in ["jpsi", "etac", "chic0", "chic1"]:
+                sig_dfs.append(ak.to_dataframe(state_data))
+        sig_df = pd.concat(sig_dfs, ignore_index=True) if sig_dfs else pd.DataFrame()
 
-    X_sig = sig_df[features].copy()
-    y_sig = np.ones(len(X_sig))
+        features = config.data.get("xgboost", {}).get(
+            "features",
+            [
+                "Bu_DTF_chi2",
+                "Bu_FDCHI2_OWNPV",
+                "Bu_IPCHI2_OWNPV",
+                "Bu_PT",
+                "p_ProbNNp",
+                "h1_ProbNNk",
+                "h2_ProbNNk",
+            ],
+        )
 
-    X_bkg = bkg_df[features].copy()
-    y_bkg = np.zeros(len(X_bkg))
+        X_sig = sig_df[features].copy()
+        y_sig = np.ones(len(X_sig))
 
-    X = pd.concat([X_sig, X_bkg], ignore_index=True)
-    y = np.concatenate([y_sig, y_bkg])
+        X_bkg = bkg_df[features].copy()
+        y_bkg = np.zeros(len(X_bkg))
 
-    from sklearn.model_selection import train_test_split
+        X = pd.concat([X_sig, X_bkg], ignore_index=True)
+        y = np.concatenate([y_sig, y_bkg])
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+        from sklearn.model_selection import train_test_split
 
-    # Use standard catboost
-    from catboost import CatBoostClassifier
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
-    model = CatBoostClassifier(
-        iterations=300, learning_rate=0.1, depth=6, verbose=False, random_state=42
-    )
-    model.fit(X_train, y_train)
+        # Use standard catboost
+        from catboost import CatBoostClassifier
 
-    # Optimize threshold simply (placeholder logic to just return a decent threshold)
-    y_pred = model.predict_proba(X_test)[:, 1]
-    optimal_threshold = 0.5  # Default
+        model = CatBoostClassifier(
+            iterations=300, learning_rate=0.1, depth=6, verbose=False, random_state=42
+        )
+        model.fit(X_train, y_train)
 
-    cuts_file = out_path / "optimized_cuts.json"
-    with open(cuts_file, "w") as f:
-        json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
+        # Optimize threshold simply (placeholder logic to just return a decent threshold)
+        y_pred = model.predict_proba(X_test)[:, 1]
+        optimal_threshold = 0.5  # Default
 
-    # Save the model
-    model.save_model(str(Path(output_dir) / "mva_model.cbm"))
-    logger.info(f"MVA Optimization complete. Threshold: {optimal_threshold}. Saved to {cuts_file}")
+        cuts_file = out_path / "optimized_cuts.json"
+        with open(cuts_file, "w") as f:
+            json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
+
+        # Save the model
+        model.save_model(str(Path(output_dir) / "mva_model.cbm"))
+        logger.info(f"MVA Optimization complete. Threshold: {optimal_threshold}. Saved to {cuts_file}")
 
 else:
     logger.error(f"Unknown optimization_type: {opt_type}. Must be 'box' or 'mva'.")
