@@ -137,7 +137,15 @@ if opt_type == "box":
 
 elif opt_type == "mva":
     logger.info(f"Applying MVA Cuts (Branch: {branch})")
-    threshold = optimized_cuts.get("mva_threshold", 0.5)
+    if branch == "high_yield":
+        threshold = optimized_cuts.get(
+            "mva_threshold_high", optimized_cuts.get("mva_threshold", 0.5)
+        )
+    else:
+        threshold = optimized_cuts.get(
+            "mva_threshold_low", optimized_cuts.get("mva_threshold", 0.5)
+        )
+
     features = optimized_cuts.get("features", [])
 
     from catboost import CatBoostClassifier

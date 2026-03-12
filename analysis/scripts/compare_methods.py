@@ -31,11 +31,13 @@ def generate_comparison():
 
     # 1. Extraction
     mva_cuts = load_json(mva_dir / "tables" / "optimized_cuts.json")
-    mva_threshold = mva_cuts.get("mva_threshold", "N/A")
+    thr_high = mva_cuts.get("mva_threshold_high", "N/A")
+    thr_low = mva_cuts.get("mva_threshold_low", "N/A")
 
     report = [
         "# Optimization Method Comparison: MVA vs Box\n",
-        f"**MVA BDT Threshold:** `{mva_threshold}`\n",
+        f"**MVA BDT Threshold (High-Yield):** `{thr_high}`\n",
+        f"**MVA BDT Threshold (Low-Yield):** `{thr_low}`\n",
         "This report compares the performance of the MVA-based selection and the two-step Box Grid Search.\n",
     ]
 

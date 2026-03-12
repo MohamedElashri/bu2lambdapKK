@@ -114,6 +114,23 @@ elif opt_type == "mva":
         model_dir.mkdir(parents=True, exist_ok=True)
         model.save_model(str(model_dir / "mva_model.cbm"))
 
+        # Prepare MVA data for threshold optimization even if model is pre-trained
+        # Background from upper mass sideband (5330-5410 MeV)
+        bkg_dfs = []
+        for year, y_data in data_dict.items():
+            mask = (y_data["Bu_MM_corrected"] > 5330) & (y_data["Bu_MM_corrected"] < 5410)
+            bkg_dfs.append(ak.to_dataframe(y_data[mask]))
+        bkg_df = pd.concat(bkg_dfs, ignore_index=True) if bkg_dfs else pd.DataFrame()
+
+        # Signal from MC (State-grouped)
+        sig_groups = {"high": ["jpsi", "etac"], "low": ["chic0", "chic1"]}
+
+        sig_dfs = {k: [] for k in sig_groups}
+        for state, state_data in mc_dict.items():
+            for group, states in sig_groups.items():
+                if state in states:
+                    sig_dfs[group].append(ak.to_dataframe(state_data))
+
         features = config.data.get("xgboost", {}).get(
             "features",
             [
@@ -126,13 +143,61 @@ elif opt_type == "mva":
                 "h2_ProbNNk",
             ],
         )
-        optimal_threshold = 0.5  # Default threshold
+
+        def optimize_fom(sig_group_df, bkg_df, model, features):
+            if sig_group_df.empty or bkg_df.empty:
+                return 0.5
+
+            sig_probs = model.predict_proba(sig_group_df[features])[:, 1]
+            bkg_probs = model.predict_proba(bkg_df[features])[:, 1]
+
+            # FOM = S / sqrt(S + B)
+            # S is scaled as in box optimization
+            s_scale = getattr(config, "optimization", {}).get("signal_scale_factor", 10000.0)
+
+            best_fom = -1
+            best_thr = 0.5
+
+            for thr in np.linspace(0.1, 0.95, 86):
+                s = (
+                    np.sum(sig_probs > thr) * (s_scale / len(sig_probs))
+                    if len(sig_probs) > 0
+                    else 0
+                )
+                b = np.sum(bkg_probs > thr)
+
+                if s + b > 0:
+                    fom = s / np.sqrt(s + b)
+                    if fom > best_fom:
+                        best_fom = fom
+                        best_thr = thr
+            return float(best_thr)
+
+        # Optimize for both groups
+        threshold_high = optimize_fom(
+            pd.concat(sig_dfs["high"]) if sig_dfs["high"] else pd.DataFrame(),
+            bkg_df,
+            model,
+            features,
+        )
+        threshold_low = optimize_fom(
+            pd.concat(sig_dfs["low"]) if sig_dfs["low"] else pd.DataFrame(), bkg_df, model, features
+        )
 
         cuts_file = out_path / "optimized_cuts.json"
         with open(cuts_file, "w") as f:
-            json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
+            json.dump(
+                {
+                    "mva_threshold_high": threshold_high,
+                    "mva_threshold_low": threshold_low,
+                    "features": features,
+                },
+                f,
+                indent=2,
+            )
 
-        logger.info(f"MVA loading complete. Threshold: {optimal_threshold}. Saved to {cuts_file}")
+        logger.info("MVA loading and threshold optimization complete.")
+        logger.info(f"Threshold High: {threshold_high}, Threshold Low: {threshold_low}")
 
     else:
         if use_pretrained:
@@ -197,13 +262,64 @@ elif opt_type == "mva":
         )
         model.fit(X_train, y_train)
 
-        # Optimize threshold simply (placeholder logic to just return a decent threshold)
-        y_pred = model.predict_proba(X_test)[:, 1]
-        optimal_threshold = 0.5  # Default
+        # FOM-based threshold optimization (grid scan)
+        def optimize_fom(sig_group_df, bkg_df, model, features):
+            if sig_group_df.empty or bkg_df.empty:
+                return 0.5
+
+            sig_probs = model.predict_proba(sig_group_df[features])[:, 1]
+            bkg_probs = model.predict_proba(bkg_df[features])[:, 1]
+
+            s_scale = getattr(config, "optimization", {}).get("signal_scale_factor", 10000.0)
+
+            best_fom = -1
+            best_thr = 0.5
+            for thr in np.linspace(0.1, 0.95, 86):
+                s = (
+                    np.sum(sig_probs > thr) * (s_scale / len(sig_probs))
+                    if len(sig_probs) > 0
+                    else 0
+                )
+                b = np.sum(bkg_probs > thr)
+                if s + b > 0:
+                    fom = s / np.sqrt(s + b)
+                    if fom > best_fom:
+                        best_fom = fom
+                        best_thr = thr
+            return float(best_thr)
+
+        # Separate signal by group
+        sig_groups = {"high": ["jpsi", "etac"], "low": ["chic0", "chic1"]}
+        sig_dfs_grouped = {k: [] for k in sig_groups}
+        for state, state_data in mc_dict.items():
+            for group, states in sig_groups.items():
+                if state in states:
+                    sig_dfs_grouped[group].append(ak.to_dataframe(state_data))
+
+        threshold_high = optimize_fom(
+            pd.concat(sig_dfs_grouped["high"]) if sig_dfs_grouped["high"] else pd.DataFrame(),
+            bkg_df,
+            model,
+            features,
+        )
+        threshold_low = optimize_fom(
+            pd.concat(sig_dfs_grouped["low"]) if sig_dfs_grouped["low"] else pd.DataFrame(),
+            bkg_df,
+            model,
+            features,
+        )
 
         cuts_file = out_path / "optimized_cuts.json"
         with open(cuts_file, "w") as f:
-            json.dump({"mva_threshold": optimal_threshold, "features": features}, f, indent=2)
+            json.dump(
+                {
+                    "mva_threshold_high": threshold_high,
+                    "mva_threshold_low": threshold_low,
+                    "features": features,
+                },
+                f,
+                indent=2,
+            )
 
         # Save the model
         model_dir = Path(output_dir) / "models"
