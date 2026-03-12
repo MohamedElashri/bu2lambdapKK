@@ -75,45 +75,64 @@ mc_final = {}
 
 if opt_type == "box":
     logger.info(f"Applying Box Cuts for branch: {branch}")
-
-    # Identify which state's cuts to use for the whole branch
-    # Branch high_yield uses jpsi cuts; branch low_yield uses chic1 cuts.
+    # User requested S/sqrt(S+B) for all states in both Box and MVA
+    target_fom = "S/sqrt(S+B)"
     target_state = "jpsi" if branch == "high_yield" else "chic1"
 
-    # Find cuts for target_state
-    branch_cuts = None
-    for entry in optimized_cuts:
-        if entry["state"] == target_state:
-            branch_cuts = entry["cuts"]
-            break
+    # Collect all cuts for the target state and FoM
+    branch_cuts = [
+        entry
+        for entry in optimized_cuts
+        if entry["state"] == target_state and entry["FoM_type"] == target_fom
+    ]
 
-    if branch_cuts is None:
-        logger.error(f"Could not find cuts for state {target_state} in {cuts_file}")
+    if not branch_cuts:
+        logger.error(f"Could not find {target_fom} cuts for state {target_state} in {cuts_file}")
         sys.exit(1)
 
-    # Apply identical cuts to MC and Data per state
-    # 1. Apply to MC
-    for state, state_data in mc_dict.items():
-        mask = ak.ones_like(state_data["Bu_MM"], dtype=bool)
-        for var, cut_val in branch_cuts.items():
-            # Heuristic for cut direction if not explicitly saved:
-            if any(x in var for x in ["chi2", "IP", "FD"]):
-                mask = mask & (state_data[var] < cut_val)
-            else:
-                mask = mask & (state_data[var] > cut_val)
+    logger.info(f"Using cuts from state {target_state} with FoM {target_fom}")
 
+    # Apply to MC
+    for state, state_data in mc_dict.items():
+        if len(state_data) == 0:
+            mc_final[state] = state_data
+            continue
+
+        mask = ak.ones_like(state_data[state_data.fields[0]], dtype=bool)
+        for cut_entry in branch_cuts:
+            var_branch = cut_entry["branch_name"]
+            cut_val = cut_entry["optimal_cut"]
+            cut_type = cut_entry["cut_type"]
+
+            if var_branch not in state_data.fields:
+                continue
+
+            if cut_type == "less":
+                mask = mask & (state_data[var_branch] < cut_val)
+            else:
+                mask = mask & (state_data[var_branch] > cut_val)
         mc_final[state] = state_data[mask]
         logger.info(f"MC {state} passed cuts: {len(mc_final[state])} / {len(state_data)}")
 
-    # 2. Apply to Data (same branch cuts for all data)
+    # Apply to Data
     for year, y_data in data_dict.items():
-        mask = ak.ones_like(y_data["Bu_MM"], dtype=bool)
-        for var, cut_val in branch_cuts.items():
-            if any(x in var for x in ["chi2", "IP", "FD"]):
-                mask = mask & (y_data[var] < cut_val)
-            else:
-                mask = mask & (y_data[var] > cut_val)
+        if len(y_data) == 0:
+            data_final[year] = y_data
+            continue
 
+        mask = ak.ones_like(y_data[y_data.fields[0]], dtype=bool)
+        for cut_entry in branch_cuts:
+            var_branch = cut_entry["branch_name"]
+            cut_val = cut_entry["optimal_cut"]
+            cut_type = cut_entry["cut_type"]
+
+            if var_branch not in y_data.fields:
+                continue
+
+            if cut_type == "less":
+                mask = mask & (y_data[var_branch] < cut_val)
+            else:
+                mask = mask & (y_data[var_branch] > cut_val)
         data_final[year] = y_data[mask]
         logger.info(f"Data {year} passed cuts: {len(data_final[year])} / {len(y_data)}")
 

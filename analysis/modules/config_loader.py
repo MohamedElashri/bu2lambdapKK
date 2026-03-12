@@ -22,7 +22,7 @@ class StudyConfig:
         self.pdg_masses = self.data.get("pdg", {}).get("masses", {})
         self.pdg_widths = self.data.get("pdg", {}).get("widths", {})
         self.fitting = self.data.get("fitting", {})
-        self.optimization = self.data.get("optimization", {})
+        self.optimization = self.data.get("optimization_strategy", {})
         self.selection = self.data.get("nd_optimizable_selection", {})
 
     def get_signal_region(self, state: str) -> tuple[float, float]:

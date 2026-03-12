@@ -1058,6 +1058,9 @@ class SelectionOptimizer:
 
             n_expected = {}
             for state in self.ALL_STATES:
+                if state not in self.mc_data:
+                    n_expected[state] = 1.0  # Placeholder
+                    continue
                 sw = state_windows[state]
                 n_sr = float(ak.sum(sw["in_sig"]))
                 d_low = (
@@ -1075,6 +1078,8 @@ class SelectionOptimizer:
 
             mc_branches, mc_totals = {}, {}
             for state in self.ALL_STATES:
+                if state not in self.mc_data:
+                    continue
                 mc_totals[state] = len(self.mc_data[state])
                 brs = []
                 for var_name in current_vars:
@@ -1154,6 +1159,8 @@ class SelectionOptimizer:
                         high_epsilons, high_s, high_b = {}, {}, {}
 
                         for state in self.HIGH_YIELD_STATES:
+                            if state not in self.mc_data:
+                                continue
                             if fixed_cuts:
                                 fc = fixed_cuts[state][fom_type]
                                 # Create data mask
@@ -1214,6 +1221,8 @@ class SelectionOptimizer:
                             val_high = self.box_s_over_sqrt_s_plus_b(s_high, b_high)
 
                         for state in self.HIGH_YIELD_STATES:
+                            if state not in self.mc_data:
+                                continue
                             entry = best_results[state][fom_type]
                             if val_high > entry["best_fom"]:
                                 entry["best_fom"] = val_high
@@ -1227,6 +1236,8 @@ class SelectionOptimizer:
                         low_epsilons, low_s, low_b = {}, {}, {}
 
                         for state in self.LOW_YIELD_STATES:
+                            if state not in self.mc_data:
+                                continue
                             if fixed_cuts:
                                 fc = fixed_cuts[state][fom_type]
                                 d_mask = ak.ones_like(data_combined["Bu_PT"], dtype=bool)
@@ -1282,6 +1293,8 @@ class SelectionOptimizer:
                             val_low = self.box_s_over_sqrt_s_plus_b(s_low, b_low)
 
                         for state in self.LOW_YIELD_STATES:
+                            if state not in self.mc_data:
+                                continue
                             entry = best_results[state][fom_type]
                             if val_low > entry["best_fom"]:
                                 entry["best_fom"] = val_low
@@ -1302,6 +1315,7 @@ class SelectionOptimizer:
                     for f in foms_to_compute
                 }
                 for state in self.ALL_STATES
+                if state in self.mc_data
             }
             # Return raw best_results dict for later processing/saving, and mapped for step2
             return results_mapped, best_results, n_expected
@@ -1338,6 +1352,7 @@ class SelectionOptimizer:
                 for f in ["S/sqrt(B)", "S/sqrt(S+B)"]
             }
             for state in self.ALL_STATES
+            if state in self.mc_data
         }
 
         # Re-use the existing DataFrame saving logic from original function!
