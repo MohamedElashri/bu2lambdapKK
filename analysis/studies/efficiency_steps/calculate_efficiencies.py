@@ -15,10 +15,11 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List
 
-import awkward as ak
 import numpy as np
+import pandas as pd
 import tomli
 import uproot
+import xgboost as xgb
 
 
 def get_gen_eff_from_config(
@@ -57,40 +58,38 @@ class EfficiencyResult:
     gen_err: float = 0.0005
 
     # Raw counts
-    n_total: int = 0
-    n_gen: int = 0  # Placeholder for generated count
-    n_reco_str: int = 0
-    n_trig: int = 0
-    n_pre: int = 0
+    n_total: float = 0.0
+    n_reco_str: float = 0.0
+    n_trig: float = 0.0
+    n_pre: float = 0.0
+    n_mva: float = 0.0
 
-    # Store individual trigger line counts
-    n_l0_global_tis: int = 0
-    n_l0_phys_tis: int = 0
-    n_l0_hadron_tis: int = 0
-    n_l0_muon_tis: int = 0
-    n_l0_muon_high_tis: int = 0
-    n_l0_dimuon_tis: int = 0
-    n_l0_photon_tis: int = 0
-    n_l0_electron_tis: int = 0
-    n_l0_hadron_tos: int = 0
-    n_l0_or: int = 0
+    n_l0_global_tis: float = 0.0
+    n_l0_phys_tis: float = 0.0
+    n_l0_hadron_tis: float = 0.0
+    n_l0_muon_tis: float = 0.0
+    n_l0_muon_high_tis: float = 0.0
+    n_l0_dimuon_tis: float = 0.0
+    n_l0_photon_tis: float = 0.0
+    n_l0_electron_tis: float = 0.0
+    n_l0_hadron_tos: float = 0.0
+    n_l0_or: float = 0.0
 
-    n_hlt1_track_mva_tos: int = 0
-    n_hlt1_track_mva_tis: int = 0
-    n_hlt1_two_track_mva_tos: int = 0
-    n_hlt1_two_track_mva_tis: int = 0
-    n_hlt1_or: int = 0
+    n_hlt1_track_mva_tos: float = 0.0
+    n_hlt1_track_mva_tis: float = 0.0
+    n_hlt1_two_track_mva_tos: float = 0.0
+    n_hlt1_two_track_mva_tis: float = 0.0
+    n_hlt1_or: float = 0.0
 
-    n_hlt2_topo2_tos: int = 0
-    n_hlt2_topo3_tos: int = 0
-    n_hlt2_topo4_tos: int = 0
-    n_hlt2_or: int = 0
+    n_hlt2_topo2_tos: float = 0.0
+    n_hlt2_topo3_tos: float = 0.0
+    n_hlt2_topo4_tos: float = 0.0
+    n_hlt2_or: float = 0.0
 
     # Calculate efficiencies relative to previous step
     @property
     def eff_gen(self) -> float:
-        # Placeholder: assume 1.0 or implement lookup from MC report
-        return 0.22  # Placeholder 22% for gen
+        return self.gen_eff
 
     def get_err_gen(self) -> float:
         return self.gen_err
@@ -106,10 +105,6 @@ class EfficiencyResult:
     @property
     def eff_pre(self) -> float:
         return self.n_pre / self.n_trig if self.n_trig > 0 else 0.0
-
-    @property
-    def eff_total(self) -> float:
-        return self.eff_gen * self.eff_reco_str * self.eff_trig * self.eff_pre
 
     def get_err_reco_str(self) -> float:
         if self.n_total == 0:
@@ -129,13 +124,33 @@ class EfficiencyResult:
         eff = self.eff_pre
         return np.sqrt(eff * (1 - eff) / self.n_trig)
 
+    def get_err_mva(self) -> float:
+        if self.n_pre == 0:
+            return 0.0
+        eff = self.eff_mva
+        return np.sqrt(eff * (1 - eff) / self.n_pre)
+
+    @property
+    def eff_mva(self) -> float:
+        return self.n_mva / self.n_pre if self.n_pre > 0 else 0.0
+
+    @property
+    def eff_total(self) -> float:
+        return self.eff_gen * self.eff_reco_str * self.eff_trig * self.eff_pre * self.eff_mva
+
+    def get_err_mva(self) -> float:
+        if self.n_pre == 0:
+            return 0.0
+        eff = self.eff_mva
+        return np.sqrt(eff * (1 - eff) / self.n_pre)
+
     def get_err_total(self) -> float:
         # Simple error propagation assuming uncorrelated binomial steps
         # This is an approximation for eff_total without gen error
         eff_tot_no_gen = self.eff_reco_str * self.eff_trig * self.eff_pre
         if self.n_total == 0:
             return 0.0
-        # For a sequence of cuts from n_total to n_pre, it's just a single binomial:
+        # For a sequence of cuts from n_total to n_mva, it's just a single binomial:
         err_no_gen = np.sqrt(eff_tot_no_gen * (1 - eff_tot_no_gen) / self.n_total)
         return self.eff_gen * err_no_gen
 
@@ -152,7 +167,15 @@ def get_luminosity_weights(config: dict) -> Dict[str, float]:
 
 
 def calculate_efficiencies_for_file(
-    file_path: str, category: str = "LL", gen_eff: float = 0.22, gen_err: float = 0.0005
+    file_path: str,
+    category: str = "LL",
+    gen_eff: float = 0.22,
+    gen_err: float = 0.0005,
+    mva_model: xgb.Booster = None,
+    mva_features: list = None,
+    mva_threshold: float = 0.0,
+    kin_weights: dict = None,
+    tracking_weights: bool = False,
 ) -> EfficiencyResult:
     """Calculate the efficiency steps for a single MC file for a given Lambda category."""
     result = EfficiencyResult(gen_eff=gen_eff, gen_err=gen_err)
@@ -171,6 +194,29 @@ def calculate_efficiencies_for_file(
     tree = f[tree_name]
 
     result.n_total = tree.num_entries
+    if result.n_total == 0:
+        return result
+
+    # Build weight array (initialized to 1.0)
+    w_array = np.ones(result.n_total, dtype=float)
+
+    # 1. Kinematic reweighting (pT)
+    if kin_weights is not None:
+        pt_array = tree["Bu_PT"].array()
+        pt_bins = np.array(kin_weights["pt_bins"])
+        weights = np.array(kin_weights["weights"])
+        idx = np.digitize(pt_array, pt_bins) - 1
+        idx = np.clip(idx, 0, len(weights) - 1)
+        w_array *= weights[idx]
+
+    # 2. Tracking Corrections (Placeholder for Phase 4)
+    if tracking_weights:
+        # Currently just multiplying by 1.0.
+        # When LHCb tables are loaded, extract p_P, p_ETA, etc. and calculate event-by-event scale factors.
+        pass
+
+    # We update n_total to be the weighted total
+    result.n_total = np.sum(w_array)
     if result.n_total == 0:
         return result
 
@@ -215,7 +261,7 @@ def calculate_efficiencies_for_file(
     )
 
     reco_str_mask = truth_mask & track_mask
-    result.n_reco_str = ak.sum(reco_str_mask)
+    result.n_reco_str = np.sum(w_array[reco_str_mask])
 
     if result.n_reco_str == 0:
         return result
@@ -245,29 +291,29 @@ def calculate_efficiencies_for_file(
     hlt2_tos = hlt2_topo2_tos | hlt2_topo3_tos | hlt2_topo4_tos
 
     # Fill individual trigger line counts relative to stripping
-    result.n_l0_global_tis = ak.sum(reco_str_mask & l0_global_tis)
-    result.n_l0_phys_tis = ak.sum(reco_str_mask & l0_phys_tis)
-    result.n_l0_hadron_tis = ak.sum(reco_str_mask & l0_hadron_tis)
-    result.n_l0_muon_tis = ak.sum(reco_str_mask & l0_muon_tis)
-    result.n_l0_muon_high_tis = ak.sum(reco_str_mask & l0_muon_high_tis)
-    result.n_l0_dimuon_tis = ak.sum(reco_str_mask & l0_dimuon_tis)
-    result.n_l0_photon_tis = ak.sum(reco_str_mask & l0_photon_tis)
-    result.n_l0_electron_tis = ak.sum(reco_str_mask & l0_electron_tis)
-    result.n_l0_hadron_tos = ak.sum(reco_str_mask & l0_hadron_tos)
-    result.n_l0_or = ak.sum(reco_str_mask & l0_tis)
+    result.n_l0_global_tis = np.sum(w_array[reco_str_mask & l0_global_tis])
+    result.n_l0_phys_tis = np.sum(w_array[reco_str_mask & l0_phys_tis])
+    result.n_l0_hadron_tis = np.sum(w_array[reco_str_mask & l0_hadron_tis])
+    result.n_l0_muon_tis = np.sum(w_array[reco_str_mask & l0_muon_tis])
+    result.n_l0_muon_high_tis = np.sum(w_array[reco_str_mask & l0_muon_high_tis])
+    result.n_l0_dimuon_tis = np.sum(w_array[reco_str_mask & l0_dimuon_tis])
+    result.n_l0_photon_tis = np.sum(w_array[reco_str_mask & l0_photon_tis])
+    result.n_l0_electron_tis = np.sum(w_array[reco_str_mask & l0_electron_tis])
+    result.n_l0_hadron_tos = np.sum(w_array[reco_str_mask & l0_hadron_tos])
+    result.n_l0_or = np.sum(w_array[reco_str_mask & l0_tis])
 
-    result.n_hlt1_track_mva_tos = ak.sum(reco_str_mask & hlt1_track_mva_tos)
-    result.n_hlt1_track_mva_tis = ak.sum(reco_str_mask & hlt1_track_mva_tis)
-    result.n_hlt1_or = ak.sum(reco_str_mask & hlt1_tos)
+    result.n_hlt1_track_mva_tos = np.sum(w_array[reco_str_mask & hlt1_track_mva_tos])
+    result.n_hlt1_track_mva_tis = np.sum(w_array[reco_str_mask & hlt1_track_mva_tis])
+    result.n_hlt1_or = np.sum(w_array[reco_str_mask & hlt1_tos])
 
-    result.n_hlt2_topo2_tos = ak.sum(reco_str_mask & hlt2_topo2_tos)
-    result.n_hlt2_topo3_tos = ak.sum(reco_str_mask & hlt2_topo3_tos)
-    result.n_hlt2_topo4_tos = ak.sum(reco_str_mask & hlt2_topo4_tos)
-    result.n_hlt2_or = ak.sum(reco_str_mask & hlt2_tos)
+    result.n_hlt2_topo2_tos = np.sum(w_array[reco_str_mask & hlt2_topo2_tos])
+    result.n_hlt2_topo3_tos = np.sum(w_array[reco_str_mask & hlt2_topo3_tos])
+    result.n_hlt2_topo4_tos = np.sum(w_array[reco_str_mask & hlt2_topo4_tos])
+    result.n_hlt2_or = np.sum(w_array[reco_str_mask & hlt2_tos])
 
     trigger_mask = l0_tis & hlt1_tos & hlt2_tos
     trig_mask_total = reco_str_mask & trigger_mask
-    result.n_trig = ak.sum(trig_mask_total)
+    result.n_trig = np.sum(w_array[trig_mask_total])
 
     if result.n_trig == 0:
         return result
@@ -307,7 +353,29 @@ def calculate_efficiencies_for_file(
     pre_mask = baseline_mask & lambda_mask
 
     pre_mask_total = trig_mask_total & pre_mask
-    result.n_pre = ak.sum(pre_mask_total)
+    result.n_pre = np.sum(w_array[pre_mask_total])
+
+    if result.n_pre == 0 or mva_model is None:
+        result.n_mva = result.n_pre
+        return result
+
+    # STEP 5: MVA Selection (eff_{mva})
+    # Extract features for events passing pre-selection
+    events_pre = tree.arrays(mva_features, pre_mask_total)
+
+    # Convert Awkward Array to Pandas DataFrame for XGBoost
+    df = pd.DataFrame({f: events_pre[f] for f in mva_features})
+
+    # Predict probabilities
+    dmatrix = xgb.DMatrix(df)
+    preds = mva_model.predict(dmatrix)
+
+    # Apply threshold
+    mva_mask = preds > mva_threshold
+
+    # Get weights for events passing pre-selection
+    w_pre = w_array[pre_mask_total]
+    result.n_mva = np.sum(w_pre[mva_mask])
 
     return result
 
@@ -434,7 +502,7 @@ def print_markdown_table(
     sep = "|---|" + "|".join(["---" for _ in range(len(categories) * len(years))]) + "|"
     output_str += header + "\n" + sep + "\n"
 
-    rows = {"ε_gen": [], "ε_strip+reco": [], "ε_trig": [], "ε_presel": [], "ε_tot": []}
+    rows = {"ε_gen": [], "ε_strip+reco": [], "ε_trig": [], "ε_presel": [], "ε_mva": [], "ε_tot": []}
 
     for cat in categories:
         for year in years:
@@ -449,6 +517,7 @@ def print_markdown_table(
             )
             rows["ε_trig"].append(f"{effs['eff_trig']*100:.2f} ± {errs['err_trig']*100:.2f}")
             rows["ε_presel"].append(f"{effs['eff_pre']*100:.2f} ± {errs['err_pre']*100:.2f}")
+            rows["ε_mva"].append(f"{effs['eff_mva']*100:.2f} ± {errs['err_mva']*100:.2f}")
 
             # For total we keep precision slightly higher
             tot_val = effs["eff_total"] * 100
@@ -483,6 +552,25 @@ def main():
                 gen_config = tomli.load(f)
         except Exception:
             gen_config = {}
+
+        # Load MVA Model
+        mva_model = None
+        mva_features = sel_config.get("xgboost", {}).get("features", [])
+        mva_threshold = 0.0
+
+        if sel_config.get("cut_application", {}).get("optimization_type") == "mva":
+            # For now, let's hardcode the optimal threshold from our MVA study
+            # We found High_Yield S/sqrt(B) cut is 0.89.
+            # We can use that as the nominal MVA cut for efficiencies.
+            mva_threshold = 0.89
+            try:
+                mva_model = xgb.Booster()
+                mva_model.load_model("../mva_optimization/output/models/xgboost_bdt.json")
+                print(f"Loaded XGBoost model. Using threshold > {mva_threshold}")
+            except Exception as e:
+                print(f"Warning: Could not load MVA model: {e}")
+                mva_model = None
+
     except Exception as e:
         print(f"Error loading configs: {e}")
         return
@@ -520,6 +608,7 @@ def main():
                     year_res.n_reco_str += res.n_reco_str
                     year_res.n_trig += res.n_trig
                     year_res.n_pre += res.n_pre
+                    year_res.n_mva += res.n_mva
 
                     year_res.n_l0_global_tis += res.n_l0_global_tis
                     year_res.n_l0_phys_tis += res.n_l0_phys_tis
@@ -568,6 +657,7 @@ def main():
                         "reco_str": int(year_res.n_reco_str),
                         "trig": int(year_res.n_trig),
                         "pre": int(year_res.n_pre),
+                        "mva": int(year_res.n_mva),
                     },
                     "trigger_counts": trig_counts,
                     "efficiencies": {
@@ -575,6 +665,7 @@ def main():
                         "eff_reco_str": year_res.eff_reco_str,
                         "eff_trig": year_res.eff_trig,
                         "eff_pre": year_res.eff_pre,
+                        "eff_mva": year_res.eff_mva,
                         "eff_total": year_res.eff_total,
                     },
                     "errors": {
@@ -582,6 +673,7 @@ def main():
                         "err_reco_str": year_res.get_err_reco_str(),
                         "err_trig": year_res.get_err_trig(),
                         "err_pre": year_res.get_err_pre(),
+                        "err_mva": year_res.get_err_mva(),
                         "err_total": year_res.get_err_total(),
                     },
                 }
