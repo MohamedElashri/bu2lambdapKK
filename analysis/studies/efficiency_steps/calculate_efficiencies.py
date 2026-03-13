@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import tomli
 import uproot
-import xgboost as xgb
+from catboost import CatBoostClassifier
 
 
 def get_gen_eff_from_config(
@@ -171,7 +171,7 @@ def calculate_efficiencies_for_file(
     category: str = "LL",
     gen_eff: float = 0.22,
     gen_err: float = 0.0005,
-    mva_model: xgb.Booster = None,
+    mva_model=None,
     mva_features: list = None,
     mva_threshold: float = 0.0,
     kin_weights: dict = None,
@@ -559,14 +559,21 @@ def main():
         mva_threshold = 0.0
 
         if sel_config.get("cut_application", {}).get("optimization_type") == "mva":
-            # For now, let's hardcode the optimal threshold from our MVA study
-            # We found High_Yield S/sqrt(B) cut is 0.89.
-            # We can use that as the nominal MVA cut for efficiencies.
-            mva_threshold = 0.89
+            cuts_path = "../../analysis_output/mva/models/optimized_cuts.json"
+            model_path = "../../analysis_output/mva/models/mva_model.cbm"
             try:
-                mva_model = xgb.Booster()
-                mva_model.load_model("../mva_optimization/output/models/xgboost_bdt.json")
-                print(f"Loaded XGBoost model. Using threshold > {mva_threshold}")
+                with open(cuts_path, "r") as cf:
+                    cuts_data = json.load(cf)
+                    # Use the high yield cut for efficiencies by default, or an average
+                    mva_threshold = cuts_data.get("mva_threshold_high", 0.5)
+            except Exception as e:
+                print(f"Warning: Could not read {cuts_path}, defaulting to 0.5: {e}")
+                mva_threshold = 0.5
+
+            try:
+                mva_model = CatBoostClassifier()
+                mva_model.load_model(model_path)
+                print(f"Loaded CatBoost model from {model_path}. Using threshold > {mva_threshold}")
             except Exception as e:
                 print(f"Warning: Could not load MVA model: {e}")
                 mva_model = None

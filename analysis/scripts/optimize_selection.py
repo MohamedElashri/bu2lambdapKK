@@ -221,11 +221,8 @@ elif opt_type == "mva":
                     (n_low_cut / b_low_sb_width + n_high_cut / b_high_sb_width) / 2.0
                 ) * b_sig_width
 
-            # FOM: S/sqrt(B) for high, S/sqrt(S+B) for low
-            if group == "high":
-                fom = s_total / np.sqrt(b_total) if b_total > 0 else 0
-            else:
-                fom = s_total / np.sqrt(s_total + b_total) if (s_total + b_total) > 0 else 0
+            # FOM: S/sqrt(S+B) for both
+            fom = s_total / np.sqrt(s_total + b_total) if (s_total + b_total) > 0 else 0
 
             if fom > best_fom:
                 best_fom = fom

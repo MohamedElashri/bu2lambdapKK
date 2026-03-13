@@ -57,17 +57,62 @@ if mc_final is None:
     )
     sys.exit(1)
 
+import json
+
+eff_json_path = project_root / "studies" / "efficiency_steps" / "output" / "efficiencies.json"
+eff_data = {}
+if eff_json_path.exists():
+    with open(eff_json_path, "r") as f:
+        eff_data = json.load(f)
+else:
+    logger.warning(f"Efficiency file not found at {eff_json_path}. Using 1.0 placeholders.")
+
 # Get states from config (Phase 5 refactor)
 plotting_cfg = config.fitting.get("plotting", {})
 all_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
 ref_state = plotting_cfg.get("ref_state", "jpsi")
 
-logger.info(f"Calculating Efficiencies for branch {branch} (using placeholder 1.0 as requested)")
+# Mapping between config state names and efficiency study state names
+state_map = {
+    "jpsi": "Jpsi",
+    "chic0": "chic0",
+    "chic1": "chic1",
+    "chic2": "chic2",
+    "etac": "etac",
+    "etac_2s": "etac_2s",
+}
+
+logger.info(f"Calculating Efficiencies for branch {branch} (aggregating from efficiency study)")
 
 eff_rows = []
 for state in all_states:
+    study_state = state_map.get(state, state)
+
+    total_eff = 1.0
+    total_err = 0.0
+    note = "Placeholder"
+
+    if study_state in eff_data:
+        # We need to compute a weighted average of LL/DD and Years based on luminosity or just simple average for now
+        # Actually, the easiest way to get the true total efficiency across everything is to sum the counts and use the combined gen_eff.
+        # But for simplicity, let's average the final eff_total across the 6 categories (LL/DD x 3 years) if available.
+        # Wait, the efficiency JSON contains counts and efficiencies per year/category.
+
+        effs = []
+        errs = []
+        for cat in eff_data[study_state].values():
+            for year, data in cat.items():
+                effs.append(data["efficiencies"]["eff_total"])
+                errs.append(data["errors"]["err_total"])
+
+        if effs:
+            total_eff = sum(effs) / len(effs)
+            # Simple error propagation for an average
+            total_err = sum(e**2 for e in errs) ** 0.5 / len(errs)
+            note = "Averaged over LL/DD and Years"
+
     eff_rows.append(
-        {"state": state, "efficiency": 1.0, "efficiency_err": 0.0, "note": "Placeholder"}
+        {"state": state, "efficiency": total_eff, "efficiency_err": total_err, "note": note}
     )
 
 df_eff = pd.DataFrame(eff_rows)
@@ -76,9 +121,31 @@ df_eff.to_csv(eff_file, index=False)
 
 # Ratios relative to ref_state from config
 ratios_rows = []
-for state in all_states:
+ref_eff = (
+    df_eff[df_eff["state"] == ref_state]["efficiency"].values[0]
+    if ref_state in df_eff["state"].values
+    else 1.0
+)
+ref_err = (
+    df_eff[df_eff["state"] == ref_state]["efficiency_err"].values[0]
+    if ref_state in df_eff["state"].values
+    else 0.0
+)
+
+for _, row in df_eff.iterrows():
+    state = row["state"]
+    eff = row["efficiency"]
+    err = row["efficiency_err"]
+
+    ratio = eff / ref_eff if ref_eff > 0 else 1.0
+
+    # Error propagation
+    rel_err_sig = err / eff if eff > 0 else 0
+    rel_err_ref = ref_err / ref_eff if ref_eff > 0 else 0
+    ratio_err = ratio * (rel_err_sig**2 + rel_err_ref**2) ** 0.5
+
     ratios_rows.append(
-        {"state": state, "ratio_to_ref": 1.0, "ratio_err": 0.0, "note": "Placeholder"}
+        {"state": state, "ratio_to_ref": ratio, "ratio_err": ratio_err, "note": row["note"]}
     )
 
 df_ratios = pd.DataFrame(ratios_rows)
