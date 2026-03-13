@@ -175,7 +175,6 @@ def calculate_efficiencies_for_file(
     mva_features: list = None,
     mva_threshold: float = 0.0,
     kin_weights: dict = None,
-    tracking_weights: bool = False,
 ) -> EfficiencyResult:
     """Calculate the efficiency steps for a single MC file for a given Lambda category."""
     result = EfficiencyResult(gen_eff=gen_eff, gen_err=gen_err)
@@ -208,12 +207,6 @@ def calculate_efficiencies_for_file(
         idx = np.digitize(pt_array, pt_bins) - 1
         idx = np.clip(idx, 0, len(weights) - 1)
         w_array *= weights[idx]
-
-    # 2. Tracking Corrections (Placeholder for Phase 4)
-    if tracking_weights:
-        # Currently just multiplying by 1.0.
-        # When LHCb tables are loaded, extract p_P, p_ETA, etc. and calculate event-by-event scale factors.
-        pass
 
     # We update n_total to be the weighted total
     result.n_total = np.sum(w_array)
@@ -360,22 +353,78 @@ def calculate_efficiencies_for_file(
         return result
 
     # STEP 5: MVA Selection (eff_{mva})
-    # Extract features for events passing pre-selection
-    events_pre = tree.arrays(mva_features, pre_mask_total)
+    import awkward as ak
 
-    # Convert Awkward Array to Pandas DataFrame for XGBoost
-    df = pd.DataFrame({f: events_pre[f] for f in mva_features})
+    # The pre_mask_total is an event-level mask where we require at least one passing candidate.
+    # Wait, looking at the code `result.n_pre = np.sum(w_array[pre_mask_total])`, pre_mask_total MUST be 1D boolean array per event.
+    # We can check its type. If it's a candidate-level mask, `w_array[pre_mask_total]` would fail.
+    # Since it succeeded, pre_mask_total is either 1D or it's implicitly flattened.
+    # Let's assume pre_mask_total is a 1D event-level mask.
+    # But wait, earlier:
+    # baseline_mask = (bu_fdchi2 > 175.0) & ...
+    # These variables are usually jagged. So baseline_mask is jagged.
+    # Then pre_mask = baseline_mask & lambda_mask (jagged).
+    # Then pre_mask_total = trig_mask_total & pre_mask.
+    # If trig_mask_total is 1D and pre_mask is 2D, they broadcast. The result is 2D.
+    # np.sum(w_array[pre_mask_total]) fails if pre_mask_total is 2D and w_array is 1D.
+    # BUT wait! We changed pre_mask_total to 1D somewhere else? Let's fix this properly.
 
-    # Predict probabilities
-    dmatrix = xgb.DMatrix(df)
-    preds = mva_model.predict(dmatrix)
+    # Let's extract the actual arrays and flatten them at the same time to guarantee length match.
+    # Extract features for all events then apply the mask to get passing events
+    events_all = tree.arrays(mva_features)
+    events_pre = events_all[pre_mask_total]
 
-    # Apply threshold
-    mva_mask = preds > mva_threshold
+    # We need to ensure all features have the same shape before flattening.
+    # We broadcast 1D features (like Bu_PT) to the shape of the 2D features (like Bu_DTF_chi2).
+    # First, find a 2D feature to use as a template for broadcasting.
+    template = None
+    for f in mva_features:
+        if events_pre[f].ndim > 1:
+            template = events_pre[f]
+            break
 
-    # Get weights for events passing pre-selection
-    w_pre = w_array[pre_mask_total]
-    result.n_mva = np.sum(w_pre[mva_mask])
+    data_dict = {}
+    for f in mva_features:
+        arr = events_pre[f]
+        if arr.ndim == 1 and template is not None:
+            # Broadcast the 1D array to the jagged shape of the template
+            arr = arr * ak.ones_like(template)
+
+        if arr.ndim > 1:
+            arr = ak.flatten(arr)
+        data_dict[f] = ak.to_numpy(arr)
+
+    df = pd.DataFrame(data_dict)
+
+    # Now we must build w_pre of exactly the same length.
+    # w_array is length N_events. pre_mask_total is length N_events.
+    # We need to stretch w_pre to match the number of candidates per event.
+    w_pre_events = w_array[pre_mask_total]
+
+    # Use the same template to broadcast the weights
+    if template is not None:
+        w_pre_jagged = w_pre_events * ak.ones_like(template)
+        w_pre = ak.to_numpy(ak.flatten(w_pre_jagged))
+    else:
+        w_pre = ak.to_numpy(w_pre_events)
+
+    if len(df) > 0:
+        # Predict probabilities
+        if hasattr(mva_model, "predict_proba"):
+            preds = mva_model.predict_proba(df)[:, 1]
+        else:
+            import xgboost as xgb
+
+            dmatrix = xgb.DMatrix(df)
+            preds = mva_model.predict(dmatrix)
+
+        # Apply threshold
+        mva_mask = preds > mva_threshold
+
+        # Now both mva_mask and w_pre are exactly 1D arrays per event
+        result.n_mva = np.sum(w_pre[mva_mask])
+    else:
+        result.n_mva = 0.0
 
     return result
 
@@ -608,7 +657,13 @@ def main():
                     year_res.gen_err = g_err
 
                     res = calculate_efficiencies_for_file(
-                        file_path, category=category, gen_eff=g_eff, gen_err=g_err
+                        file_path,
+                        category=category,
+                        gen_eff=g_eff,
+                        gen_err=g_err,
+                        mva_model=mva_model,
+                        mva_features=mva_features,
+                        mva_threshold=mva_threshold,
                     )
 
                     year_res.n_total += res.n_total
