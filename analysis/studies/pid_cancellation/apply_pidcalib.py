@@ -133,18 +133,20 @@ def generate_condensed_plot(data, states, p_maps, k_maps):
     bin_widths = (bins[1:] - bins[:-1]) / 2 / 1000.0
 
     panels = [
-        {"title": "Prompt Proton", "p_branch": "p_P", "pt_branch": "p_PT"},
+        {"title": r"Prompt Proton ($p$)", "p_branch": "p_P", "pt_branch": "p_PT"},
         {"title": r"Prompt Kaon ($K^+$)", "p_branch": "h1_P", "pt_branch": "h1_PT"},
         {"title": r"Prompt Kaon ($K^-$)", "p_branch": "h2_P", "pt_branch": "h2_PT"},
         {"title": r"$\Lambda^0$ Proton", "p_branch": "Lp_P", "pt_branch": "Lp_PT"},
     ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12), sharey=True)
+    # Increase figure size significantly for high-res visibility
+    fig, axes = plt.subplots(2, 2, figsize=(20, 16), sharey=True)
     axes = axes.flatten()
 
     # We want to display visually distinct markers for states
     markers = ["o", "s", "^", "D"]
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+    # Use LHCb-style distinct colors
+    colors = ["#0078FF", "#FF6600", "#0AAFB6", "#FF3333"]
 
     for idx, panel in enumerate(panels):
         ax = axes[idx]
@@ -159,9 +161,9 @@ def generate_condensed_plot(data, states, p_maps, k_maps):
         jpsi_err = binned_effs["Jpsi"]["err"]
 
         # Plot J/psi unity reference line
-        ax.axhline(1.0, color="black", linestyle="-", linewidth=2, zorder=1)
+        ax.axhline(1.0, color="black", linestyle="-", linewidth=2.5, zorder=1)
         # 1% band to show how tight the cancellation is
-        ax.axhspan(0.99, 1.01, color="gray", alpha=0.2, label=r"$\pm 1\%$ Band", zorder=0)
+        ax.axhspan(0.99, 1.01, color="gray", alpha=0.15, label=r"$\pm 1\%$ Band", zorder=0)
 
         m_idx = 0
         for state in states:
@@ -184,6 +186,10 @@ def generate_condensed_plot(data, states, p_maps, k_maps):
             }
             formatted_label = label_map.get(state, state)
 
+            # Only add labels to the legend once (from the first panel) to avoid duplicates
+            plot_label = formatted_label if idx == 0 else "_nolegend_"
+            band_label = r"$\pm 1\%$ Band" if idx == 0 else "_nolegend_"
+
             ax.errorbar(
                 bin_centers,
                 ratio,
@@ -191,27 +197,53 @@ def generate_condensed_plot(data, states, p_maps, k_maps):
                 yerr=ratio_err,
                 fmt=markers[m_idx],
                 color=colors[m_idx],
-                label=formatted_label,
-                markersize=6,
-                capsize=0,
+                label=plot_label,
+                markersize=10,
+                capsize=3,
+                linewidth=2,
                 zorder=2,
             )
             m_idx += 1
 
-        ax.set_title(panel["title"])
-        ax.set_xlabel(r"$P$ [GeV/$c$]")
+        # Add labels
+        ax.set_xlabel(f"{panel['title']} $p$ [GeV/$c$]", fontsize=24)
         if idx % 2 == 0:
             ax.set_ylabel(
-                r"Ratio $\left( \varepsilon_{\text{PID}}^{X} / \varepsilon_{\text{PID}}^{J/\psi} \right)$"
+                r"Ratio $\left( \varepsilon_{\rm PID}^{X} / \varepsilon_{\rm PID}^{J/\psi} \right)$",
+                fontsize=26,
             )
 
         # Very tight y-axis specifically to show it completely cancels
-        ax.set_ylim(0.97, 1.03)
+        ax.set_ylim(0.95, 1.05)
+        ax.tick_params(axis="both", which="major", labelsize=20)
 
+        # Add standard LHCb preliminary watermark to the first plot
         if idx == 0:
-            ax.legend(loc="upper right", ncol=2, frameon=True, edgecolor="white")
+            hep.lhcb.text("Preliminary", ax=ax, loc=1, fontsize=24)
 
-    plt.tight_layout()
+    # Extract handles and labels from the first axis to create a single global legend
+    handles, labels = axes[0].get_legend_handles_labels()
+
+    # Place a global legend outside the subplots, centered below the master title
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.93),
+        ncol=5,
+        frameon=False,
+        fontsize=22,
+    )
+
+    # Global title and spacing
+    plt.suptitle(
+        "PID Efficiency Cancellation Verification (Data-Driven)",
+        fontsize=32,
+        y=0.98,
+        fontweight="bold",
+    )
+    plt.subplots_adjust(top=0.86, wspace=0.1, hspace=0.25)
+
     plt.savefig("output/real_ratio_condensed_panel.pdf", bbox_inches="tight")
     plt.savefig("output/real_ratio_condensed_panel.png", dpi=300, bbox_inches="tight")
     plt.close()
