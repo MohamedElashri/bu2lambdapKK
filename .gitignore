@@ -247,3 +247,9 @@ output
 
 # Hidden files and folders
 .*
+
+# compressed files
+*.tar.gz
+*.zip
+*.rar
+*.7z
