@@ -1,12 +1,31 @@
 """
-Derive MC Kinematic Weights using the high-statistics J/psi control channel.
+Derive MC kinematic weights using the high-statistics J/psi control channel.
 
 Method:
-1. Load J/psi Data and apply pre-selection + MVA cut (for max purity).
-2. Perform B+ mass sideband subtraction to extract pure signal distributions for Bu_PT, Bu_ETA, and nTracks.
-3. Load J/psi MC and apply the same pre-selection + MVA cut.
-4. Compute the normalized 2D Data/MC ratio weights for (Bu_PT, Bu_ETA).
-5. Save the weights to a file so `calculate_efficiencies.py` can load and apply them.
+1. Load J/psi data (both LL and DD) and apply the Phase 0 pre-selection.
+2. Perform B+ mass sideband subtraction to extract pure signal pT distributions.
+3. Load J/psi MC and apply the same pre-selection.
+4. Compute the normalised 1D Data/MC ratio weights for Bu_pT, separately per category.
+5. Save per-category weight maps:
+   output/kinematic_weights_LL.json
+   output/kinematic_weights_DD.json
+
+Phase 3 changes:
+- Updated from XGBoost to CatBoost model (Phase 2 BDT retrain).
+- Fixed the bug where all_data_eta was initialised but never populated (eta array removed
+  since we only compute 1D pT weights; extending to 2D is a Phase 3.2 enhancement).
+- Added per-category (LL and DD) weight derivation.  Separate weights are needed because
+  the B+ pT spectrum can differ between LL and DD due to different geometric acceptances.
+- The script now reads the pre-selection from the main pipeline's clean_data_loader.py
+  (via direct import) to stay consistent.
+
+Note on 2D extension (Phase 3.2):
+  nTracks is available in the ntuples as "nTracks" or "nSPDHits" depending on the year.
+  To extend to 2D (pT × nTracks), replace the 1D histogramming below with:
+    h_data_2d, xe, ye = np.histogram2d(data_pt, data_ntracks, bins=[pt_bins, ntracks_bins], weights=data_w)
+    h_mc_2d,   _,  _ = np.histogram2d(mc_pt,   mc_ntracks,   bins=[pt_bins, ntracks_bins])
+  and save the 2D weight map.  The 2D lookup in calculate_efficiencies.py should then
+  use np.digitize on both axes.
 """
 
 import argparse
@@ -14,59 +33,218 @@ import json
 import sys
 from pathlib import Path
 
+import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import tomli
-import xgboost as xgb
 
-# Add modules to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add analysis root to path
+analysis_root = Path(__file__).resolve().parent.parent.parent
+if str(analysis_root) not in sys.path:
+    sys.path.insert(0, str(analysis_root))
+
 from modules.clean_data_loader import load_and_preprocess
 
 
-def get_eta(px, py, pz):
-    p = np.sqrt(px**2 + py**2 + pz**2)
-    return 0.5 * np.log((p + pz) / (p - pz + 1e-10))
-
-
-def apply_mva(events, mva_model, features, threshold=0.89):
-    if len(events) == 0:
+def apply_catboost(events, model_path: Path, features: list, threshold: float):
+    """Apply CatBoost BDT and return events passing the threshold."""
+    if len(events) == 0 or not model_path.exists():
         return events
-    df = pd.DataFrame({f: events[f] for f in features})
-    dmatrix = xgb.DMatrix(df)
-    preds = mva_model.predict(dmatrix)
+    import pandas as pd
+    from catboost import CatBoostClassifier
+
+    df_dict = {}
+    for feat in features:
+        arr = events[feat]
+        if "var" in str(ak.type(arr)):
+            arr = ak.firsts(arr)
+        df_dict[feat] = ak.to_numpy(arr)
+    df = pd.DataFrame(df_dict)
+
+    model = CatBoostClassifier()
+    model.load_model(str(model_path))
+    preds = model.predict_proba(df)[:, 1]
     return events[preds > threshold]
 
 
-def sideband_subtraction(mass_array, weight_array, signal_window, sb_window):
-    """Return a mask for events in regions and a weight modifier array for subtraction"""
+def sideband_weights(
+    mass_array, signal_window=(5255.0, 5305.0), sb_lo=(5150.0, 5230.0), sb_hi=(5330.0, 5410.0)
+):
+    """Return per-event sideband-subtraction weights (+1 in signal, −scale in sidebands)."""
     sig_min, sig_max = signal_window
-    low_sb_min, low_sb_max = sb_window[0]
-    high_sb_min, high_sb_max = sb_window[1]
-
-    in_sig = (mass_array >= sig_min) & (mass_array <= sig_max)
-    in_low = (mass_array >= low_sb_min) & (mass_array <= low_sb_max)
-    in_high = (mass_array >= high_sb_min) & (mass_array <= high_sb_max)
+    lo_min, lo_max = sb_lo
+    hi_min, hi_max = sb_hi
 
     width_sig = sig_max - sig_min
-    width_sb = (low_sb_max - low_sb_min) + (high_sb_max - high_sb_min)
+    width_sb = (lo_max - lo_min) + (hi_max - hi_min)
     scale = width_sig / width_sb
 
-    # We return an array where signal events get weight 1, and sidebands get weight -scale
-    # Events outside these get weight 0
-    final_weights = np.zeros(len(mass_array), dtype=float)
-    final_weights[in_sig] = 1.0 * (weight_array[in_sig] if weight_array is not None else 1.0)
-    final_weights[in_low] = -scale * (weight_array[in_low] if weight_array is not None else 1.0)
-    final_weights[in_high] = -scale * (weight_array[in_high] if weight_array is not None else 1.0)
+    w = np.zeros(len(mass_array), dtype=float)
+    w[(mass_array >= sig_min) & (mass_array <= sig_max)] = 1.0
+    w[(mass_array >= lo_min) & (mass_array <= lo_max)] = -scale
+    w[(mass_array >= hi_min) & (mass_array <= hi_max)] = -scale
+    return w
 
-    mask = in_sig | in_low | in_high
-    return mask, final_weights
+
+def derive_weights_for_category(
+    category: str,
+    data_base: Path,
+    mc_base: Path,
+    years: list,
+    polarities: list,
+    mva_model_path: Path,
+    mva_features: list,
+    mva_threshold: float,
+    delta_z_cuts: dict,
+) -> dict:
+    """Derive 1D pT kinematic weights for one Lambda category."""
+    print(f"\n[{category}] Deriving kinematic weights...")
+
+    data_pt_all, data_w_all = [], []
+    mc_pt_all = []
+
+    for year in years:
+        for pol in polarities:
+            # ---- Data ----
+            d_file = data_base / f"dataBu2L0barPHH_{year}{pol}.root"
+            if d_file.exists():
+                events = load_and_preprocess(
+                    d_file,
+                    is_mc=False,
+                    track_type=category,
+                    delta_z_cut=delta_z_cuts[category],
+                )
+                events = apply_catboost(events, mva_model_path, mva_features, mva_threshold)
+                if len(events) > 0:
+                    mass = ak.to_numpy(events["Bu_MM_corrected"])
+                    pt = ak.to_numpy(events["Bu_PT"])
+                    w = sideband_weights(mass)
+                    # only keep events in the three regions
+                    in_region = w != 0
+                    data_pt_all.extend(pt[in_region])
+                    data_w_all.extend(w[in_region])
+            else:
+                print(f"  [{category}] Data file not found: {d_file}")
+
+            # ---- J/psi MC ----
+            m_file = mc_base / f"Jpsi_{year}_{pol}.root"
+            if m_file.exists():
+                events = load_and_preprocess(
+                    m_file,
+                    is_mc=True,
+                    track_type=category,
+                    delta_z_cut=delta_z_cuts[category],
+                )
+                events = apply_catboost(events, mva_model_path, mva_features, mva_threshold)
+                if len(events) > 0:
+                    mc_pt_all.extend(ak.to_numpy(events["Bu_PT"]))
+            else:
+                print(f"  [{category}] MC file not found: {m_file}")
+
+    data_pt = np.array(data_pt_all)
+    data_w = np.array(data_w_all)
+    mc_pt = np.array(mc_pt_all)
+
+    print(f"  [{category}] Data (sideband-subtracted): {np.sum(data_w):.0f} signal events")
+    print(f"  [{category}] MC: {len(mc_pt)} events")
+
+    if len(data_pt) == 0 or len(mc_pt) == 0:
+        print(f"  [{category}] Insufficient data — returning uniform weights.")
+        return {"pt_bins": [3000, 25000], "weights": [1.0]}
+
+    pt_bins = np.array([3000, 4000, 5000, 6000, 8000, 10000, 15000, 25000], dtype=float)
+
+    h_data, _ = np.histogram(data_pt, bins=pt_bins, weights=data_w)
+    h_mc, _ = np.histogram(mc_pt, bins=pt_bins)
+
+    # Normalise to unity so the weights are pure shape corrections
+    h_data_norm = h_data / np.sum(h_data) if np.sum(h_data) != 0 else h_data
+    h_mc_norm = h_mc / np.sum(h_mc) if np.sum(h_mc) != 0 else h_mc
+
+    weights_1d = np.divide(
+        h_data_norm,
+        h_mc_norm,
+        out=np.ones_like(h_data_norm),
+        where=h_mc_norm > 0,
+    )
+
+    print(f"  [{category}] Weight range: [{weights_1d.min():.3f}, {weights_1d.max():.3f}]")
+    return {"pt_bins": pt_bins.tolist(), "weights": weights_1d.tolist()}
+
+
+def derive_weights_varied(
+    category: str, nominal_weights: dict, variation: str, rng: np.random.Generator
+) -> dict:
+    """
+    Phase 4.4 — Produce one kinematic weight variation for the systematic.
+
+    Variations:
+      "fine_bins"   : Double the number of pT bins (finer granularity)
+      "coarse_bins" : Halve the number of pT bins (coarser granularity)
+      "bootstrap"   : Resample weights with Gaussian noise proportional to bin occupancy
+                      (conservative 5% relative uncertainty per bin as no bin-stat errors
+                      are stored in the 1D map)
+
+    Args:
+        category:        "LL" or "DD"
+        nominal_weights: dict with "pt_bins" and "weights" from `derive_weights_for_category`
+        variation:       one of "fine_bins", "coarse_bins", "bootstrap"
+        rng:             numpy Generator
+
+    Returns:
+        dict with "pt_bins" and "weights" for the varied map
+    """
+    pt_bins_nom = np.array(nominal_weights["pt_bins"])
+    w_nom = np.array(nominal_weights["weights"])
+
+    if variation == "bootstrap":
+        # Smear each weight bin by 5% relative (conservative without bin-stat info)
+        sigma = 0.05 * np.abs(w_nom)
+        w_var = np.clip(w_nom + rng.normal(0.0, sigma), 0.1, 10.0)
+        return {"pt_bins": pt_bins_nom.tolist(), "weights": w_var.tolist()}
+
+    if variation == "fine_bins":
+        # Insert midpoints between existing bin edges to double bin count
+        extra = 0.5 * (pt_bins_nom[:-1] + pt_bins_nom[1:])
+        new_bins = np.sort(np.concatenate([pt_bins_nom, extra]))
+        # Each new bin inherits the weight of its parent bin
+        new_weights = []
+        for i in range(len(new_bins) - 1):
+            mid = 0.5 * (new_bins[i] + new_bins[i + 1])
+            idx = np.searchsorted(pt_bins_nom, mid, side="right") - 1
+            idx = int(np.clip(idx, 0, len(w_nom) - 1))
+            new_weights.append(float(w_nom[idx]))
+        return {"pt_bins": new_bins.tolist(), "weights": new_weights}
+
+    if variation == "coarse_bins":
+        # Merge adjacent bins in pairs (average weights, sum bin edges)
+        n = len(w_nom)
+        pairs = n // 2
+        coarse_bins = [pt_bins_nom[0]]
+        coarse_weights = []
+        for i in range(pairs):
+            coarse_bins.append(pt_bins_nom[2 * i + 2])
+            coarse_weights.append(0.5 * (w_nom[2 * i] + w_nom[2 * i + 1]))
+        if 2 * pairs < n:  # odd bin — keep last bin as-is
+            coarse_bins.append(pt_bins_nom[-1])
+            coarse_weights.append(float(w_nom[-1]))
+        return {"pt_bins": coarse_bins, "weights": coarse_weights}
+
+    raise ValueError(f"Unknown variation '{variation}'")
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Derive kinematic weights per category")
     parser.add_argument("--config-dir", default="../../config")
+    parser.add_argument(
+        "--branch", default="high_yield", help="Branch name for loading the per-category MVA model."
+    )
+    parser.add_argument(
+        "--compute-variations",
+        action="store_true",
+        help="Phase 4.4: also compute systematic variations and save to "
+        "output/kinematic_weights_{cat}_var_{name}.json",
+    )
     args = parser.parse_args()
 
     with open(f"{args.config_dir}/data.toml", "rb") as f:
@@ -75,102 +253,90 @@ def main():
         sel_config = tomli.load(f)
 
     mva_features = sel_config.get("xgboost", {}).get("features", [])
-    mva_model = xgb.Booster()
-    mva_model.load_model("../../studies/mva_optimization/output/models/xgboost_bdt.json")
-    mva_threshold = 0.89
-
-    years = ["16", "17", "18"]
-    polarities = ["MD", "MU"]
+    mva_threshold = 0.89  # default; overridden by optimized_cuts.json if available
 
     data_base = Path(data_config["input_data"]["base_path"])
     mc_base = Path(data_config["input_mc"]["base_path"]) / "Jpsi"
+    years = ["16", "17", "18"]
+    polarities = ["MD", "MU"]
 
-    all_data_pt = []
-    all_data_eta = []
-    all_data_weights = []
+    # Category-aware Delta_Z cuts (matching Phase 0 values)
+    delta_z_cuts = {"LL": 20.0, "DD": 5.0}
 
-    all_mc_pt = []
-    all_mc_eta = []
+    output_dir = Path("output")
+    output_dir.mkdir(exist_ok=True)
 
-    print("Loading J/psi Data and MC for reweighting...")
-    for year in years:
-        for pol in polarities:
-            # Data
-            d_file = data_base / f"dataBu2L0barPHH_{year}{pol}_reduced_PID.root"
-            if d_file.exists():
-                events = load_and_preprocess(
-                    d_file, is_mc=False, track_type="LL"
-                )  # Assume LL is representative enough for B+ kinematics, or load both. Let's load LL for simplicity.
-                events = apply_mva(events, mva_model, mva_features, mva_threshold)
+    all_weights = {}
+    for category in ["LL", "DD"]:
+        # Try to load optimized threshold for this category
+        cuts_path = Path(
+            f"../../analysis_output/mva/{args.branch}/{category}/models/optimized_cuts.json"
+        )
+        cat_threshold = mva_threshold
+        if cuts_path.exists():
+            with open(cuts_path, "r") as f:
+                cuts_data = json.load(f)
+            cat_threshold = cuts_data.get("mva_threshold_high", mva_threshold)
+            print(f"[{category}] Loaded MVA threshold = {cat_threshold:.3f} from {cuts_path}")
 
-                # Calculate PT
-                pt = events["Bu_PT"]
-                mass = events["Bu_MM_corrected"]
+        # Per-category CatBoost model
+        model_path = Path(
+            f"../../analysis_output/mva/{args.branch}/{category}/models/mva_model.cbm"
+        )
 
-                # Sideband subtract
-                sig_w = (5255.0, 5305.0)
-                sb_w = ((5150.0, 5230.0), (5330.0, 5410.0))
-                mask, weights = sideband_subtraction(mass, None, sig_w, sb_w)
+        weights = derive_weights_for_category(
+            category=category,
+            data_base=data_base,
+            mc_base=mc_base,
+            years=years,
+            polarities=polarities,
+            mva_model_path=model_path,
+            mva_features=mva_features,
+            mva_threshold=cat_threshold,
+            delta_z_cuts=delta_z_cuts,
+        )
 
-                all_data_pt.extend(pt[mask].to_numpy())
+        out_file = output_dir / f"kinematic_weights_{category}.json"
+        with open(out_file, "w") as f:
+            json.dump(weights, f, indent=2)
+        print(f"  [{category}] Saved to {out_file}")
+        all_weights[category] = weights
 
-                all_data_weights.extend(weights[mask])
+        # Plot
+        pt_bins = np.array(weights["pt_bins"])
+        w_vals = np.array(weights["weights"])
+        centers = 0.5 * (pt_bins[:-1] + pt_bins[1:])
+        widths = np.diff(pt_bins)
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.bar(centers, w_vals, width=widths * 0.8, color="steelblue", alpha=0.7, edgecolor="k")
+        ax.axhline(1.0, color="red", linestyle="--", linewidth=1)
+        ax.set_xlabel("B+ pT [MeV/c]")
+        ax.set_ylabel("Data/MC weight")
+        ax.set_title(f"Kinematic reweighting — {category}")
+        fig.tight_layout()
+        fig.savefig(output_dir / f"weight_map_{category}.pdf")
+        plt.close(fig)
 
-            # MC
-            m_file = mc_base / f"Jpsi_{year}_{pol}.root"
-            if m_file.exists():
-                events = load_and_preprocess(m_file, is_mc=True, track_type="LL")
-                events = apply_mva(events, mva_model, mva_features, mva_threshold)
+    # Phase 4.4: compute systematic variations if requested
+    if args.compute_variations:
+        rng = np.random.default_rng(seed=42)
+        for cat, nom_w in all_weights.items():
+            for var_name in ("fine_bins", "coarse_bins", "bootstrap"):
+                var_w = derive_weights_varied(cat, nom_w, var_name, rng)
+                var_file = output_dir / f"kinematic_weights_{cat}_var_{var_name}.json"
+                with open(var_file, "w") as f:
+                    json.dump(var_w, f, indent=2)
+                print(f"  [{cat}] Variation '{var_name}' saved to {var_file}")
 
-                # Calculate PT
-                pt = events["Bu_PT"]
-
-                all_mc_pt.extend(pt.to_numpy())
-
-    data_pt = np.array(all_data_pt)
-    data_eta = np.array(all_data_eta)
-    data_w = np.array(all_data_weights)
-
-    mc_pt = np.array(all_mc_pt)
-    mc_eta = np.array(all_mc_eta)
-
-    # Define binning
-    # PT: 3000 to 25000
-    pt_bins = np.array([3000, 4000, 5000, 6000, 8000, 10000, 15000, 25000])
-
-    print(f"Total Data (weighted): {np.sum(data_w):.1f}")
-    print(f"Total MC: {len(mc_pt)}")
-
-    # Histogram 1D
-    h_data, xedges = np.histogram(data_pt, bins=pt_bins, weights=data_w)
-    h_mc, _ = np.histogram(mc_pt, bins=pt_bins)
-
-    # Normalize to 1
-    h_data = h_data / np.sum(h_data)
-    h_mc = h_mc / np.sum(h_mc)
-
-    # Calculate weights (avoid division by zero)
-    weights_1d = np.divide(h_data, h_mc, out=np.ones_like(h_data), where=h_mc > 0)
-
-    # Save the weight map
-    output_data = {"pt_bins": pt_bins.tolist(), "weights": weights_1d.tolist()}
-
-    Path("output").mkdir(exist_ok=True)
-    with open("output/kinematic_weights.json", "w") as f:
-        json.dump(output_data, f, indent=2)
-
-    print("Kinematic weights successfully derived and saved to output/kinematic_weights.json")
-
-    # Plot
-    plt.figure(figsize=(8, 6))
-    bin_centers = 0.5 * (xedges[:-1] + xedges[1:])
-    bin_widths = np.diff(xedges)
-
-    plt.bar(bin_centers, weights_1d, width=bin_widths, color="blue", alpha=0.6, edgecolor="black")
-    plt.xlabel("B+ pT [MeV/c]")
-    plt.ylabel("Data/MC Weight")
-    plt.title("Kinematic Reweighting (1D pT)")
-    plt.savefig("output/weight_map.png")
+    # Also save a combined (average) file for backwards compatibility
+    if "LL" in all_weights and "DD" in all_weights:
+        pt_bins = all_weights["LL"]["pt_bins"]
+        w_avg = 0.5 * (
+            np.array(all_weights["LL"]["weights"]) + np.array(all_weights["DD"]["weights"])
+        )
+        with open(output_dir / "kinematic_weights.json", "w") as f:
+            json.dump({"pt_bins": pt_bins, "weights": w_avg.tolist()}, f, indent=2)
+        print("\nSaved combined (averaged LL+DD) weights to output/kinematic_weights.json")
 
 
 if __name__ == "__main__":

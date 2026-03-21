@@ -1,11 +1,27 @@
 # MVA Optimization Snakefile
+#
+# Phase 2 changes: separate BDT trained per Lambda category (LL and DD).
+# Per-category models are saved as:
+#   output/models/catboost_bdt_LL.cbm
+#   output/models/catboost_bdt_DD.cbm
+#
+# The main pipeline's optimize_selection.py looks for catboost_bdt_{category}.cbm
+# before falling back to the combined catboost_bdt.cbm.
+#
+# Run order:
+#   snakemake tune_catboost     # optional Optuna hyperparameter tuning
+#   snakemake run_mva_study     # trains LL + DD BDTs and optimises thresholds
+#   snakemake run_tmva_study    # TMVA baseline (requires ROOT)
+#   snakemake compare_studies   # comparison PDF (requires pdflatex)
+
+CATEGORIES = ["LL", "DD"]
+
+ruleorder: run_mva_study > run_mva_ll > run_mva_dd
 
 rule all:
     input:
-        "output/models/optuna_catboost_best_params.json",
-        "mva_optimization_completed.txt",
-        "tmva_optimization_completed.txt",
-        "comparison/mva_vs_tmva.pdf"
+        expand("output/models/catboost_bdt_{category}.cbm", category=CATEGORIES),
+        "mva_optimization_completed.txt"
 
 rule tune_catboost:
     output:
@@ -18,13 +34,34 @@ rule tune_catboost:
 
 rule run_mva_study:
     input:
-        "output/models/optuna_catboost_best_params.json"
+        # Optionally depend on tuned params if they exist; not mandatory
     output:
+        expand("output/models/catboost_bdt_{category}.cbm", category=CATEGORIES),
         "mva_optimization_completed.txt"
     shell:
         """
         cd mva
-        uv run python main.py
+        uv run python main.py --category both
+        """
+
+rule run_mva_ll:
+    output:
+        "output/models/catboost_bdt_LL.cbm",
+        "output/tables/mva_optimization_results_LL.md"
+    shell:
+        """
+        cd mva
+        uv run python main.py --category LL
+        """
+
+rule run_mva_dd:
+    output:
+        "output/models/catboost_bdt_DD.cbm",
+        "output/tables/mva_optimization_results_DD.md"
+    shell:
+        """
+        cd mva
+        uv run python main.py --category DD
         """
 
 rule run_tmva_study:
@@ -33,20 +70,13 @@ rule run_tmva_study:
         "output/tmva/tmva_summary.md"
     shell:
         """
-        # Run inside the tmva directory
         cd tmva
-
-        # Check if we can import ROOT in the current environment
-        # Only run TMVA if the TMVA class can be accessed natively
         if python -c "import ROOT; ROOT.gSystem.Load('libTMVA'); getattr(ROOT, 'TMVA')" 2>/dev/null; then
-            echo "ROOT+TMVA found in current environment. Running TMVA..."
+            echo "ROOT+TMVA found. Running TMVA..."
             python run_tmva.py
             touch ../tmva_optimization_completed.txt
         else
-            echo "WARNING: ROOT/TMVA not found in current environment."
-            echo "TMVA study requires a full ROOT installation."
-            echo "To run this step properly, please run snakemake inside an environment with ROOT (like conda bphysics)."
-            echo "Creating a dummy completion file to allow the pipeline to proceed."
+            echo "WARNING: ROOT/TMVA not available. Creating placeholder files."
             mkdir -p ../output/tmva
             touch ../output/tmva/tmva_summary.md
             touch ../tmva_optimization_completed.txt

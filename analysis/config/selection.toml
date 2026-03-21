@@ -16,9 +16,22 @@ argus_endpoint_offset = 200.0
 bin_width = 5.0
 use_binned_fit = true
 
+[fixed_selection]
+# Variables fixed outside the ND optimizer (validated by fit_based_optimizer study).
+# PID proxy optimization is fundamentally broken (see studies/pid_proxy_comparison).
+# PID > 0.20 is applied as a hard pre-cut; fit-based FOM confirms it improves S/sqrt(B).
+pid_product_min = 0.20
+
 [lambda_selection]
-delta_z_min = 5.0
-fd_chisq_min = 250.0
+delta_z_min_dd = 5.0
+# Category-aware Delta_Z cuts (applied per track type in clean_data_loader.py)
+# LL: tight cut to reject fake Lambda candidates (reference analysis uses 20 mm)
+# DD: loose cut; downstream FD chi2 is more discriminating for downstream tracks
+delta_z_min_ll = 20.0
+# Lambda FD chi2: lowered from 250 to 50 (stripping minimum ~12).
+# The optimizer now scans this variable; 250 was previously baked in at pre-selection
+# level creating circular logic. The optimal value will be found by the ND scan.
+fd_chisq_min = 50.0
 mass_max = 1121.0
 mass_min = 1111.0
 proton_probnnp_min = 0.3
@@ -41,13 +54,6 @@ cut_type = "greater"
 end = 300.0
 step = 10.0
 
-[nd_optimizable_selection.bu_ipchi2]
-begin = 4.0
-branch_name = "Bu_IPCHI2_OWNPV"
-cut_type = "less"
-end = 10.0
-step = 0.25
-
 [nd_optimizable_selection.bu_pt]
 begin = 3000.0
 branch_name = "Bu_PT"
@@ -55,12 +61,23 @@ cut_type = "greater"
 end = 4000.0
 step = 200.0
 
-[nd_optimizable_selection.pid_product]
-begin = 0.1
-branch_name = "PID_product"
+# Lambda FD chi2 added to ND scan (was previously hard-coded at 250 in pre-selection)
+[nd_optimizable_selection.lambda_fdchi2]
+begin = 50.0
+branch_name = "L0_FDCHI2_OWNPV"
 cut_type = "greater"
-end = 0.8
-step = 0.25
+end = 300.0
+step = 50.0
+
+# log(IP chi2) replaces the raw IP chi2 scan — more uniform distribution in
+# the sensitive region, finer effective granularity near the optimal cut.
+# log(4) ≈ 1.39, log(10) ≈ 2.30; previous optimal was IP chi2 < 7 → log(7) ≈ 1.95
+[nd_optimizable_selection.log_bu_ipchi2]
+begin = 0.5
+branch_name = "log_Bu_IPCHI2"
+cut_type = "less"
+end = 2.5
+step = 0.1
 
 [optimization_strategy]
 b_high_sideband_max = 5410.0
@@ -104,14 +121,15 @@ center = 3096.916
 window = 15.0
 
 [xgboost]
+# PID variables (p_ProbNNp, h1_ProbNNk, h2_ProbNNk) removed from BDT feature set.
+# Reason: sideband training background has higher PID quality than true combinatorial
+# background in signal window → BDT learns wrong direction in PID space.
+# PID > 0.20 is applied as a fixed pre-cut before BDT evaluation.
 features = [
   "Bu_DTF_chi2",
   "Bu_FDCHI2_OWNPV",
   "Bu_IPCHI2_OWNPV",
-  "Bu_PT",
-  "p_ProbNNp",
-  "h1_ProbNNk",
-  "h2_ProbNNk"
+  "Bu_PT"
 ]
 random_state = 42
 test_size = 0.3

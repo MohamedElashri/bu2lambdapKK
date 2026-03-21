@@ -47,14 +47,16 @@ center = 3096.916
 window = 15.0
 
 [xgboost]
+# PID variables (p_ProbNNp, h1_ProbNNk, h2_ProbNNk) have been removed.
+# All proxy-based PID FOMs are anti-correlated with the fit-based FOM (r = -0.90)
+# because sideband backgrounds consist of real, well-identified particles.
+# PID is handled as a fixed pre-cut (PID_product > 0.20) applied in load_and_preprocess().
+# See studies/pid_proxy_comparison/ for the full investigation.
 features = [
   "Bu_DTF_chi2",
   "Bu_FDCHI2_OWNPV",
   "Bu_IPCHI2_OWNPV",
-  "Bu_PT",
-  "p_ProbNNp",
-  "h1_ProbNNk",
-  "h2_ProbNNk"
+  "Bu_PT"
 ]
 random_state = 42
 test_size = 0.3

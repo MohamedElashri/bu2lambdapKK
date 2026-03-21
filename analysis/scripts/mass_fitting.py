@@ -22,9 +22,8 @@ if "snakemake" in globals():
     summary_file = snakemake.input[0]
     yields_file = snakemake.output[0]
     branch = snakemake.params.branch
+    category = snakemake.params.category
     opt_method = snakemake.params.get("opt_method", "box")
-    years = snakemake.params.get("years", ["2016", "2017", "2018"])
-    track_types = snakemake.params.get("track_types", ["LL", "DD"])
 else:
     no_cache = False
     config_dir = "config"
@@ -32,10 +31,9 @@ else:
     cache_dir = f"analysis_output/{opt_method}/cache"
     output_dir = f"analysis_output/{opt_method}"
     branch = "high_yield"
-    summary_file = Path(output_dir) / branch / "tables" / "cut_summary.json"
-    yields_file = Path(output_dir) / branch / "tables" / "fitted_yields.csv"
-    years = ["2016", "2017", "2018"]
-    track_types = ["LL", "DD"]
+    category = "LL"
+    summary_file = Path(output_dir) / branch / category / "tables" / "cut_summary.json"
+    yields_file = Path(output_dir) / branch / category / "tables" / "fitted_yields.csv"
 
 config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
@@ -44,29 +42,30 @@ cache = CacheManager(cache_dir=cache_dir)
 # Re-compute dependencies matching apply cuts
 cut_deps = cache.compute_dependencies(
     config_files=list(Path(config_dir).glob("*.toml")),
-    code_files=[
-        project_root / "scripts" / "apply_cuts.py",
-    ],
+    code_files=[project_root / "scripts" / "apply_cuts.py"],
 )
 
-# Load cut data (Final data after optimal cuts are applied for this branch)
-data_dict = cache.load(f"{branch}_final_data", dependencies=cut_deps)
+# Load cut data: cache key includes branch AND category (set by apply_cuts.py)
+data_dict = cache.load(f"{branch}_{category}_final_data", dependencies=cut_deps)
 
 if data_dict is None:
     logger.error(
-        f"Cut data for branch {branch} not found in cache. Run 'snakemake apply_cuts' first."
+        f"Cut data for branch={branch}, category={category} not found in cache. "
+        "Run 'snakemake apply_cuts' first."
     )
     sys.exit(1)
 
-# Branch-specific plot directory (Hierarchical: {output_dir}/{branch}/plots/fits)
-out_path = Path(output_dir) / branch / "plots" / "fits"
-out_path.mkdir(parents=True, exist_ok=True)
-
-logger.info(f"Initializing RooFit Mass Fitter for branch: {branch}")
+logger.info(f"Initializing RooFit Mass Fitter for branch={branch}, category={category}")
 fitter = MassFitter(config=config)
 
-# We pass the absolute path for plots to the fitter via plot_tag
-fit_result = fitter.perform_fit(data_dict, fit_combined=True, plot_tag=str(out_path.absolute()))
+# Plot directory: LL and DD plots are kept in separate subdirectories
+out_path = Path(output_dir) / branch / category / "plots" / "fits"
+fit_result = fitter.perform_fit(
+    data_dict,
+    fit_combined=True,
+    plot_dir=out_path,
+    fit_label=f"{branch} / {category}",
+)
 
 import pandas as pd
 
@@ -90,4 +89,7 @@ df_yields = pd.DataFrame(rows)
 Path(yields_file).parent.mkdir(parents=True, exist_ok=True)
 df_yields.to_csv(yields_file, index=False)
 
-logger.info(f"Mass fitting complete for branch {branch}. Yields saved to {yields_file}")
+logger.info(
+    f"Mass fitting complete for branch={branch}, category={category}. "
+    f"Yields saved to {yields_file}"
+)

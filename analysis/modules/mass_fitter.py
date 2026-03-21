@@ -53,14 +53,21 @@ class MassFitter:
         yields: Nested dictionary of yield variables
     """
 
-    def __init__(self, config: Any) -> None:
+    def __init__(self, config: Any, systematic_params: dict | None = None) -> None:
         """
         Initialize mass fitter with configuration.
 
         Args:
             config: TOMLConfig object with particles, paths configuration
+            systematic_params: Optional overrides for systematic variation fits.
+                Recognised keys:
+                  "bkg_model"              : "argus" (default) | "poly2" (Chebyshev)
+                  "argus_endpoint_offset"  : float override (default from config, usually 200 MeV)
+                  "signal_resolution_fixed": float — fix resolution to this value (MeV) instead
+                                             of floating; used for ±1σ resolution systematics
         """
         self.config: Any = config
+        self.systematic_params: dict = systematic_params or {}
         self.fit_range: tuple[float, float] = config.mass_windows["charmonium_fit_range"]
 
         # B+ mass window for pre-selection (applied BEFORE fitting)
@@ -170,13 +177,22 @@ class MassFitter:
 
         # Resolution (shared Gaussian width - same detector for all states)
         if self.resolution is None:
-            self.resolution = ROOT.RooRealVar(  # type: ignore
-                "sigma_resolution",
-                "#sigma_{resolution} [MeV/c^{2}]",
-                5.0,  # Initial guess ~5 MeV
-                1.0,  # Minimum
-                20.0,  # Maximum
-            )
+            fixed_res = self.systematic_params.get("signal_resolution_fixed")
+            if fixed_res is not None:
+                self.resolution = ROOT.RooRealVar(  # type: ignore
+                    "sigma_resolution",
+                    "#sigma_{resolution} [MeV/c^{2}]",
+                    float(fixed_res),
+                )
+                self.resolution.setConstant(True)
+            else:
+                self.resolution = ROOT.RooRealVar(  # type: ignore
+                    "sigma_resolution",
+                    "#sigma_{resolution} [MeV/c^{2}]",
+                    5.0,  # Initial guess ~5 MeV
+                    1.0,  # Minimum
+                    20.0,  # Maximum
+                )
 
         # Create Voigtian PDF (RBW ⊗ Gaussian)
         signal_pdf = ROOT.RooVoigtian(  # type: ignore
@@ -212,9 +228,32 @@ class MassFitter:
         if year in self.bkg_pdfs:
             return self.bkg_pdfs[year], self.argus_params[year]["c"]
 
-        # ARGUS endpoint - set BEYOND the fit range to avoid sharp cutoff
-        # Read offset from config (default 200 MeV for backward compatibility)
-        endpoint_offset = self.config.fitting.get("argus_endpoint_offset", 200.0)
+        # Initialize storage if needed
+        if not hasattr(self, "argus_params"):
+            self.argus_params = {}
+
+        bkg_model = self.systematic_params.get("bkg_model", "argus")
+
+        if bkg_model == "poly2":
+            # 2nd-order Chebyshev polynomial background (systematic alternative)
+            c0 = ROOT.RooRealVar(f"c0_poly_{year}", f"poly c0 {year}", 0.0, -10.0, 10.0)  # type: ignore
+            c1 = ROOT.RooRealVar(f"c1_poly_{year}", f"poly c1 {year}", 0.0, -10.0, 10.0)  # type: ignore
+            coef_list = ROOT.RooArgList(c0, c1)  # type: ignore
+            bkg_pdf = ROOT.RooChebychev(  # type: ignore
+                f"pdf_bkg_{year}", f"Background PDF {year}", mass_var, coef_list
+            )
+            # Store a dummy "c" for interface compatibility; consumers only use the PDF
+            self.bkg_pdfs[year] = bkg_pdf
+            self.argus_params[year] = {"c": c0, "c0": c0, "c1": c1}
+            return bkg_pdf, c0
+
+        # Default: ARGUS background
+        # Endpoint — set BEYOND the fit range to avoid a sharp cutoff.
+        # Allow systematic_params to override the endpoint offset (±50 MeV variations).
+        endpoint_offset = self.systematic_params.get(
+            "argus_endpoint_offset",
+            self.config.fitting.get("argus_endpoint_offset", 200.0),
+        )
 
         m0 = ROOT.RooRealVar(  # type: ignore
             f"m0_argus_{year}",
@@ -238,10 +277,6 @@ class MassFitter:
 
         # Create ARGUS PDF
         bkg_pdf = ROOT.RooArgusBG(f"pdf_bkg_{year}", f"Background PDF {year}", mass_var, m0, c, p)  # type: ignore
-
-        # Initialize storage if needed
-        if not hasattr(self, "argus_params"):
-            self.argus_params = {}
 
         # Cache ALL parameters to prevent garbage collection
         self.bkg_pdfs[year] = bkg_pdf
@@ -314,7 +349,11 @@ class MassFitter:
         return total_pdf, year_yields
 
     def perform_fit(
-        self, data_by_year: dict[str, ak.Array], fit_combined: bool = True, plot_tag: str = ""
+        self,
+        data_by_year: dict[str, ak.Array],
+        fit_combined: bool = True,
+        plot_dir: "Path | None" = None,
+        fit_label: str = "",
     ) -> dict[str, Any]:
         """
         Perform mass fits to all years (per-year AND combined).
@@ -481,10 +520,18 @@ class MassFitter:
                 all_yields[dataset_name] = dataset_yields
                 all_fit_results[dataset_name] = fit_result
 
-                # Plot results (pass fit_result for quality metrics)
-                self.plot_fit_result(
-                    dataset_name, mass_var, dataset, model, yields, fit_result, plot_tag=plot_tag
-                )
+                # Plot results only when a target directory is explicitly provided
+                if plot_dir is not None:
+                    self.plot_fit_result(
+                        dataset_name,
+                        mass_var,
+                        dataset,
+                        model,
+                        yields,
+                        fit_result,
+                        plot_dir=plot_dir,
+                        fit_label=fit_label,
+                    )
 
                 pbar.update(1)
 
@@ -530,7 +577,8 @@ class MassFitter:
         model: Any,
         yields: dict[str, Any],
         fit_result: Any = None,
-        plot_tag: str = "",
+        plot_dir: "Path | None" = None,
+        fit_label: str = "",
     ) -> None:
         """
         Plot fit result with official LHCb publication style
@@ -647,6 +695,15 @@ class MassFitter:
         year_label.SetTextSize(0.05)
         year_text = "2016-2018" if year == "combined" else str(year)
         year_label.DrawLatex(0.12, 0.81, year_text)
+
+        # Add context label (e.g. "high_yield / LL") if provided
+        if fit_label:
+            ctx_label = ROOT.TLatex()  # type: ignore
+            ctx_label.SetNDC()
+            ctx_label.SetTextFont(132)
+            ctx_label.SetTextSize(0.04)
+            ctx_label.SetTextColor(ROOT.kGray + 2)  # type: ignore
+            ctx_label.DrawLatex(0.12, 0.76, fit_label)
 
         # Calculate pull statistics early (before drawing info boxes)
         pull_hist = frame.pullHist("data", "total")
@@ -815,15 +872,12 @@ class MassFitter:
 
         # Save plot
         canvas.cd()
-        if plot_tag:
-            # Use plot_tag as a subdirectory if provided, or assume it is a full path if absolute
-            if Path(plot_tag).is_absolute():
-                plot_dir = Path(plot_tag)
-            else:
-                plot_dir = self.config.output_dir / "plots" / "fits" / plot_tag
-        else:
-            plot_dir = self.config.output_dir / "plots" / "fits"
-
+        if plot_dir is None:
+            # Caller did not provide a directory — skip saving
+            canvas.Clear()
+            canvas.Close()
+            return
+        plot_dir = Path(plot_dir)
         plot_dir.mkdir(exist_ok=True, parents=True)
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))

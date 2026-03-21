@@ -8,6 +8,10 @@
 #   snakemake --dag | dot -Tpdf > dag.pdf  # Visualize DAG
 #
 # Standalone studies live in analysis/studies/<study_name>/ with their own Snakefiles.
+#
+# Phase 1 change: LL and DD Lambda categories are now processed separately through
+# rules 3–6 (optimize → apply_cuts → mass_fitting → efficiency_calculation).
+# They are combined only at rule 7 (branching_ratios), following the reference analysis.
 
 configfile: "snakemake_config.yaml"
 
@@ -24,6 +28,10 @@ MAGNETS = config.get("magnets", ["MD", "MU"])
 STATES = config.get("states", ["jpsi", "etac", "chic0", "chic1"])
 USE_MANUAL_CUTS = config.get("use_manual_cuts", False)
 NO_CACHE = config.get("no_cache", False)
+
+# Lambda categories processed separately through optimization and fitting
+CATEGORIES = TRACK_TYPES  # ["LL", "DD"]
+BRANCHES = ["high_yield", "low_yield"]
 
 import re
 from pathlib import Path
@@ -48,14 +56,11 @@ if not OPT_METHOD:
 print(f"INFO: Using optimization method: {OPT_METHOD}")
 
 # Redefine output and cache directories to be method-specific
-# This ensures that all markers and intermediate files are isolated
 OUTPUT_DIR = f"{ROOT_OUTPUT_DIR}/{OPT_METHOD}"
 CACHE_DIR = f"{OUTPUT_DIR}/cache"
 
-BRANCHES = ["high_yield", "low_yield"]
-
 # ---------------------------------------------------------------------------
-# Config file list (all 11 TOML files)
+# Config file list (all TOML files in config/)
 # ---------------------------------------------------------------------------
 CONFIG_FILES = [
     f"{CONFIG_DIR}/{f}"
@@ -78,9 +83,17 @@ CONFIG_FILES = [
 # ---------------------------------------------------------------------------
 rule all:
     input:
-        expand(f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv", branch=BRANCHES),
+        expand(
+            f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
+            branch=BRANCHES,
+        ),
+        expand(
+            f"{OUTPUT_DIR}/{{branch}}/LL_DD/tables/fitted_yields_combined.csv",
+            branch=BRANCHES,
+        ),
         f"{OUTPUT_DIR}/comparison/branch_comparison.md",
         f"{OUTPUT_DIR}/results/bf_products.tex",
+        f"{OUTPUT_DIR}/results/systematics_summary.md",
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -98,6 +111,8 @@ rule validate_config:
 
 # ---------------------------------------------------------------------------
 # Step 2: Data/MC loading + Lambda pre-selection
+# Outputs a nested dict {year: {category: array}} for data and
+# {state: {category: array}} for MC, stored in the cache.
 # ---------------------------------------------------------------------------
 rule load_data:
     input:
@@ -116,13 +131,15 @@ rule load_data:
         "scripts/load_data.py"
 
 # ---------------------------------------------------------------------------
-# Step 3: Selection optimization
+# Step 3: Selection optimization — one per (branch, category)
+# Each category gets its own cut set. This allows LL and DD to be independently
+# optimised (reference analysis finds different optimal cuts per category).
 # ---------------------------------------------------------------------------
 rule optimize_selection:
     input:
         f"{OUTPUT_DIR}/.data_loaded",
     output:
-        f"{OUTPUT_DIR}/models/optimized_cuts.json",
+        f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
     params:
         use_manual_cuts=USE_MANUAL_CUTS,
         no_cache=NO_CACHE,
@@ -130,41 +147,43 @@ rule optimize_selection:
         cache_dir=CACHE_DIR,
         output_dir=OUTPUT_DIR,
         years=YEARS,
-        track_types=TRACK_TYPES,
+        category="{category}",
+        branch="{branch}",
         opt_method=OPT_METHOD,
     script:
         "scripts/optimize_selection.py"
 
 # ---------------------------------------------------------------------------
-# Step 4: Apply optimized cuts
+# Step 4: Apply optimized cuts — one per (branch, category)
 # ---------------------------------------------------------------------------
 rule apply_cuts:
     input:
         data_loaded=f"{OUTPUT_DIR}/.data_loaded",
-        cuts=f"{OUTPUT_DIR}/models/optimized_cuts.json",
+        cuts=f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
     output:
-        summary=f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
+        summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
     params:
         branch="{branch}",
+        category="{category}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
         output_dir=OUTPUT_DIR,
         years=YEARS,
-        track_types=TRACK_TYPES,
     script:
         "scripts/apply_cuts.py"
 
 # ---------------------------------------------------------------------------
-# Step 5: Mass fitting (RooFit)
+# Step 5: Mass fitting — one per (branch, category)
 # ---------------------------------------------------------------------------
 rule mass_fitting:
     input:
-        f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
+        f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
     output:
-        f"{OUTPUT_DIR}/{{branch}}/tables/fitted_yields.csv",
+        f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/fitted_yields.csv",
     params:
         branch="{branch}",
+        category="{category}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
@@ -174,17 +193,40 @@ rule mass_fitting:
         "scripts/mass_fitting.py"
 
 # ---------------------------------------------------------------------------
-# Step 6: Efficiency calculation
+# Step 5b: Combined LL+DD mass fit — one per branch
+# Concatenates LL and DD events per year and fits the merged sample.
+# Purpose: publication-quality combined plot + cross-check yields.
+# Yield extraction for branching fractions uses the separate LL/DD fits above.
+# ---------------------------------------------------------------------------
+rule mass_fitting_combined:
+    input:
+        ll=f"{OUTPUT_DIR}/{{branch}}/LL/tables/cut_summary.json",
+        dd=f"{OUTPUT_DIR}/{{branch}}/DD/tables/cut_summary.json",
+    output:
+        f"{OUTPUT_DIR}/{{branch}}/LL_DD/tables/fitted_yields_combined.csv",
+    params:
+        branch="{branch}",
+        no_cache=NO_CACHE,
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+        output_dir=OUTPUT_DIR,
+        opt_method=OPT_METHOD,
+    script:
+        "scripts/mass_fitting_combined.py"
+
+# ---------------------------------------------------------------------------
+# Step 6: Efficiency calculation — one per (branch, category)
 # ---------------------------------------------------------------------------
 rule efficiency_calculation:
     input:
-        summary=f"{OUTPUT_DIR}/{{branch}}/tables/cut_summary.json",
-        cuts=f"{OUTPUT_DIR}/models/optimized_cuts.json",
+        summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
+        cuts=f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
     output:
-        efficiencies=f"{OUTPUT_DIR}/{{branch}}/tables/efficiencies.csv",
-        ratios=f"{OUTPUT_DIR}/{{branch}}/tables/efficiency_ratios.csv",
+        efficiencies=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/efficiencies.csv",
+        ratios=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/efficiency_ratios.csv",
     params:
         branch="{branch}",
+        category="{category}",
         no_cache=NO_CACHE,
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
@@ -194,12 +236,17 @@ rule efficiency_calculation:
 
 # ---------------------------------------------------------------------------
 # Step 7: Branching fraction ratios
+# Takes LL and DD fitted yields and efficiency tables as inputs.
+# Yields are summed across categories before computing the ratio.
 # ---------------------------------------------------------------------------
 rule branching_ratios:
     input:
-        yields=f"{OUTPUT_DIR}/{{branch}}/tables/fitted_yields.csv",
-        efficiencies=f"{OUTPUT_DIR}/{{branch}}/tables/efficiencies.csv",
-        ratios=f"{OUTPUT_DIR}/{{branch}}/tables/efficiency_ratios.csv",
+        yields_ll=f"{OUTPUT_DIR}/{{branch}}/LL/tables/fitted_yields.csv",
+        yields_dd=f"{OUTPUT_DIR}/{{branch}}/DD/tables/fitted_yields.csv",
+        efficiencies_ll=f"{OUTPUT_DIR}/{{branch}}/LL/tables/efficiencies.csv",
+        efficiencies_dd=f"{OUTPUT_DIR}/{{branch}}/DD/tables/efficiencies.csv",
+        ratios_ll=f"{OUTPUT_DIR}/{{branch}}/LL/tables/efficiency_ratios.csv",
+        ratios_dd=f"{OUTPUT_DIR}/{{branch}}/DD/tables/efficiency_ratios.csv",
     output:
         br_ratios=f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
         final_results=f"{OUTPUT_DIR}/{{branch}}/results/final_results.md",
@@ -210,7 +257,6 @@ rule branching_ratios:
         output_dir=OUTPUT_DIR,
     script:
         "scripts/branching_ratios.py"
-
 
 # ---------------------------------------------------------------------------
 # Step 8: Branch comparison
@@ -225,28 +271,74 @@ rule compare_branches:
         "scripts/compare_branches.py"
 
 # ---------------------------------------------------------------------------
-# Step 9: Export final LaTeX tables
+# Step 9: Compute systematic uncertainties (Phase 4)
+# Reads fit_systematics + selection_systematic study outputs and aggregates
+# into a per-state systematic table consumed by branching_ratios.py.
+# Run the studies first:
+#   cd studies/fit_systematics  && uv run snakemake -j4
+#   cd studies/selection_systematic && uv run snakemake -j4
+# ---------------------------------------------------------------------------
+rule compute_systematics:
+    input:
+        expand(
+            f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
+            branch=BRANCHES,
+        ),
+    output:
+        expand(f"{OUTPUT_DIR}/{{branch}}/tables/systematics.json", branch=BRANCHES),
+        f"{OUTPUT_DIR}/results/systematics_summary.md",
+    params:
+        output_dir=OUTPUT_DIR,
+        studies_dir="studies",
+    shell:
+        """
+        uv run python scripts/compute_systematics.py \
+            --branches     high_yield low_yield \
+            --categories   LL DD \
+            --output-dir   {params.output_dir} \
+            --studies-dir  {params.studies_dir}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 10: Export final LaTeX tables
 # ---------------------------------------------------------------------------
 rule export_latex_results:
     input:
         high_yield=f"{OUTPUT_DIR}/high_yield/tables/branching_fraction_ratios.csv",
         low_yield=f"{OUTPUT_DIR}/low_yield/tables/branching_fraction_ratios.csv",
+        systematics=f"{OUTPUT_DIR}/results/systematics_summary.md",
     output:
         report=f"{OUTPUT_DIR}/results/bf_products.tex",
     script:
         "scripts/export_latex_results.py"
 
-# ===========================================================================
-# Convenience targets (not part of the DAG)
-# ===========================================================================
+# ---------------------------------------------------------------------------
+# Step 11: Collect all results into a single organised folder
+# Run:  snakemake collect_results
+# ---------------------------------------------------------------------------
+rule collect_results:
+    """Gather every important output into results/ for easy review."""
+    input:
+        f"{OUTPUT_DIR}/results/bf_products.tex",
+        f"{OUTPUT_DIR}/results/systematics_summary.md",
+        f"{OUTPUT_DIR}/comparison/branch_comparison.md",
+    output:
+        directory(f"{ROOT_OUTPUT_DIR}/results"),
+    params:
+        pipeline_dir=OUTPUT_DIR,
+        studies_dir="studies",
+        output_dir=f"{ROOT_OUTPUT_DIR}/results",
+    shell:
+        """
+        uv run python scripts/collect_results.py \
+            --pipeline-dir {params.pipeline_dir} \
+            --studies-dir  {params.studies_dir} \
+            --output-dir   {params.output_dir}
+        """
 
-# ---------------------------------------------------------------------------
-# Clean targets — use: snakemake clean -j1 --delete-all-output
-# Or run these directly:
-#   snakemake clean_cache -j1 -f
-#   snakemake clean_outputs -j1 -f
-#   snakemake clean_all -j1 -f
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Convenience targets
+# ===========================================================================
 rule clean_cache:
     """Remove cached intermediate results (pickle files)."""
     shell:

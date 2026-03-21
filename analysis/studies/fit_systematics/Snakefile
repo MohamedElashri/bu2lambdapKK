@@ -1,0 +1,40 @@
+# Phase 4.1 — Fit Model Systematics Snakefile
+#
+# Runs 5 fit variations per (branch, category) and saves δN per state.
+# Output consumed by scripts/compute_systematics.py.
+#
+# Run order:
+#   cd analysis/                   # main pipeline must have been run first
+#   cd studies/fit_systematics
+#   uv run snakemake -j4
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+BRANCHES    = ["high_yield", "low_yield"]
+CATEGORIES  = ["LL", "DD"]
+CONFIG_DIR  = "../../config"
+CACHE_DIR   = "../../analysis_output/mva/cache"
+
+rule all:
+    input:
+        expand(
+            "output/fit_systematics_{branch}_{category}.json",
+            branch=BRANCHES,
+            category=CATEGORIES,
+        )
+
+rule run_fit_systematics:
+    output:
+        "output/fit_systematics_{branch}_{category}.json"
+    shell:
+        """
+        uv run python run_fit_systematics.py \
+            --branch     {wildcards.branch} \
+            --category   {wildcards.category} \
+            --config-dir {CONFIG_DIR} \
+            --cache-dir  {CACHE_DIR} \
+            --output-dir output
+        """

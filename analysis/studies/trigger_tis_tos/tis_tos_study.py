@@ -12,6 +12,7 @@ Here we use sideband subtraction as a simpler, robust method for counting.
 """
 
 import argparse
+import json
 
 import awkward as ak
 import numpy as np
@@ -19,7 +20,13 @@ import uproot
 
 
 def apply_lambda_selection(tree, category):
-    """Apply standard lambda pre-selection from config."""
+    """Apply standard lambda pre-selection (Phase 0 values).
+
+    Changes from original:
+    - Lambda FD chi2 lowered: 250 → 50 (allows optimizer to scan the range freely).
+    - Delta_Z is now category-aware: LL uses 20 mm, DD uses 5 mm.
+    - PID_product > 0.20 added as fixed pre-cut (validated by fit_based_optimizer study).
+    """
     l0_mass = tree["L0_M"].array()
     l0_fdchi2 = tree["L0_FDCHI2_OWNPV"].array()
     l0_end_z = tree["L0_ENDVERTEX_Z"].array()
@@ -35,12 +42,21 @@ def apply_lambda_selection(tree, category):
 
     expected_lambda_track_type = 3 if category == "LL" else 5
 
+    # Category-aware Delta_Z cut (Phase 0)
+    delta_z_cut = 20.0 if category == "LL" else 5.0
+
+    # PID variables for fixed pre-cut
+    p_probnnp = tree["p_ProbNNp"].array() if "p_ProbNNp" in tree else ak.ones_like(l0_mass)
+    h1_probnnk = tree["h1_ProbNNk"].array() if "h1_ProbNNk" in tree else ak.ones_like(l0_mass)
+    h2_probnnk = tree["h2_ProbNNk"].array() if "h2_ProbNNk" in tree else ak.ones_like(l0_mass)
+
     mask = (
         (l0_mass > 1111.0)
         & (l0_mass < 1121.0)
-        & (l0_fdchi2 > 250.0)
-        & ((l0_end_z - bu_end_z) > 5.0)
+        & (l0_fdchi2 > 50.0)  # Phase 0: was 250
+        & ((l0_end_z - bu_end_z) > delta_z_cut)  # Phase 0: category-aware
         & (lp_probnnp > 0.3)
+        & ((p_probnnp * h1_probnnk * h2_probnnk) > 0.20)  # Phase 0: fixed PID pre-cut
         & (p_track == 3)
         & (h1_track == 3)
         & (h2_track == 3)
@@ -178,6 +194,7 @@ def analyze_file(file_path: str, is_data: bool, category: str = "LL"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-dir", default="../../config")
+    parser.add_argument("--output-dir", default="output")
     args = parser.parse_args()
 
     years = ["16", "17", "18"]
@@ -252,14 +269,31 @@ def main():
             results["data"][category][year] = {"eff": eff_data, "err": err_data}
             results["mc"][category][year] = {"eff": eff_mc, "err": err_mc}
 
+            results["data"][category][year] = {"eff": eff_data, "err": err_data}
+            results["mc"][category][year] = {"eff": eff_mc, "err": err_mc}
+            results.setdefault("correction", {}).setdefault(category, {})[year] = {
+                "value": correction,
+                "err": err_corr,
+            }
+
             print(f"[{category} 20{year}]")
             print(
-                f"  Data: {n_tis_tos_data_tot:.1f} / {n_tis_data_tot:.1f} = {eff_data*100:.2f} ± {err_data*100:.2f}%"
+                f"  Data: {n_tis_tos_data_tot:.1f} / {n_tis_data_tot:.1f}"
+                f" = {eff_data*100:.2f} ± {err_data*100:.2f}%"
             )
             print(
-                f"  MC  : {n_tis_tos_mc_tot:.1f} / {n_tis_mc_tot:.1f} = {eff_mc*100:.2f} ± {err_mc*100:.2f}%"
+                f"  MC  : {n_tis_tos_mc_tot:.1f} / {n_tis_mc_tot:.1f}"
+                f" = {eff_mc*100:.2f} ± {err_mc*100:.2f}%"
             )
             print(f"  Correction Factor: {correction:.3f} ± {err_corr:.3f}\n")
+
+    import os
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    json_path = f"{args.output_dir}/tis_tos_results.json"
+    with open(json_path, "w") as f:
+        json.dump(results, f, indent=4)
+    print(f"Results saved to {json_path}")
 
 
 if __name__ == "__main__":

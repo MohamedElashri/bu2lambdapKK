@@ -1,15 +1,26 @@
+# TIS/TOS Trigger Efficiency Snakefile
+#
+# Phase 3 changes:
+# - Now saves results as JSON (tis_tos_results.json) in addition to the text log.
+# - The JSON is consumed by efficiency_steps/Snakefile as a dependency.
+
 import sys
 from pathlib import Path
 
-# Add analysis modules to path
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
 rule all:
     input:
-        "output/tis_tos_results.txt"
+        "output/tis_tos_results.json"
 
 rule run_tis_tos:
     output:
-        "output/tis_tos_results.txt"
+        json = "output/tis_tos_results.json",
+        txt  = "output/tis_tos_results.txt",
     shell:
-        "uv run python tis_tos_study.py > {output} && cat {output}"
+        """
+        uv run python tis_tos_study.py \
+            --config-dir ../../config \
+            --output-dir output \
+            > {output.txt}
+        """

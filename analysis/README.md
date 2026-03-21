@@ -1,168 +1,251 @@
-# B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis — Snakemake Pipeline
+# B⁺ → Λ̄pK⁻K⁺ Charmonium Analysis Pipeline
 
-Snakemake-based analysis pipeline for measuring branching fraction ratios of charmonium states
-(J/ψ, ηc, χc0, χc1, ηc(2S)) in B⁺ → Λ̄pK⁻K⁺ decays at LHCb.
+Snakemake-based analysis for measuring branching fraction ratios of charmonium states
+(J/ψ, η_c, χ_c0, χ_c1, η_c(2S)) in B⁺ → Λ̄pK⁻K⁺ decays at LHCb.
 
+---
 
 ## Prerequisites
 
 - **Python ≥ 3.11**
-- **[uv](https://docs.astral.sh/uv/)** — for dependency management
+- **[uv](https://docs.astral.sh/uv/)** — dependency manager
+- **graphviz** — optional, only needed for `make dag`
 
-All Python packages (including ROOT/PyROOT) are managed by `uv` and installed automatically.
-
-## Setup
+All Python packages (including ROOT/PyROOT) are managed by `uv`:
 
 ```bash
-# From the repository root:
+cd /path/to/bu2lambdapKK
 uv sync
 ```
 
-This installs all dependencies into the repo-root `.venv/`, including:
-- **HEP stack:** `uproot`, `awkward`, `ROOT` (PyROOT), `mplhep`, `vector`
-- **Core:** `numpy`, `scipy`, `matplotlib`, `pandas`
-- **Workflow:** `snakemake`
-- **Utilities:** `tqdm`, `uncertainties`, `psutil`, `pyyaml`, `tomli`
+---
 
-## Running the Pipeline
+## Quick start
 
-### Full pipeline
-
-All `uv run` commands below should be run from the `analysis/` directory.
-
-The pipeline is parameterized by the optimization method (`mva` or `box`). We recommend using the provided Makefile for convenience:
+All commands run from the `analysis/` directory.
 
 ```bash
 cd analysis/
-make OPT_METHOD=mva           # Run the full pipeline using MVA optimization
-make clean                    # Clean all outputs and caches
+
+make          # Full A-Z run (recommended for a clean slate)
+make help     # Print all available targets
+make clean    # Remove all outputs before a fresh run
 ```
 
-Or you can run Snakemake directly:
+---
+
+## Full A-Z Workflow
+
+The analysis has four sequential phases. Running `make` executes all four:
+
+```
+studies  →  main-pipeline  →  systematics  →  collect-results
+```
+
+| Phase | Make target | What it does |
+|-------|-------------|--------------|
+| 1 | `make studies` | Train MVA, compute trigger ratios, derive kinematic weights, compute efficiency table |
+| 2 | `make main-pipeline` | Load data, optimize selection, fit mass spectra, compute efficiencies, calculate BF ratios |
+| 3 | `make systematics` | Fit model + selection + PID systematics; aggregate into final uncertainties |
+| 4 | `make collect-results` | Gather all key outputs into `results/` |
+
+### Running individual phases
 
 ```bash
-uv run snakemake -j1 --config opt_method=mva  # Single-core (recommended for first run)
-uv run snakemake -j2 --config opt_method=mva  # Steps 5 & 6 can run in parallel
+make studies           # Phase 1 only
+make main-pipeline     # Phase 2 only
+make systematics       # Phase 3 only
+make collect-results   # Phase 4 only
 ```
 
-### Dry run
+### Controlling parallelism and method
 
 ```bash
-uv run snakemake -n           # Show what would be executed (no actual work)
+make CORES=8               # Use 8 parallel Snakemake jobs (default: 4)
+make OPT_METHOD=box        # Use box-cut optimization instead of MVA (default: mva)
+make OPT_METHOD=box CORES=2
 ```
 
-### Run individual steps
+---
 
-```bash
-uv run snakemake validate_config       # Step 1 only
-uv run snakemake load_data             # Steps 1–2
-uv run snakemake optimize_selection    # Steps 1–3
-uv run snakemake apply_cuts            # Steps 1–4
-uv run snakemake mass_fitting          # Steps 1–5
-uv run snakemake efficiency_calculation  # Steps 1–4, 6
-uv run snakemake branching_ratios      # Full pipeline (all steps)
+## Make Targets Reference
+
+### Full workflow
+
+| Target | Description |
+|--------|-------------|
+| `make` | **Full A-Z**: studies → pipeline → systematics → collect |
+| `make dry-run` | Show what Snakemake would execute without running anything |
+| `make dag` | Render pipeline DAG to `dag.pdf` (requires graphviz) |
+| `make rerun` | Force complete main pipeline re-run (ignores existing outputs) |
+
+### Prerequisite studies (Phase 1)
+
+| Target | Description |
+|--------|-------------|
+| `make studies` | Run all four prerequisite studies in order |
+| `make study-mva` | Train CatBoost BDTs for LL and DD separately |
+| `make study-trigger` | Compute TIS/TOS trigger efficiency ratios |
+| `make study-reweighting` | Derive per-category kinematic reweighting weights |
+| `make study-efficiency` | Compute cumulative efficiency table |
+
+### Main pipeline steps (Phase 2)
+
+Each target runs all preceding steps automatically.
+
+| Target | Steps | Key outputs |
+|--------|-------|-------------|
+| `make load-data` | 1–2 | Cached data/MC pickle files |
+| `make optimize` | 1–3 | `models/optimized_cuts.json` per branch×category |
+| `make apply-cuts` | 1–4 | `tables/cut_summary.json` |
+| `make mass-fitting` | 1–5 | `tables/fitted_yields.csv`, fit plots |
+| `make efficiency` | 6 | `tables/efficiencies.csv`, `efficiency_ratios.csv` |
+| `make branching-ratios` | 7 | `tables/branching_fraction_ratios.csv`, `results/final_results.md` |
+| `make compare` | 8 | `comparison/branch_comparison.md` |
+| `make export-latex` | 9–10 | `results/bf_products.tex`, `results/systematics_summary.md` |
+| `make main-pipeline` | 1–10 | All of the above |
+
+### Systematic studies (Phase 3)
+
+| Target | Description |
+|--------|-------------|
+| `make systematics` | Run all three studies then aggregate into `systematics.json` |
+| `make study-fit-syst` | Fit model variations (ARGUS→poly2, endpoint ±50 MeV, resolution ±2 MeV) |
+| `make study-sel-syst` | Selection threshold systematic (BDT cut ±1 step) |
+| `make study-pid-bootstrap` | PID efficiency bootstrap (100 Gaussian-smeared iterations) |
+
+### Collect results (Phase 4)
+
+| Target | Description |
+|--------|-------------|
+| `make collect-results` | Copy all key outputs into `results/` |
+
+### Cleaning
+
+| Target | What is removed |
+|--------|-----------------|
+| `make clean` | Everything — analysis_output/, results/, study outputs, .snakemake metadata. **`studies/pid_cancellation/pidcalib_output/` is preserved** (PIDCalib2 histograms from lxplus) |
+| `make clean-main` | `analysis_output/` and `results/` only |
+| `make clean-studies` | Study outputs only (same PKL preservation) |
+| `make clean-snakemake` | `.snakemake/metadata` and locks only |
+
+---
+
+## Pipeline Steps Detail
+
+### Steps 1–2: Config validation + data loading
+
+Validates all TOML config files, then loads data and MC from ROOT files for all configured years (2016–2018), track types (LL/DD), and magnet polarities (MagDown/MagUp). Applies fixed Λ pre-selection (mass window, flight distance, proton PID). Results cached as pickle files (~19 MB).
+
+**Cache note:** Modifying `data_handler.py` or `selection.toml` invalidates this cache. Rebuild with `make load-data`.
+
+### Step 3: Selection optimization
+
+Per (branch, category): either a box grid-scan (`OPT_METHOD=box`) or MVA BDT threshold scan (`OPT_METHOD=mva`, default). Outputs `optimized_cuts.json`.
+
+- **high_yield** branch: FOM = S/√B (J/ψ + η_c)
+- **low_yield** branch: FOM = S/√(S+B) (χ_c0, χ_c1, η_c(2S))
+
+### Step 5: Mass fitting
+
+Simultaneous binned maximum-likelihood fit to M(Λ̄pK⁻) in [2800, 4000] MeV using RooFit. Models 5 charmonium states with Double Crystal Ball signals and ARGUS background. Fit plots saved to `{branch}/{category}/plots/fits/mass_fit_{year}.pdf`.
+
+### Step 6: Efficiency
+
+Calculates ε_sel = N_pass / N_generated from MC. All other efficiency components (ε_reco, ε_strip, ε_trig, ε_PID) cancel in ratios because all channels share the identical Λ̄pK⁻K⁺ final state.
+
+### Steps 7–10: Branching fractions
+
+LL and DD yields summed; efficiency ratios yield-weighted. Normalization channel: B⁺ → J/ψ K⁺. Systematic uncertainties loaded from `systematics.json` (populated by Phase 3). Final results exported to LaTeX.
+
+---
+
+## Output Structure
+
+After `make collect-results`, all key outputs are in `results/`:
+
+```
+results/
+  final/
+    bf_products.tex                  ← LaTeX BF product table (stat ± syst)
+    final_results_high_yield.md      ← Yields, efficiencies, BF ratios
+    final_results_low_yield.md
+    branch_comparison.md             ← High vs low yield consistency check
+    systematics_summary.md           ← Phase 4 systematics breakdown
+  tables/
+    branching_fraction_ratios_{branch}.csv
+    systematics_{branch}.json
+  plots/
+    mass_fits/
+      high_yield_LL/  mass_fit_{year}.pdf ...
+      high_yield_DD/
+      low_yield_LL/
+      low_yield_DD/
+  studies/
+    mva/        CatBoost models + reports
+    efficiency/ Efficiencies + trigger ratios
+    reweighting/ Kinematic weight maps
+    pid/        PID cancellation plots + bootstrap systematics
+    fit_syst/   fit_systematics_{branch}_{cat}.json
+    sel_syst/   selection_systematics_{branch}_{cat}.json
 ```
 
-### Visualize the DAG
+The full intermediate pipeline tree lives in `analysis_output/mva/` (or `analysis_output/box/`).
 
-```bash
-uv run snakemake --dag | dot -Tpdf > dag.pdf
-```
-
-## Pipeline Steps
-
-| Step | Rule | Description | Key Outputs |
-|------|------|-------------|-------------|
-| 1 | `validate_config` | Validate all 11 TOML config files | `.config_validated` sentinel |
-| 2 | `load_data` | Load data/MC ROOT files, apply Λ pre-selection | Cached pickle files (~1.2 GB) |
-| 3 | `optimize_selection` | Run configured optimization (`box` grid scan or `mva` BDT cut) | `models/optimized_cuts.json` |
-| 4 | `apply_cuts` | Apply optimized cuts to MC (data unchanged) | `cut_summary.json` |
-| 5 | `mass_fitting` | Simultaneous RooFit mass fit (all charmonium states) | `fitted_yields.csv`, fit plots |
-| 6 | `efficiency_calculation` | MC selection efficiency ε_sel and ratios vs J/ψ | `efficiencies.csv`, `efficiency_ratios.csv` |
-| 7 | `branching_ratios` | Branching fraction ratios relative to J/ψ | `branching_fraction_ratios.csv`, `final_results.md` |
-| 8 | `compare_branches` | Compare outputs between high/low yield branches | `branch_comparison.md` |
-| 9 | `export_latex_results` | Generate LaTeX formatted table of ultimate BF products | `bf_products.tex` |
-
-Steps 5 and 6 are independent and can run in parallel (both depend only on Step 4).
-
-### Step details
-
-**Step 2 — Data loading:**
-Loads real data and Monte Carlo from ROOT files for all configured years, track types (LL/DD),
-and magnet polarities (MagDown/MagUp). Applies fixed Λ pre-selection cuts (mass window, flight
-distance, proton PID). Caches 4 outputs: `data_dict`, `mc_dict`, `phase_space_dict`,
-`mc_generated_counts`.
-
-**Step 3 — Selection optimization:**
-Uses objects native to `analysis/modules/` (e.g. `BoxOptimizer`) to dynamically apply either a Box grid-scan or MVA BDT thresholding dynamically based on the `opt_method` configuration parameter.
-
-**Step 5 — Mass fitting:**
-Extracts a universal `MassFitter` from `analysis/modules/mass_fitter.py`. Performs a simultaneous binned maximum-likelihood fit to M(Λ̄pK⁻) in [2800, 4000] MeV using RooFit. Models 5 charmonium states with Double Crystal Ball signals and ARGUS background. Output paths isolate neatly by `opt_method` and `branch`.
-
-**Step 6 — Efficiency:**
-Calculates selection efficiency ε_sel = N_pass / N_generated from MC. Other efficiencies
-(reconstruction, stripping, trigger, PID) cancel in ratios because all channels share an
-identical final state (Λ̄pK⁻K⁺). Uses χc1 as proxy for ηc(2S) (no dedicated MC).
+---
 
 ## Snakemake Configuration
 
-All pipeline parameters are set in `snakemake_config.yaml` and can be overridden at the
-command line with `--config key=value`.
+All pipeline parameters are in `snakemake_config.yaml` and overridable at the command line.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `opt_method` | str | `"box"` | Selection optimization strategy (`box` or `mva`) |
-| `years` | list | `["2016", "2017", "2018"]` | LHCb data-taking years to process |
-| `track_types` | list | `["LL", "DD"]` | Λ reconstruction categories |
-| `magnets` | list | `["MD", "MU"]` | Magnet polarities (MagDown, MagUp) |
-| `states` | list | `["jpsi", "etac", "chic0", "chic1"]` | Signal MC charmonium states |
-| `use_manual_cuts` | bool | `false` | Skip optimization, use manual cuts from config |
-| `no_cache` | bool | `false` | Force reprocessing (ignore cached intermediate results) |
-| `config_dir` | str | `"config"` | Path to TOML configuration directory |
-| `cache_dir` | str | `"cache"` | Path to intermediate cache directory |
-| `output_dir` | str | `"analysis_output"` | Path to output directory |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `opt_method` | `"mva"` | Selection optimization strategy (`mva` or `box`) |
+| `years` | `["2016","2017","2018"]` | LHCb data-taking years |
+| `track_types` | `["LL","DD"]` | Λ reconstruction categories |
+| `magnets` | `["MD","MU"]` | Magnet polarities |
+| `states` | `["jpsi","etac","chic0","chic1"]` | Signal MC states |
+| `use_manual_cuts` | `false` | Skip optimization, use manual cuts |
+| `no_cache` | `false` | Force reprocessing (ignore cached results) |
 
-### Common overrides
+### Useful Snakemake overrides
 
 ```bash
-# Process only 2016 data (fast test)
-uv run snakemake -j1 --config years='["2016"]'
+# Process only 2016 (fast test)
+uv run snakemake -j1 --config years='["2016"]' opt_method=mva
 
-# Use manual cuts (skip ~5 min optimization)
-uv run snakemake -j1 --config use_manual_cuts=true
+# Use manual cuts (skip ~10 min optimization)
+uv run snakemake -j1 --config use_manual_cuts=true opt_method=mva
 
-# Force full reprocessing (ignore all caches)
-uv run snakemake -j1 --config no_cache=true
-
-# Combine overrides
-uv run snakemake -j1 --config years='["2016"]' use_manual_cuts=true no_cache=true
+# Force full reprocessing
+uv run snakemake -j4 --config no_cache=true opt_method=mva
 ```
+
+---
 
 ## TOML Configuration Files
 
-The `config/` directory contains 11 TOML files controlling the physics analysis:
+Located in `config/`:
 
 | File | Purpose |
 |------|---------|
-| `physics.toml` | PDG masses, widths, branching fractions, analysis method |
-| `detector.toml` | Mass windows, signal regions, integrated luminosity per year |
-| `fitting.toml` | Fit method (binned/unbinned), signal model (DCB), background (ARGUS), strategy |
-| `selection.toml` | Λ cuts, B⁺ fixed cuts, optimizable variables, manual cuts, optimization strategy |
+| `physics.toml` | PDG masses, widths, branching fractions |
+| `detector.toml` | Mass windows, signal regions, luminosity |
+| `fitting.toml` | Fit method (binned), signal model (DCB), background (ARGUS) |
+| `selection.toml` | Λ cuts, B⁺ cuts, optimizable variables, optimization strategy |
 | `triggers.toml` | L0, HLT1, HLT2 trigger requirements |
-| `data.toml` | Input ROOT file paths, output directories, cache settings, verbosity |
-| `efficiencies.toml` | Efficiency components (which cancel in ratios, which are calculated) |
-| `paths.toml` | Legacy path definitions (superseded by `data.toml`) |
-| `luminosity.toml` | Legacy luminosity (superseded by `detector.toml`) |
-| `branching_fractions.toml` | Legacy BR values (superseded by `physics.toml`) |
-| `particles.toml` | Legacy particle properties (superseded by `physics.toml` + `detector.toml`) |
+| `data.toml` | Input ROOT file paths, cache settings |
+| `efficiencies.toml` | Which efficiency components cancel in ratios |
 
-### Key analysis choices in config
+### Key analysis choices
 
-- **Fit range:** M(Λ̄pK⁻) ∈ [2800, 4000] MeV (`detector.toml`)
-- **B⁺ mass window:** M_corr ∈ [5255, 5305] MeV (`selection.toml`)
-- **Λ mass window:** [1111, 1121] MeV (`selection.toml`)
-- **Fit type:** Binned ML, 5 MeV/bin (`fitting.toml`)
-- **Signal model:** Double Crystal Ball (`fitting.toml`)
-- **Background model:** ARGUS function (`fitting.toml`)
-- **Optimization:** Unbiased data-driven, universal cuts (`selection.toml`)
-- **Efficiency:** Only ε_sel calculated; ε_reco, ε_strip, ε_trig, ε_PID cancel in ratios (`efficiencies.toml`)
+| Parameter | Value | Location |
+|-----------|-------|----------|
+| Fit range | M(Λ̄pK⁻) ∈ [2800, 4000] MeV | `detector.toml` |
+| B⁺ mass window | M_corr ∈ [5255, 5305] MeV | `selection.toml` |
+| Λ mass window | [1111, 1121] MeV | `selection.toml` |
+| Fit type | Binned ML, 5 MeV/bin | `fitting.toml` |
+| Signal model | Double Crystal Ball | `fitting.toml` |
+| Background model | ARGUS function | `fitting.toml` |
+| PID cut | PID_product > 0.20 (fixed) | `selection.toml` |
+| Normalization channel | B⁺ → J/ψ K⁺ | `physics.toml` |

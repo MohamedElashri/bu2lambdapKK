@@ -25,14 +25,16 @@ if "snakemake" in globals():
     cache_dir = snakemake.params.cache_dir
     output_dir = snakemake.params.output_dir
     years = snakemake.params.get("years", ["2016", "2017", "2018"])
-    track_types = snakemake.params.get("track_types", ["LL", "DD"])
+    category = snakemake.params.get("category", "LL")
+    branch = snakemake.params.get("branch", "high_yield")
 else:
     no_cache = False
     config_dir = "config"
     cache_dir = "analysis_output/box/cache"
     output_dir = "analysis_output/box"
     years = ["2016", "2017", "2018"]
-    track_types = ["LL", "DD"]
+    category = "LL"
+    branch = "high_yield"
 
 config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
@@ -44,26 +46,32 @@ preprocessed_deps = cache.compute_dependencies(
         project_root / "modules" / "clean_data_loader.py",
         project_root / "scripts" / "load_data.py",
     ],
-    extra_params={"years": years, "track_types": track_types},
+    extra_params={"years": years, "track_types": ["LL", "DD"]},
 )
 
-# Load preprocessed data
-data_dict = cache.load("preprocessed_data", dependencies=preprocessed_deps)
-mc_dict = cache.load("preprocessed_mc", dependencies=preprocessed_deps)
+# Load nested {year: {cat: array}} and {state: {cat: array}} dicts from cache
+data_dict_full = cache.load("preprocessed_data", dependencies=preprocessed_deps)
+mc_dict_full = cache.load("preprocessed_mc", dependencies=preprocessed_deps)
 
-if data_dict is None or mc_dict is None:
+if data_dict_full is None or mc_dict_full is None:
     logger.error("Preprocessed data not found in cache. Run 'snakemake load_data' first.")
     sys.exit(1)
+
+# Extract this category's slice: {year: array} and {state: array}
+data_dict = {
+    yr: data_dict_full[yr][category] for yr in data_dict_full if category in data_dict_full[yr]
+}
+mc_dict = {st: mc_dict_full[st][category] for st in mc_dict_full if category in mc_dict_full[st]}
+logger.info(f"Optimizing for category={category}, branch={branch}")
 
 opt_type = config.data.get("cut_application", {}).get("optimization_type", "box")
 if "snakemake" in globals():
     opt_type = snakemake.params.get("opt_method", opt_type)
 
 if "snakemake" in globals():
-    # Use snakemake output if available to ensure sync with Snakefile
     out_path = Path(snakemake.output[0]).parent
 else:
-    out_path = Path(output_dir) / opt_type / "models"
+    out_path = Path(output_dir) / branch / category / "models"
 
 out_path.mkdir(parents=True, exist_ok=True)
 
@@ -129,21 +137,16 @@ if opt_type == "box":
 elif opt_type == "mva":
     # 2. MVA Model Path
     use_pretrained = config.data.get("cut_application", {}).get("use_pretrained_mva", True)
-    tuned_model_path = (
-        project_root / "studies" / "mva_optimization" / "output" / "models" / "catboost_bdt.cbm"
-    )
+    # Look for per-category model first (catboost_bdt_LL.cbm / catboost_bdt_DD.cbm),
+    # then fall back to the combined model for backwards compatibility.
+    study_models_dir = project_root / "studies" / "mva_optimization" / "output" / "models"
+    tuned_model_path = study_models_dir / f"catboost_bdt_{category}.cbm"
+    if not tuned_model_path.exists():
+        tuned_model_path = study_models_dir / "catboost_bdt.cbm"
 
     features = config.data.get("xgboost", {}).get(
         "features",
-        [
-            "Bu_DTF_chi2",
-            "Bu_FDCHI2_OWNPV",
-            "Bu_IPCHI2_OWNPV",
-            "Bu_PT",
-            "p_ProbNNp",
-            "h1_ProbNNk",
-            "h2_ProbNNk",
-        ],
+        ["Bu_DTF_chi2", "Bu_FDCHI2_OWNPV", "Bu_IPCHI2_OWNPV", "Bu_PT"],
     )
 
     from catboost import CatBoostClassifier
@@ -175,10 +178,10 @@ elif opt_type == "mva":
         )
         model.fit(X, y)
 
-    # Save the model to method-isolated output
-    model_dir = Path(output_dir) / "models"
-    model_dir.mkdir(parents=True, exist_ok=True)
-    model.save_model(str(model_dir / "mva_model.cbm"))
+    # Save model to the branch/category-specific models directory
+    # (apply_cuts.py loads from this exact location)
+    out_path.mkdir(parents=True, exist_ok=True)
+    model.save_model(str(out_path / "mva_model.cbm"))
 
     # 3. Threshold Optimization via Scientific FOM Scan
     logger.info("Starting scientific BDT threshold optimization...")

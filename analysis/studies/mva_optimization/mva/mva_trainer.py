@@ -120,7 +120,9 @@ def plot_overtraining(y_train, y_train_pred, y_test, y_test_pred, output_dir, mo
     plt.close()
 
 
-def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgboost"):
+def train_and_evaluate_model(
+    config: StudyConfig, ml_data: dict, model_type="xgboost", category: str = ""
+):
     # Using single Train/Test split like TMVA to make it apples-to-apples comparison
     logger.info(f"Initializing {model_type.upper()} Classifier...")
 
@@ -234,30 +236,49 @@ def train_and_evaluate_model(config: StudyConfig, ml_data: dict, model_type="xgb
     model_dir = Path("../output/models")
     model_dir.mkdir(parents=True, exist_ok=True)
 
+    # Save with category suffix when provided
+    category_suffix = f"_{category}" if category else ""
     if model_type == "xgboost":
-        model.save_model(model_dir / "xgboost_bdt.json")
+        model.save_model(model_dir / f"xgboost_bdt{category_suffix}.json")
     elif model_type == "catboost":
-        model.save_model(model_dir / "catboost_bdt.cbm")
+        model.save_model(model_dir / f"catboost_bdt{category_suffix}.cbm")
 
     return model, roc_auc
 
 
-def train_and_evaluate_bdt(config: StudyConfig, ml_data: dict):
-    # Train and compare XGBoost, LightGBM, CatBoost, and AdaBoost
-    logger.info("Starting Multi-Algorithm evaluation...")
+def train_and_evaluate_bdt(config: StudyConfig, ml_data: dict, category: str = ""):
+    """Train and compare XGBoost, LightGBM, CatBoost, and AdaBoost.
 
-    xgb_model, xgb_auc = train_and_evaluate_model(config, ml_data, model_type="xgboost")
-    lgb_model, lgb_auc = train_and_evaluate_model(config, ml_data, model_type="lightgbm")
-    cb_model, cb_auc = train_and_evaluate_model(config, ml_data, model_type="catboost")
-    ab_model, ab_auc = train_and_evaluate_model(config, ml_data, model_type="adaboost")
+    Args:
+        config:   Study configuration.
+        ml_data:  Prepared training/test arrays from data_preparation.py.
+        category: Lambda track category ("LL" or "DD").  Used as a suffix in saved
+                  model filenames so separate models don't overwrite each other.
+
+    Returns:
+        The primary CatBoost model (best AUC in our studies).
+    """
+    logger.info(f"Starting Multi-Algorithm evaluation [{category or 'combined'}]...")
+
+    xgb_model, xgb_auc = train_and_evaluate_model(
+        config, ml_data, model_type="xgboost", category=category
+    )
+    lgb_model, lgb_auc = train_and_evaluate_model(
+        config, ml_data, model_type="lightgbm", category=category
+    )
+    cb_model, cb_auc = train_and_evaluate_model(
+        config, ml_data, model_type="catboost", category=category
+    )
+    ab_model, ab_auc = train_and_evaluate_model(
+        config, ml_data, model_type="adaboost", category=category
+    )
 
     logger.info("=" * 50)
-    logger.info("Algorithm Comparison (Single Train/Test Split AUC):")
+    logger.info(f"Algorithm Comparison [{category or 'combined'}] (AUC):")
     logger.info(f"XGBoost  : {xgb_auc:.4f}")
     logger.info(f"LightGBM : {lgb_auc:.4f}")
     logger.info(f"CatBoost : {cb_auc:.4f}")
     logger.info(f"AdaBoost : {ab_auc:.4f}")
     logger.info("=" * 50)
 
-    # We return the CatBoost model as primary, keeping XGBoost as backup
     return cb_model

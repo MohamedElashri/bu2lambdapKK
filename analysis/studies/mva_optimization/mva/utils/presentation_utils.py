@@ -122,7 +122,7 @@ def analyze_feature_importance_and_impact(
     return top_2_idx
 
 
-def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path):
+def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path, suffix: str = ""):
     """
     Plots 2D histograms and 1D distributions of the top 2 features to visually
     demonstrate signal vs background separation power.
@@ -168,7 +168,7 @@ def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path)
     fig.colorbar(h2[3], ax=axes[1])
 
     plt.tight_layout()
-    plt.savefig(plot_dir / "top2_features_2d.pdf")
+    plt.savefig(plot_dir / f"top2_features_2d{suffix}.pdf")
     plt.close()
 
     # 1D Distributions
@@ -190,7 +190,7 @@ def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path)
     axes[1].legend()
 
     plt.tight_layout()
-    plt.savefig(plot_dir / "top2_features_1d.pdf")
+    plt.savefig(plot_dir / f"top2_features_1d{suffix}.pdf")
     plt.close()
 
 

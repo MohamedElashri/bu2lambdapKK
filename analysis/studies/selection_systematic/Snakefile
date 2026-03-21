@@ -1,0 +1,33 @@
+# Phase 4.5 — Selection Systematic Snakefile
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+BRANCHES   = ["high_yield", "low_yield"]
+CATEGORIES = ["LL", "DD"]
+CONFIG_DIR = "../../config"
+CACHE_DIR  = "../../analysis_output/mva/cache"
+OUTPUT_DIR = "../../analysis_output/mva"
+
+rule all:
+    input:
+        expand(
+            "output/selection_systematics_{branch}_{category}.json",
+            branch=BRANCHES,
+            category=CATEGORIES,
+        )
+
+rule run_selection_systematic:
+    output:
+        "output/selection_systematics_{branch}_{category}.json"
+    shell:
+        """
+        uv run python run_selection_systematic.py \
+            --branch     {wildcards.branch} \
+            --category   {wildcards.category} \
+            --config-dir {CONFIG_DIR} \
+            --cache-dir  {CACHE_DIR} \
+            --output-dir output
+        """

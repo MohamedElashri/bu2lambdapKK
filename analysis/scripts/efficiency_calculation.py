@@ -15,12 +15,18 @@ from modules.config_loader import StudyConfig
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+# States whose MC simulation is not yet available (in LHCb production pipeline).
+# Their efficiency is set to 1.0 as a placeholder and they are excluded from
+# the main branching-fraction results table until real MC arrives.
+MC_PENDING_STATES = {"etac_2s"}
+
 if "snakemake" in globals():
     no_cache = snakemake.params.no_cache
     config_dir = snakemake.params.config_dir
     cache_dir = snakemake.params.cache_dir
     output_dir = snakemake.params.output_dir
     branch = snakemake.params.branch
+    category = snakemake.params.category
     summary_file = snakemake.input.summary
     cuts_file = snakemake.input.cuts
     eff_file = snakemake.output.efficiencies
@@ -31,10 +37,11 @@ else:
     cache_dir = "analysis_output/box/cache"
     output_dir = "analysis_output/box"
     branch = "high_yield"
-    summary_file = Path(output_dir) / branch / "tables" / "cut_summary.json"
-    cuts_file = Path(output_dir) / "tables" / "optimized_cuts.json"
-    eff_file = Path(output_dir) / branch / "tables" / "efficiencies.csv"
-    ratios_file = Path(output_dir) / branch / "tables" / "efficiency_ratios.csv"
+    category = "LL"
+    summary_file = Path(output_dir) / branch / category / "tables" / "cut_summary.json"
+    cuts_file = Path(output_dir) / branch / category / "models" / "optimized_cuts.json"
+    eff_file = Path(output_dir) / branch / category / "tables" / "efficiencies.csv"
+    ratios_file = Path(output_dir) / branch / category / "tables" / "efficiency_ratios.csv"
 
 config_path = Path(config_dir) / "selection.toml"
 config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
@@ -43,17 +50,16 @@ cache = CacheManager(cache_dir=cache_dir)
 # Re-compute dependencies
 cut_deps = cache.compute_dependencies(
     config_files=list(Path(config_dir).glob("*.toml")),
-    code_files=[
-        project_root / "scripts" / "apply_cuts.py",
-    ],
+    code_files=[project_root / "scripts" / "apply_cuts.py"],
 )
 
-# Load branch-specific cut data
-mc_final = cache.load(f"{branch}_final_mc", dependencies=cut_deps)
+# Load category-specific cut MC (cache key set by apply_cuts.py)
+mc_final = cache.load(f"{branch}_{category}_final_mc", dependencies=cut_deps)
 
 if mc_final is None:
     logger.error(
-        f"Cut data for branch {branch} not found in cache. Run 'snakemake apply_cuts' first."
+        f"Cut MC for branch={branch}, category={category} not found in cache. "
+        "Run 'snakemake apply_cuts' first."
     )
     sys.exit(1)
 
@@ -82,7 +88,10 @@ state_map = {
     "etac_2s": "etac_2s",
 }
 
-logger.info(f"Calculating Efficiencies for branch {branch} (aggregating from efficiency study)")
+logger.info(
+    f"Calculating Efficiencies for branch={branch}, category={category} "
+    "(aggregating from efficiency study)"
+)
 
 eff_rows = []
 for state in all_states:
@@ -90,29 +99,40 @@ for state in all_states:
 
     total_eff = 1.0
     total_err = 0.0
-    note = "Placeholder"
+    is_placeholder = state in MC_PENDING_STATES
 
-    if study_state in eff_data:
-        # We need to compute a weighted average of LL/DD and Years based on luminosity or just simple average for now
-        # Actually, the easiest way to get the true total efficiency across everything is to sum the counts and use the combined gen_eff.
-        # But for simplicity, let's average the final eff_total across the 6 categories (LL/DD x 3 years) if available.
-        # Wait, the efficiency JSON contains counts and efficiencies per year/category.
+    if is_placeholder:
+        note = "MC in LHCb production pipeline — ε = 1.0 placeholder"
+    else:
+        note = "From efficiency study"
 
+    if not is_placeholder and study_state in eff_data:
+        # Phase 1: efficiency is now computed per-category.
+        # Average eff_total over years for this specific category only.
+        # The efficiency JSON structure is {state: {category: {year: {efficiencies, errors}}}}.
         effs = []
         errs = []
-        for cat in eff_data[study_state].values():
-            for year, data in cat.items():
+        state_eff = eff_data[study_state]
+        # Select the slice for this category; fall back to flat dict if old format
+        cat_data = state_eff.get(category, state_eff)
+        for year, data in cat_data.items():
+            if isinstance(data, dict) and "efficiencies" in data:
                 effs.append(data["efficiencies"]["eff_total"])
                 errs.append(data["errors"]["err_total"])
 
         if effs:
             total_eff = sum(effs) / len(effs)
-            # Simple error propagation for an average
             total_err = sum(e**2 for e in errs) ** 0.5 / len(errs)
-            note = "Averaged over LL/DD and Years"
+            note = f"Averaged over years for category={category}"
 
     eff_rows.append(
-        {"state": state, "efficiency": total_eff, "efficiency_err": total_err, "note": note}
+        {
+            "state": state,
+            "efficiency": total_eff,
+            "efficiency_err": total_err,
+            "note": note,
+            "is_placeholder": is_placeholder,
+        }
     )
 
 df_eff = pd.DataFrame(eff_rows)
@@ -152,5 +172,6 @@ df_ratios = pd.DataFrame(ratios_rows)
 df_ratios.to_csv(ratios_file, index=False)
 
 logger.info(
-    f"Efficiency calculation complete for branch {branch}. Saved to {eff_file} and {ratios_file}"
+    f"Efficiency calculation complete for branch={branch}, category={category}. "
+    f"Saved to {eff_file} and {ratios_file}"
 )

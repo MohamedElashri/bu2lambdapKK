@@ -1,7 +1,21 @@
+# Efficiency Steps Snakefile
+#
+# Phase 3 changes:
+# - Passes --tis-tos flag to load data/MC trigger correction factors.
+# - Passes --kin-weights-dir so 1D pT weights are applied per category.
+# - Passes --mva-output-dir and --branch for per-category MVA model loading.
+#
+# Run order (assuming TIS/TOS study and kinematic reweighting already completed):
+#   snakemake calculate_efficiencies
+#
+# Or run the full dependency chain:
+#   cd ../trigger_tis_tos && uv run snakemake
+#   cd ../kinematic_reweighting && uv run python derive_weights.py
+#   cd ../efficiency_steps && uv run snakemake
+
 import sys
 from pathlib import Path
 
-# Add analysis modules to path
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
 rule all:
@@ -9,7 +23,19 @@ rule all:
         "output/efficiencies.json"
 
 rule calculate_efficiencies:
+    input:
+        tis_tos   = "../trigger_tis_tos/output/tis_tos_results.json",
+        kin_ll    = "../kinematic_reweighting/output/kinematic_weights_LL.json",
+        kin_dd    = "../kinematic_reweighting/output/kinematic_weights_DD.json",
     output:
         "output/efficiencies.json"
     shell:
-        "uv run python calculate_efficiencies.py --config-dir ../../config --output {output}"
+        """
+        uv run python calculate_efficiencies.py \
+            --config-dir   ../../config \
+            --output       {output} \
+            --tis-tos      {input.tis_tos} \
+            --kin-weights-dir ../kinematic_reweighting/output \
+            --mva-output-dir  ../../analysis_output/mva \
+            --branch          high_yield
+        """

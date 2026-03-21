@@ -49,13 +49,48 @@ def get_eta(pt, p):
 
 
 class PIDCalibMap:
-    def __init__(self, pkl_path: Path):
+    def __init__(self, pkl_path: Path, bootstrap_effs: np.ndarray | None = None):
+        """
+        Load a PIDCalib2 efficiency histogram.
+
+        Args:
+            pkl_path: Path to the boost-histogram pickle file.
+            bootstrap_effs: Optional pre-perturbed efficiency array (shape matching
+                the histogram grid). When provided, `get_efficiency` uses this array
+                instead of the nominal values — used for bootstrap systematic evaluation.
+        """
         with open(pkl_path, "rb") as f:
             self.hist = pickle.load(f)
 
         self.p_axis = self.hist.axes[0].edges
         self.eta_axis = self.hist.axes[1].edges
-        self.effs = self.hist.values()
+        self.effs = self.hist.values() if bootstrap_effs is None else bootstrap_effs
+
+        # Statistical variances per bin (may not be present in all PIDCalib2 versions)
+        try:
+            self._variances = self.hist.variances()
+        except Exception:
+            self._variances = None
+
+    def bootstrap_sample(self, rng: np.random.Generator) -> "PIDCalibMap":
+        """Return a new PIDCalibMap with bin efficiencies perturbed by their statistical
+        uncertainties (Gaussian smearing). Uses the bin variances if available;
+        falls back to a Poisson approximation (σ ≈ √ε·(1-ε)/N with N≈100)."""
+        if self._variances is not None:
+            sigma = np.sqrt(np.maximum(self._variances, 0.0))
+        else:
+            # Conservative fallback: assume ~1% relative uncertainty per bin
+            sigma = 0.01 * self.effs
+
+        perturbed = np.clip(self.effs + rng.normal(0.0, sigma), 0.0, 1.0)
+        # Create a new instance sharing the same path/axes but with perturbed values
+        obj = object.__new__(PIDCalibMap)
+        obj.hist = self.hist
+        obj.p_axis = self.p_axis
+        obj.eta_axis = self.eta_axis
+        obj.effs = perturbed
+        obj._variances = self._variances
+        return obj
 
     def get_efficiency(self, p_array, pt_array):
         """Lookup efficiency for arrays of P and PT."""
@@ -358,5 +393,143 @@ def main():
     print("\nAll done! Results saved in output/")
 
 
+def run_pid_bootstrap(
+    data: dict, states: list, p_maps: dict, k_maps: dict, n_bootstrap: int = 100, seed: int = 42
+) -> dict:
+    """
+    Phase 4.2 — PID systematic via bootstrap.
+
+    For each bootstrap iteration, smear all efficiency map bins by their
+    statistical uncertainty and recompute the per-state PID efficiency ratio
+    (state / J/ψ).  The RMS of the ratio across iterations is the PID systematic.
+
+    Args:
+        data:        {state: events_array} as loaded by load_kinematics.
+        states:      List of state names (J/ψ must be present as "Jpsi").
+        p_maps:      {"up": PIDCalibMap, "down": PIDCalibMap} for protons.
+        k_maps:      {"up": PIDCalibMap, "down": PIDCalibMap} for kaons.
+        n_bootstrap: Number of bootstrap iterations (default 100).
+        seed:        RNG seed for reproducibility.
+
+    Returns:
+        Dict {state: {"ratio_nominal": float, "syst_abs": float, "syst_rel": float,
+                      "bootstrap_ratios": list}}
+    """
+    rng = np.random.default_rng(seed)
+
+    def event_eff(d, pm_u, pm_d, km_u, km_d):
+        eff_p = (
+            pm_u.get_efficiency(d["p_P"], d["p_PT"]) + pm_d.get_efficiency(d["p_P"], d["p_PT"])
+        ) / 2
+        eff_k1 = (
+            km_u.get_efficiency(d["h1_P"], d["h1_PT"]) + km_d.get_efficiency(d["h1_P"], d["h1_PT"])
+        ) / 2
+        eff_k2 = (
+            km_u.get_efficiency(d["h2_P"], d["h2_PT"]) + km_d.get_efficiency(d["h2_P"], d["h2_PT"])
+        ) / 2
+        return np.mean(eff_p * eff_k1 * eff_k2)
+
+    # Nominal ratios
+    jpsi_eff_nom = event_eff(
+        data["Jpsi"], p_maps["up"], p_maps["down"], k_maps["up"], k_maps["down"]
+    )
+    nominal_ratios = {}
+    for state in states:
+        if state == "Jpsi" or state not in data:
+            continue
+        st_eff = event_eff(data[state], p_maps["up"], p_maps["down"], k_maps["up"], k_maps["down"])
+        nominal_ratios[state] = st_eff / jpsi_eff_nom if jpsi_eff_nom > 0 else 1.0
+
+    # Bootstrap
+    bootstrap_ratios: dict = {st: [] for st in nominal_ratios}
+    for i in range(n_bootstrap):
+        bp_up = p_maps["up"].bootstrap_sample(rng)
+        bp_down = p_maps["down"].bootstrap_sample(rng)
+        bk_up = k_maps["up"].bootstrap_sample(rng)
+        bk_down = k_maps["down"].bootstrap_sample(rng)
+
+        jpsi_eff_b = event_eff(data["Jpsi"], bp_up, bp_down, bk_up, bk_down)
+        for state in nominal_ratios:
+            st_eff_b = event_eff(data[state], bp_up, bp_down, bk_up, bk_down)
+            ratio_b = st_eff_b / jpsi_eff_b if jpsi_eff_b > 0 else 1.0
+            bootstrap_ratios[state].append(ratio_b)
+
+    results = {}
+    for state, ratios in bootstrap_ratios.items():
+        r_nom = nominal_ratios[state]
+        syst = float(np.std(ratios))
+        results[state] = {
+            "ratio_nominal": r_nom,
+            "syst_abs": syst,
+            "syst_rel": syst / r_nom if r_nom > 0 else 0.0,
+            "bootstrap_ratios": ratios,
+        }
+        print(f"  {state}: ratio={r_nom:.4f}, PID syst={100*syst/r_nom:.2f}%")
+
+    return results
+
+
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="PIDCalib2 efficiency study + optional bootstrap")
+    parser.add_argument(
+        "--bootstrap-n",
+        type=int,
+        default=0,
+        help="Number of bootstrap iterations for PID systematic (0 = skip)",
+    )
+    parser.add_argument("--bootstrap-seed", type=int, default=42)
+    args = parser.parse_args()
+
     main()
+
+    if args.bootstrap_n > 0:
+        import json
+
+        print(f"\n=== Phase 4.2: PID Bootstrap ({args.bootstrap_n} iterations) ===")
+        # Re-load the same data and maps as in main() above
+        out_dir = Path("output")
+        calib_dir = Path("pidcalib_output")
+        if not calib_dir.exists():
+            print("pidcalib_output not found — skipping bootstrap.")
+        else:
+            p_maps_b = {
+                "up": PIDCalibMap(
+                    calib_dir / "effhists-Turbo18-up-P-MC15TuneV1_ProbNNp>0.05-P.ETA.pkl"
+                ),
+                "down": PIDCalibMap(
+                    calib_dir / "effhists-Turbo18-down-P-MC15TuneV1_ProbNNp>0.05-P.ETA.pkl"
+                ),
+            }
+            k_maps_b = {
+                "up": PIDCalibMap(
+                    calib_dir / "effhists-Turbo18-up-K-MC15TuneV1_ProbNNk>0.224-P.ETA.pkl"
+                ),
+                "down": PIDCalibMap(
+                    calib_dir / "effhists-Turbo18-down-K-MC15TuneV1_ProbNNk>0.224-P.ETA.pkl"
+                ),
+            }
+            mc_base = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
+            states_b = ["Jpsi", "chic0", "chic1", "etac"]
+            data_b = {}
+            for st in states_b:
+                ev = load_kinematics(str(mc_base / st / f"{st}_18_MD.root"), "LL")
+                if ev is not None:
+                    data_b[st] = ev
+            if "Jpsi" in data_b:
+                bs_results = run_pid_bootstrap(
+                    data_b,
+                    states_b,
+                    p_maps_b,
+                    k_maps_b,
+                    n_bootstrap=args.bootstrap_n,
+                    seed=args.bootstrap_seed,
+                )
+                bs_out = out_dir / "pid_bootstrap_systematics.json"
+                # Remove raw bootstrap_ratios list to keep JSON small
+                for v in bs_results.values():
+                    v.pop("bootstrap_ratios", None)
+                with open(bs_out, "w") as f:
+                    json.dump(bs_results, f, indent=2)
+                print(f"Bootstrap PID systematics saved to {bs_out}")

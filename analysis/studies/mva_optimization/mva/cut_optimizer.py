@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
+def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict, category: str = ""):
     logger.info("Starting 1D scan over BDT Output Probability...")
 
     data_combined = ml_data["data_combined"]
@@ -325,6 +325,7 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
             )
 
     # Plot FoMs vs Threshold
+    cat_suffix = f"_{category}" if category else ""
     plot_dir = Path("../output/plots/mva")
     plot_dir.mkdir(parents=True, exist_ok=True)
     for group in ["High_Yield", "Low_Yield"]:
@@ -345,10 +346,10 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
         )
         plt.xlabel("BDT Probability Threshold")
         plt.ylabel("FoM Value")
-        plt.title(f"FoM Scan: {group}")
+        plt.title(f"FoM Scan: {group}{' [' + category + ']' if category else ''}")
         plt.legend()
         plt.tight_layout()
-        plt.savefig(plot_dir / f"fom_scan_{group}.pdf")
+        plt.savefig(plot_dir / f"fom_scan_{group}{cat_suffix}.pdf")
         plt.close()
 
     # Create summary table
@@ -374,8 +375,10 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict):
             )
 
     df = pd.DataFrame(rows)
-    with open(tables_dir / "mva_optimization_results.md", "w") as f:
-        f.write("# BDT Threshold Optimization Results (Grouped A)\n\n")
+    results_filename = f"mva_optimization_results{cat_suffix}.md"
+    with open(tables_dir / results_filename, "w") as f:
+        cat_label = f" [{category}]" if category else ""
+        f.write(f"# BDT Threshold Optimization Results{cat_label}\n\n")
         f.write(df.to_markdown(index=False))
         f.write("\n\n> **Notes:**\n")
         f.write("> - `High_Yield` applies to J/psi and eta_c(1S).\n")

@@ -244,6 +244,7 @@ tmva_yields.json
 *.xml
 *.C
 output
+*.cbm
 
 # Hidden files and folders
 .*
@@ -253,3 +254,6 @@ output
 *.zip
 *.rar
 *.7z
+
+## JSON
+*.json

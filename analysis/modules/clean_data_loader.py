@@ -13,8 +13,23 @@ logger = logging.getLogger(__name__)
 M_LAMBDA_PDG = 1115.683
 
 
-def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> ak.Array:
-    logger.info(f"Loading {filepath.name}...")
+def load_and_preprocess(
+    filepath: Path,
+    is_mc: bool,
+    track_type: str = "LL",
+    delta_z_cut: float = 5.0,
+    lambda_fdchi2_cut: float = 50.0,
+) -> ak.Array:
+    """Load and preprocess a single ROOT file for one track type.
+
+    Args:
+        filepath: Path to the ROOT file.
+        is_mc: True for MC, False for real data (affects PID and trigger branch names).
+        track_type: "LL" or "DD", selects the correct tree path in the ROOT file.
+        delta_z_cut: Minimum |ΔZ| cut in mm (category-dependent: LL uses 20, DD uses 5).
+        lambda_fdchi2_cut: Minimum Lambda FD chi2 (default 50; ND scan finds optimal above this).
+    """
+    logger.info(f"Loading {filepath.name} [{track_type}]...")
     tree_path = f"B2L0barPKpKm_{track_type}/DecayTree"
     with uproot.open(filepath) as f:
         tree = f[tree_path]
@@ -53,7 +68,12 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
         dtf_chi2_k = "Bu_DTF_chi2" if "Bu_DTF_chi2" in all_branches else "Bu_DTF_CHI2"
         branches_to_load.append(dtf_chi2_k)
 
-        # Add PID
+        # Add event ID branches for multiple candidate detection (optional)
+        for ev_branch in ["runNumber", "eventNumber"]:
+            if ev_branch in all_branches:
+                branches_to_load.append(ev_branch)
+
+        # Add PID (different tune names for data vs MC)
         lp_p_k = "Lp_MC12TuneV4_ProbNNp" if is_mc else "Lp_MC15TuneV1_ProbNNp"
         p_p_k = "p_MC12TuneV4_ProbNNp" if is_mc else "p_MC15TuneV1_ProbNNp"
         h1_k_k = "h1_MC12TuneV4_ProbNNk" if is_mc else "h1_MC15TuneV1_ProbNNk"
@@ -61,7 +81,7 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
 
         branches_to_load.extend([lp_p_k, p_p_k, h1_k_k, h2_k_k])
 
-        # Add trigger
+        # Add trigger branches (different names in data vs MC ntuples)
         if is_mc:
             l0_branches = [
                 "Bu_L0Global_TIS",
@@ -96,7 +116,13 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
 
         branches_to_load.extend(l0_avail + hlt1_avail + hlt2_avail)
 
-        # Check missing
+        # MC truth-matching branches (absent in real data; needed for S_true diagnostics
+        # in the MVA study cut_optimizer.py)
+        if is_mc:
+            trueid_branches = ["Bu_TRUEID", "p_TRUEID", "h1_TRUEID", "h2_TRUEID"]
+            branches_to_load.extend([b for b in trueid_branches if b in all_branches])
+
+        # Filter to branches that actually exist
         missing = [b for b in branches_to_load if b not in all_branches]
         if missing:
             logger.warning(f"Missing branches in {filepath}: {missing}")
@@ -109,7 +135,7 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
         events["Bu_DTF_chi2"] = events[dtf_chi2_k]
 
     # In MC, Bu_DTF_chi2 can be a jagged array with multiple fits per event.
-    # We take the first fit result (the primary one) to flatten the array.
+    # Take the first fit result (the primary one) to flatten.
     if "var" in str(ak.type(events["Bu_DTF_chi2"])):
         events["Bu_DTF_chi2"] = events["Bu_DTF_chi2"][:, 0]
 
@@ -118,17 +144,16 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
     events["h1_ProbNNk"] = events[h1_k_k]
     events["h2_ProbNNk"] = events[h2_k_k]
 
-    # Derivations
+    # Derived branches
     events["Bu_MM_corrected"] = events["Bu_MM"] - events["L0_MM"] + M_LAMBDA_PDG
-    # Absolute value of Delta_Z is what the pre-selection uses!
     events["Delta_Z_mm"] = np.abs(events["L0_ENDVERTEX_Z"] - events["Bu_ENDVERTEX_Z"])
     events["prodProbKK"] = events["h1_ProbNNk"] * events["h2_ProbNNk"]
     events["PID_product"] = events["p_ProbNNp"] * events["h1_ProbNNk"] * events["h2_ProbNNk"]
+    # log(IP chi2): more uniform distribution in sensitive region; used in ND scan
+    events["log_Bu_IPCHI2"] = np.log(events["Bu_IPCHI2_OWNPV"])
 
-    # 4-momentum calculation for M_LpKm_h2
-    # Register vector to awkward behavior
+    # 4-momentum: invariant mass of (Lambda + bachelor p + h2) system
     vector.register_awkward()
-
     L0_vec = vector.zip(
         {"px": events["L0_PX"], "py": events["L0_PY"], "pz": events["L0_PZ"], "E": events["L0_PE"]}
     )
@@ -138,12 +163,11 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
     h2_vec = vector.zip(
         {"px": events["h2_PX"], "py": events["h2_PY"], "pz": events["h2_PZ"], "E": events["h2_PE"]}
     )
-
     events["M_LpKm_h2"] = (L0_vec + p_vec + h2_vec).mass
 
     n_total = len(events)
 
-    # 1. Triggers
+    # ---- 1. Trigger (L0 TIS AND HLT1 TOS AND HLT2 TOS) ----
     mask_l0 = ak.zeros_like(events["Bu_MM"], dtype=bool)
     for b in l0_avail:
         mask_l0 = mask_l0 | (events[b] > 0)
@@ -156,7 +180,7 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
     for b in hlt2_avail:
         mask_hlt2 = mask_hlt2 | (events[b] > 0)
 
-    # If no trigger branches found, bypass that level to avoid 100% rejection.
+    # If no trigger branches found, bypass that level to avoid 100% rejection
     if len(l0_avail) == 0:
         mask_l0 = ak.ones_like(events["Bu_MM"], dtype=bool)
     if len(hlt1_avail) == 0:
@@ -167,17 +191,13 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
     trigger_pass = mask_l0 & mask_hlt1 & mask_hlt2
     events = events[trigger_pass]
     logger.info(
-        f"Trigger {filepath.name}: {n_total} -> {len(events)} ({100*len(events)/n_total if n_total>0 else 0:.1f}%)"
+        f"  Trigger [{track_type}] {filepath.name}: {n_total} -> {len(events)} "
+        f"({100*len(events)/n_total if n_total>0 else 0:.1f}%)"
     )
 
-    # 2. Data reduction baseline
-    # These exactly match the cuts applied to the data tuples during reduction
-    # so we apply them to both data and MC to ensure identical phase space
+    # ---- 2. Data reduction baseline (mirrors stripping-level cuts applied to ntuples) ----
     n_before = len(events)
 
-    # In some trees, IPCHI2 might not exist, but it was in the reduction script.
-    # The reduction script had: Bu_FDCHI2_OWNPV>175, Bu_IPCHI2_OWNPV<10, Bu_PT>3000, Delta_Z_mm>2.5, Lp_ProbNNp>0.05, p_ProbNNp>0.05, prodProbKK>0.05
-    # Let's ensure Bu_IPCHI2_OWNPV is in events first
     if "Bu_IPCHI2_OWNPV" in events.fields:
         ipchi2_mask = events["Bu_IPCHI2_OWNPV"] < 10.0
     else:
@@ -194,90 +214,138 @@ def load_and_preprocess(filepath: Path, is_mc: bool, track_type: str = "LL") -> 
     )
     events = events[mask_red]
     logger.info(
-        f"Data Reduction {filepath.name}: {n_before} -> {len(events)} ({100*len(events)/n_before if n_before>0 else 0:.1f}%)"
+        f"  Data Reduction [{track_type}] {filepath.name}: {n_before} -> {len(events)} "
+        f"({100*len(events)/n_before if n_before>0 else 0:.1f}%)"
     )
 
-    # 3. Final Analysis Baseline
+    # ---- 3. Lambda pre-selection (category-aware) ----
+    # - Lambda mass window: same for both LL and DD
+    # - Lambda FD chi2: soft cut (50); ND scanner will find the optimal value
+    # - Delta_Z: category-dependent (LL uses tight 20 mm cut per reference analysis;
+    #   DD relies on FD chi2 and the 5 mm cut is sufficient)
+    # - PID fixed pre-cut at 0.20 (validated by fit_based_optimizer study;
+    #   proxy-based optimization is unreliable for PID, see studies/pid_proxy_comparison)
     n_before = len(events)
 
-    mask_base = (
+    mask_lambda = (
         (events["L0_MM"] > 1111)
         & (events["L0_MM"] < 1121)
-        & (events["L0_FDCHI2_OWNPV"] > 250)
-        & (events["Delta_Z_mm"] > 5)
+        & (events["L0_FDCHI2_OWNPV"] > lambda_fdchi2_cut)
+        & (events["Delta_Z_mm"] > delta_z_cut)
         & (events["Lp_ProbNNp"] > 0.3)
+        & (events["PID_product"] > 0.20)  # fixed pre-cut (see [fixed_selection] in selection.toml)
     )
 
-    events = events[mask_base]
+    events = events[mask_lambda]
     logger.info(
-        f"Analysis Baseline {filepath.name}: {n_before} -> {len(events)} ({100*len(events)/n_before if n_before>0 else 0:.1f}%)"
+        f"  Lambda pre-sel [{track_type}] {filepath.name}: {n_before} -> {len(events)} "
+        f"({100*len(events)/n_before if n_before>0 else 0:.1f}%)"
     )
 
     return events
 
 
 def load_all_data(
-    base_data_path: Path, years: list, track_types: list = ["LL", "DD"]
-) -> Dict[str, ak.Array]:
-    data_dict = {}
+    base_data_path: Path,
+    years: list,
+    track_types: list = ["LL", "DD"],
+) -> Dict[str, Dict[str, ak.Array]]:
+    """Load real data, returning a nested dict: {year: {category: array}}.
+
+    LL and DD are kept separate throughout the pipeline so that per-category
+    optimization and efficiency calculations can be performed independently.
+    They are combined only at the mass fit / branching ratio stage.
+    """
+    # Category-dependent Delta_Z cuts (config/selection.toml [lambda_selection])
+    delta_z_cuts = {"LL": 20.0, "DD": 5.0}
+
+    data_dict: Dict[str, Dict[str, ak.Array]] = {}
     for year in years:
-        arrs = []
+        data_dict[str(year)] = {}
         for track_type in track_types:
+            arrs = []
             for magnet in ["MD", "MU"]:
                 fname = f"dataBu2L0barPHH_{int(year)-2000}{magnet}.root"
                 fpath = base_data_path / fname
                 if fpath.exists():
-                    arr = load_and_preprocess(fpath, is_mc=False, track_type=track_type)
+                    arr = load_and_preprocess(
+                        fpath,
+                        is_mc=False,
+                        track_type=track_type,
+                        delta_z_cut=delta_z_cuts[track_type],
+                    )
                     arrs.append(arr)
-        if arrs:
-            data_dict[str(year)] = ak.concatenate(arrs)
+            if arrs:
+                data_dict[str(year)][track_type] = ak.concatenate(arrs)
+            else:
+                data_dict[str(year)][track_type] = ak.Array([])
 
-    # Apply B+ mass window (including sidebands) to real data
+    # Apply B+ mass window (including sidebands for sideband subtraction) per category
     for year in data_dict:
-        n_before = len(data_dict[year])
-        mask_bmass = (data_dict[year]["Bu_MM_corrected"] > 5150) & (
-            data_dict[year]["Bu_MM_corrected"] < 5410
-        )
-        data_dict[year] = data_dict[year][mask_bmass]
-        logger.info(
-            f"Data {year} B+ Mass Window: {n_before} -> {len(data_dict[year])} ({100*len(data_dict[year])/n_before if n_before>0 else 0:.1f}%)"
-        )
+        for cat in data_dict[year]:
+            arr = data_dict[year][cat]
+            if len(arr) == 0:
+                continue
+            n_before = len(arr)
+            mask_bmass = (arr["Bu_MM_corrected"] > 5150) & (arr["Bu_MM_corrected"] < 5410)
+            data_dict[year][cat] = arr[mask_bmass]
+            logger.info(
+                f"Data {year} [{cat}] B+ mass window: {n_before} -> {len(data_dict[year][cat])} "
+                f"({100*len(data_dict[year][cat])/n_before if n_before>0 else 0:.1f}%)"
+            )
 
     return data_dict
 
 
 def load_all_mc(
-    base_mc_path: Path, states: list, years: list, track_types: list = ["LL", "DD"]
-) -> Dict[str, ak.Array]:
-    mc_dict = {}
+    base_mc_path: Path,
+    states: list,
+    years: list,
+    track_types: list = ["LL", "DD"],
+) -> Dict[str, Dict[str, ak.Array]]:
+    """Load signal MC, returning a nested dict: {state: {category: array}}.
+
+    Years and magnet polarities are concatenated within each (state, category) cell.
+    LL and DD are kept separate so that per-category efficiency calculations and
+    optimization can be performed independently.
+    """
+    delta_z_cuts = {"LL": 20.0, "DD": 5.0}
+
+    mc_dict: Dict[str, Dict[str, ak.Array]] = {}
     for state in states:
-        arrs = []
-        for year in years:
-            for track_type in track_types:
+        mc_dict[state.lower()] = {}
+        for track_type in track_types:
+            arrs = []
+            for year in years:
                 for magnet in ["MD", "MU"]:
                     fname = f"{state}_{int(year)-2000}_{magnet}.root"
                     fpath = base_mc_path / state / fname
-                    if fpath.exists():
-                        arr = load_and_preprocess(fpath, is_mc=True, track_type=track_type)
-                        arrs.append(arr)
-                    else:
-                        # Also try Jpsi instead of jpsi string if user config has different casing
+                    if not fpath.exists():
+                        # Try capitalised directory/filename (e.g. Jpsi/Jpsi_16_MD.root)
                         case_fname = f"{state.capitalize()}_{int(year)-2000}_{magnet}.root"
-                        case_fpath = base_mc_path / state.capitalize() / case_fname
-                        if case_fpath.exists():
-                            arr = load_and_preprocess(case_fpath, is_mc=True, track_type=track_type)
-                            arrs.append(arr)
-        if arrs:
-            state_data = ak.concatenate(arrs)
-            # Apply B+ mass window (including sidebands) to MC
-            n_before = len(state_data)
-            mask_bmass = (state_data["Bu_MM_corrected"] > 5150) & (
-                state_data["Bu_MM_corrected"] < 5410
-            )
-            state_data = state_data[mask_bmass]
-            logger.info(
-                f"MC {state} B+ Mass Window: {n_before} -> {len(state_data)} ({100*len(state_data)/n_before if n_before>0 else 0:.1f}%)"
-            )
-            # Always use lowercase state key format across pipeline
-            mc_dict[state.lower()] = state_data
+                        fpath = base_mc_path / state.capitalize() / case_fname
+                    if fpath.exists():
+                        arr = load_and_preprocess(
+                            fpath,
+                            is_mc=True,
+                            track_type=track_type,
+                            delta_z_cut=delta_z_cuts[track_type],
+                        )
+                        arrs.append(arr)
+            if arrs:
+                state_cat = ak.concatenate(arrs)
+                # Apply B+ mass window (including sidebands)
+                n_before = len(state_cat)
+                mask_bmass = (state_cat["Bu_MM_corrected"] > 5150) & (
+                    state_cat["Bu_MM_corrected"] < 5410
+                )
+                state_cat = state_cat[mask_bmass]
+                logger.info(
+                    f"MC {state} [{track_type}] B+ mass window: {n_before} -> {len(state_cat)} "
+                    f"({100*len(state_cat)/n_before if n_before>0 else 0:.1f}%)"
+                )
+                mc_dict[state.lower()][track_type] = state_cat
+            else:
+                mc_dict[state.lower()][track_type] = ak.Array([])
+
     return mc_dict

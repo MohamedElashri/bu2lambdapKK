@@ -22,7 +22,7 @@ Caching Strategy:
 
 [input_data]
 # Data file locations
-base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/rootfiles/reduced"
+base_path = "/share/lazy/Mohamed/Bu2LambdaPPP/files/data"
 magnets = ["MD", "MU"]  # MagDown, MagUp
 years = ["2016", "2017", "2018"]  # Strings for consistency with dict keys
 
