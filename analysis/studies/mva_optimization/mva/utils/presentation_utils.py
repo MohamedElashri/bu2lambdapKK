@@ -5,6 +5,7 @@ feature importance extraction, and visualizations.
 
 import json
 import logging
+import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -12,6 +13,18 @@ import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
 from sklearn.metrics import roc_auc_score
+
+# Allow importing from analysis/modules/
+_analysis_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+if str(_analysis_root) not in sys.path:
+    sys.path.insert(0, str(_analysis_root))
+
+try:
+    from modules.plot_utils import setup_style
+
+    setup_style()
+except Exception:
+    pass  # Style is best-effort; plotting still works without it
 
 logger = logging.getLogger(__name__)
 

@@ -581,308 +581,141 @@ class MassFitter:
         fit_label: str = "",
     ) -> None:
         """
-        Plot fit result with official LHCb publication style
+        Plot fit result using matplotlib + LHCb2 style (via plot_utils).
+
+        The RooFit objects are used only to extract data arrays and PDF
+        evaluations; all rendering is done with matplotlib.
         """
-        # Load plotting config (Phase 5 refactor)
-        fitting_cfg = getattr(self.config, "fitting", {})
-        plotting_cfg = fitting_cfg.get("plotting", {})
-        labels_cfg = fitting_cfg.get("labels", {})
+        import numpy as np
 
-        plot_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
-        state_labels = plotting_cfg.get("labels", {})
-        state_masses = plotting_cfg.get("mass_positions", {})
-        label_multipliers = plotting_cfg.get("label_multipliers", {})
-
-        # Create RooPlot (no title, we'll add it as text)
-        frame = mass_var.frame(ROOT.RooFit.Title(""))  # type: ignore
-
-        # Plot data with error bars (black points, small size)
-        dataset.plotOn(
-            frame,
-            ROOT.RooFit.Name("data"),  # type: ignore
-            ROOT.RooFit.MarkerStyle(20),  # type: ignore
-            ROOT.RooFit.MarkerSize(0.6),  # type: ignore
-            ROOT.RooFit.MarkerColor(ROOT.kBlack),  # type: ignore
-        )
-
-        # Plot total PDF (solid blue, matching LHCb style)
-        model.plotOn(
-            frame,
-            ROOT.RooFit.Name("total"),  # type: ignore
-            ROOT.RooFit.LineColor(ROOT.kBlue),  # type: ignore
-            ROOT.RooFit.LineWidth(2),  # type: ignore
-            ROOT.RooFit.LineStyle(ROOT.kSolid),  # type: ignore
-        )
-
-        # Plot signal components
-        for state in plot_states:
-            component_name = f"pdf_signal_{state}"
-            model.plotOn(
-                frame,
-                ROOT.RooFit.Components(component_name),  # type: ignore
-                ROOT.RooFit.Name(state),  # type: ignore
-                ROOT.RooFit.LineColor(ROOT.kRed),  # type: ignore
-                ROOT.RooFit.LineStyle(ROOT.kSolid),  # type: ignore
-                ROOT.RooFit.LineWidth(2),  # type: ignore
+        try:
+            from modules.plot_utils import (
+                STATE_COLORS,
+                STATE_LABELS,
+                make_mass_fit_figure,
+                save_figure,
+                setup_style,
+            )
+        except ImportError:
+            from plot_utils import (  # type: ignore[no-redef]
+                STATE_COLORS,
+                STATE_LABELS,
+                make_mass_fit_figure,
+                save_figure,
+                setup_style,
             )
 
-        # Plot background with dashed gray line
-        bkg_component_name = f"pdf_bkg_{year}"
-        model.plotOn(
-            frame,
-            ROOT.RooFit.Components(bkg_component_name),  # type: ignore
-            ROOT.RooFit.Name("background"),  # type: ignore
-            ROOT.RooFit.LineColor(ROOT.kGray + 1),  # type: ignore
-            ROOT.RooFit.LineStyle(ROOT.kDashed),  # type: ignore
-            ROOT.RooFit.LineWidth(2),  # type: ignore
+        setup_style()
+
+        fitting_cfg = getattr(self.config, "fitting", {})
+        plotting_cfg = fitting_cfg.get("plotting", {})
+        plot_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
+
+        # ── Extract histogram data from ROOT dataset ───────────────────────────
+        h1 = dataset.createHistogram(f"h_data_plt_{year}", mass_var)
+        nbins = h1.GetNbinsX()
+        bin_centers = np.array([h1.GetBinCenter(i + 1) for i in range(nbins)])
+        bin_contents = np.array([h1.GetBinContent(i + 1) for i in range(nbins)])
+        bin_errors = np.array([h1.GetBinError(i + 1) for i in range(nbins)])
+        h1.Delete()
+
+        # ── Evaluate PDFs at fine grid ─────────────────────────────────────────
+        mass_points = np.linspace(self.fit_range[0], self.fit_range[1], 500)
+        argset = ROOT.RooArgSet(mass_var)  # type: ignore
+        total_events = sum(v.getVal() for v in yields.values())
+
+        def _eval_pdf(pdf: Any, n_events: float) -> np.ndarray:
+            curve = np.empty(len(mass_points))
+            for k, m in enumerate(mass_points):
+                mass_var.setVal(m)
+                curve[k] = pdf.getVal(argset) * n_events * self.bin_width
+            return curve
+
+        total_curve = _eval_pdf(model, total_events)
+
+        bkg_yield = yields["background"].getVal()
+        bkg_pdf = self.bkg_pdfs.get(year)
+        background_curve = (
+            _eval_pdf(bkg_pdf, bkg_yield) if bkg_pdf is not None else np.zeros(len(mass_points))
         )
 
-        # Create canvas with two pads (fit on top, pulls on bottom)
-        canvas = ROOT.TCanvas(f"c_{year}", f"Fit {year}", 1200, 800)  # type: ignore
-        # Prevent Python from managing canvas memory (let ROOT handle it)
-        ROOT.SetOwnership(canvas, False)  # type: ignore
-
-        # Upper pad for fit (70% of canvas)
-        pad1 = ROOT.TPad("pad1", "Fit", 0.0, 0.30, 1.0, 1.0)  # type: ignore
-        pad1.SetBottomMargin(0.015)
-        pad1.SetLeftMargin(0.07)
-        pad1.SetRightMargin(0.05)
-        pad1.SetTopMargin(0.07)
-        pad1.Draw()
-
-        # Lower pad for pulls (30% of canvas)
-        pad2 = ROOT.TPad("pad2", "Pulls", 0.0, 0.0, 1.0, 0.30)  # type: ignore
-        pad2.SetTopMargin(0.015)
-        pad2.SetBottomMargin(0.35)
-        pad2.SetLeftMargin(0.07)
-        pad2.SetRightMargin(0.05)
-        pad2.SetGridy(1)
-        pad2.Draw()
-
-        # Draw fit in upper pad
-        pad1.cd()
-
-        # Style the frame for upper pad
-        frame.GetYaxis().SetTitle(f"Candidates / ({self.bin_width:.0f} MeV/#it{{c}}^{{2}})")
-        frame.GetYaxis().SetTitleSize(0.045)
-        frame.GetYaxis().SetLabelSize(0.0375)
-        frame.GetYaxis().SetTitleOffset(0.7)
-        frame.GetYaxis().SetTitleFont(132)  # Times-like font for professional look
-        frame.GetYaxis().SetLabelFont(132)  # Times-like font for professional look
-        frame.GetXaxis().SetLabelSize(0.0)  # Hide x-axis labels on upper pad
-        frame.GetXaxis().SetTitleSize(0.0)
-
-        frame.SetTitle("")
-
-        # Set Y-axis range with margin at top for labels
-        y_max = frame.GetMaximum()
-        frame.SetMaximum(y_max * 1.50)  # More headroom for higher labels
-        frame.SetMinimum(0.0)
-
-        frame.Draw()
-
-        # Add LHCb label in top left corner
-        lhcb_label = ROOT.TLatex()  # type: ignore
-        lhcb_label.SetNDC()
-        lhcb_label.SetTextFont(132)  # Times-like font for professional look
-        lhcb_label.SetTextSize(0.06)
-        lhcb_label.DrawLatex(0.12, 0.87, "LHCb")
-
-        # Add year label below LHCb
-        year_label = ROOT.TLatex()  # type: ignore
-        year_label.SetNDC()
-        year_label.SetTextFont(132)  # Times-like font for professional look
-        year_label.SetTextSize(0.05)
-        year_text = "2016-2018" if year == "combined" else str(year)
-        year_label.DrawLatex(0.12, 0.81, year_text)
-
-        # Add context label (e.g. "high_yield / LL") if provided
-        if fit_label:
-            ctx_label = ROOT.TLatex()  # type: ignore
-            ctx_label.SetNDC()
-            ctx_label.SetTextFont(132)
-            ctx_label.SetTextSize(0.04)
-            ctx_label.SetTextColor(ROOT.kGray + 2)  # type: ignore
-            ctx_label.DrawLatex(0.12, 0.76, fit_label)
-
-        # Calculate pull statistics early (before drawing info boxes)
-        pull_hist = frame.pullHist("data", "total")
-        pull_mean = 0.0
-        pull_rms = 0.0
-        n_pulls = 0
-
-        # Get pull values from histogram
-        for i in range(pull_hist.GetN()):
-            y = pull_hist.GetPointY(i)
-            if abs(y) < 10:  # Exclude outliers
-                pull_mean += y
-                pull_rms += y * y
-                n_pulls += 1
-
-        if n_pulls > 0:
-            pull_mean /= n_pulls
-            pull_rms = (pull_rms / n_pulls - pull_mean * pull_mean) ** 0.5
-
-        # Add fit info box to the left of legend - fancy style with two columns
-        fit_info_left = ROOT.TPaveText(0.40, 0.55, 0.58, 0.90, "NDC")  # type: ignore
-        fit_info_left.SetBorderSize(2)
-        fit_info_left.SetLineColor(ROOT.kBlue)  # type: ignore
-        fit_info_left.SetFillColor(ROOT.kWhite)  # type: ignore
-        fit_info_left.SetFillStyle(1001)
-        fit_info_left.SetTextAlign(12)  # Left-aligned
-        fit_info_left.SetTextFont(132)  # Times-like font for professional look
-        fit_info_left.SetTextSize(0.032)
-        fit_info_left.SetTextColor(ROOT.kBlack)  # type: ignore
-
-        fit_info_right = ROOT.TPaveText(0.58, 0.55, 0.76, 0.90, "NDC")  # type: ignore
-        fit_info_right.SetBorderSize(2)
-        fit_info_right.SetLineColor(ROOT.kBlue)  # type: ignore
-        fit_info_right.SetFillColor(ROOT.kWhite)  # type: ignore
-        fit_info_right.SetFillStyle(1001)
-        fit_info_right.SetTextAlign(12)  # Left-aligned
-        fit_info_right.SetTextFont(132)  # Times-like font for professional look
-        fit_info_right.SetTextSize(0.032)
-        fit_info_right.SetTextColor(ROOT.kBlack)  # type: ignore
-
-        # Header labels from config
-        y_header = labels_cfg.get("yields_header", "#bf{Yields}")
-        i_header = labels_cfg.get("fit_info_header", "#bf{Fit Info}")
-
-        # Left column - yields
-        fit_info_left.AddText(y_header)
+        signal_curves = []
         for state in plot_states:
-            if state in yields:
-                val = yields[state].getVal()
-                err = yields[state].getError()
-                l_tex = state_labels.get(state, state)
-                fit_info_left.AddText(f"N_{{{l_tex}}} = {val:.0f} #pm {err:.0f}")
+            if state not in self.signal_pdfs or state not in yields:
+                continue
+            comp_yield = yields[state].getVal()
+            if comp_yield <= 0:
+                continue
+            comp_curve = _eval_pdf(self.signal_pdfs[state], comp_yield)
+            signal_curves.append(
+                {
+                    "x": mass_points,
+                    "y": comp_curve,
+                    "label": STATE_LABELS.get(state, state),
+                    "color": STATE_COLORS.get(state, "crimson"),
+                }
+            )
 
-        # Right column - fit info
+        # ── Pull distribution ──────────────────────────────────────────────────
+        pulls = np.zeros(len(bin_centers))
+        for i, m in enumerate(bin_centers):
+            if bin_errors[i] > 0:
+                mass_var.setVal(m)
+                expected = model.getVal(argset) * total_events * self.bin_width
+                pulls[i] = (bin_contents[i] - expected) / bin_errors[i]
+
+        # ── Info text ──────────────────────────────────────────────────────────
         n_bkg = yields["background"].getVal()
         n_bkg_err = yields["background"].getError()
+        n_signal = sum(yields[s].getVal() for s in plot_states if s in yields)
         sigma_res = self.resolution.getVal()  # type: ignore
         sigma_res_err = self.resolution.getError()  # type: ignore
-        n_signal = sum(yields[s].getVal() for s in plot_states if s in yields)
-        total_events_fit = n_signal + n_bkg
 
-        fit_info_right.AddText(i_header)
-        fit_info_right.AddText(f"N_{{bkg}} = {n_bkg:.0f} #pm {n_bkg_err:.0f}")
-        fit_info_right.AddText(f"N_{{sig}} = {n_signal:.0f}")
-        fit_info_right.AddText(f"N_{{tot}} = {total_events_fit:.0f}")
-        fit_info_right.AddText(f"#sigma_{{res}} = {sigma_res:.1f} #pm {sigma_res_err:.1f} MeV")
-        fit_info_right.AddText(f"Pull: #mu = {pull_mean:.2f}, #sigma = {pull_rms:.2f}")
-
-        # Compute chi2 and ndof
+        # χ²/ndof from pulls (only populated bins)
+        valid_mask = bin_errors > 0
+        chi2 = float(np.sum(pulls[valid_mask] ** 2))
         n_params = fit_result.floatParsFinal().getSize() if fit_result is not None else 0
-        n_bins = int((self.fit_range[1] - self.fit_range[0]) / self.bin_width)
-        ndof = max(1, n_bins - n_params)
-        chi2_ndof_ratio = frame.chiSquare(n_params)
-        chi2 = chi2_ndof_ratio * ndof
-        fit_info_right.AddText(f"#chi^{{2}} / ndf = {chi2:.1f} / {ndof} = {chi2_ndof_ratio:.2f}")
+        ndof = max(1, int(valid_mask.sum()) - n_params)
 
-        fit_info_left.Draw()
-        fit_info_right.Draw()
+        yield_lines = [
+            f"{STATE_LABELS.get(s, s)} : {yields[s].getVal():.0f} ± {yields[s].getError():.0f}"
+            for s in plot_states
+            if s in yields
+        ]
+        stat_lines = [
+            f"N_bkg = {n_bkg:.0f} ± {n_bkg_err:.0f}",
+            f"N_sig = {n_signal:.0f}",
+            f"σ_res = {sigma_res:.1f} ± {sigma_res_err:.1f} MeV",
+            f"χ²/ndof = {chi2:.1f}/{ndof} = {chi2/ndof:.2f}",
+        ]
+        info_lines = yield_lines + ["─" * 26] + stat_lines
 
-        # Add compact legend in upper right (official LHCb style)
-        legend = ROOT.TLegend(0.77, 0.60, 0.93, 0.90)  # type: ignore
-        legend.SetBorderSize(0)
-        legend.SetFillStyle(0)  # Transparent
-        legend.SetFillColor(0)
-        legend.SetTextSize(0.04)
-        legend.SetTextFont(132)  # Times-like font for professional look
-        legend.SetMargin(0.15)
+        year_str = "2016–2018" if year == "combined" else str(year)
 
-        legend.AddEntry("data", "Data", "l")
-        legend.AddEntry("total", "Full model", "l")
-        legend.AddEntry(plot_states[0], "Signal", "l")
-        legend.AddEntry("background", "Background", "l")
-        legend.Draw()
+        # ── Build and save figure ──────────────────────────────────────────────
+        fig, _ = make_mass_fit_figure(
+            bin_centers=bin_centers,
+            bin_contents=bin_contents,
+            bin_errors=bin_errors,
+            mass_points=mass_points,
+            total_curve=total_curve,
+            signal_curves=signal_curves,
+            background_curve=background_curve,
+            pulls=pulls,
+            fit_range=self.fit_range,
+            bin_width=self.bin_width,
+            year=year_str,
+            context_label=fit_label,
+            info_lines=info_lines,
+        )
 
-        # Dynamically position state labels ABOVE peaks
-        state_text = ROOT.TLatex()  # type: ignore
-        state_text.SetTextFont(132)  # Times-like font for professional look
-        state_text.SetTextSize(0.04)
-        state_text.SetTextAlign(21)  # Center-aligned, bottom-aligned
-
-        for state in plot_states:
-            label = state_labels.get(state, state)
-            mass_pdg = state_masses.get(state, 0.0)
-            if mass_pdg == 0.0:
-                continue
-
-            mass_var.setVal(mass_pdg)
-            norm_set = ROOT.RooArgSet(mass_var)
-            pdf_value = model.getVal(norm_set)
-
-            bin_content = pdf_value * total_events_fit * self.bin_width
-
-            mult_map = label_multipliers.get(state, {})
-            mult = mult_map.get(year, mult_map.get("combined", 1.30))
-            label_y = bin_content * mult
-
-            if bin_content > y_max * 0.05:
-                state_text.DrawLatex(mass_pdg, label_y, label)
-
-        # Create and draw pull distribution in lower pad
-        pad2.cd()
-        pull_frame = mass_var.frame(ROOT.RooFit.Title(""))  # No title # type: ignore
-        pull_frame.addPlotable(pull_hist, "P")
-
-        # Style pull plot axes
-        pull_frame.GetYaxis().SetTitle("Pull")
-        pull_frame.GetYaxis().SetTitleSize(0.0975)
-        pull_frame.GetYaxis().SetLabelSize(0.0825)
-        pull_frame.GetYaxis().SetTitleOffset(0.3)
-        pull_frame.GetYaxis().SetTitleFont(132)  # Times-like font for professional look
-        pull_frame.GetYaxis().SetLabelFont(132)  # Times-like font for professional look
-        pull_frame.GetYaxis().SetNdivisions(505)
-        pull_frame.GetYaxis().SetRangeUser(-4.5, 4.5)
-        pull_frame.GetYaxis().CenterTitle()
-
-        pull_frame.GetXaxis().SetTitle("M(#bar{#Lambda}pK^{#minus}) [MeV/#it{c}^{2}]")
-        pull_frame.GetXaxis().SetTitleSize(0.13)
-        pull_frame.GetXaxis().SetLabelSize(0.11)
-        pull_frame.GetXaxis().SetTitleOffset(1.1)
-        pull_frame.GetXaxis().SetTitleFont(132)  # Times-like font for professional look
-        pull_frame.GetXaxis().SetLabelFont(132)  # Times-like font for professional look
-        pull_frame.Draw()
-
-        # Remove any title that might appear
-        pull_frame.SetTitle("")
-
-        # Add horizontal reference lines at 0, ±3σ
-        line_zero = ROOT.TLine(self.fit_range[0], 0.0, self.fit_range[1], 0.0)  # type: ignore
-        line_zero.SetLineColor(ROOT.kBlack)  # type: ignore
-        line_zero.SetLineStyle(1)
-        line_zero.SetLineWidth(1)
-        line_zero.Draw()
-
-        # Add ±3σ reference lines (dashed gray)
-        line_plus3 = ROOT.TLine(self.fit_range[0], 3.0, self.fit_range[1], 3.0)  # type: ignore
-        line_plus3.SetLineColor(ROOT.kGray + 1)  # type: ignore
-        line_plus3.SetLineStyle(2)
-        line_plus3.SetLineWidth(1)
-        line_plus3.Draw()
-
-        line_minus3 = ROOT.TLine(self.fit_range[0], -3.0, self.fit_range[1], -3.0)  # type: ignore
-        line_minus3.SetLineColor(ROOT.kGray + 1)  # type: ignore
-        line_minus3.SetLineStyle(2)
-        line_minus3.SetLineWidth(1)
-        line_minus3.Draw()
-
-        # Save plot
-        canvas.cd()
         if plot_dir is None:
-            # Caller did not provide a directory — skip saving
-            canvas.Clear()
-            canvas.Close()
-            return
-        plot_dir = Path(plot_dir)
-        plot_dir.mkdir(exist_ok=True, parents=True)
-        output_file = plot_dir / f"mass_fit_{year}.pdf"
-        canvas.SaveAs(str(output_file))
-        print(f"  ✓ Saved fit plot: {output_file}")
+            import matplotlib.pyplot as plt
 
-        # Clean up canvas properly to prevent ROOT segfault during garbage collection
-        canvas.Clear()
-        canvas.Close()
+            plt.close(fig)
+            return
+
+        plot_dir = Path(plot_dir)
+        output_file = plot_dir / f"mass_fit_{year}.pdf"
+        save_figure(fig, output_file)
+        print(f"  ✓ Saved fit plot: {output_file}")

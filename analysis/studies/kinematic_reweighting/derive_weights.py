@@ -44,6 +44,9 @@ if str(analysis_root) not in sys.path:
     sys.path.insert(0, str(analysis_root))
 
 from modules.clean_data_loader import load_and_preprocess
+from modules.plot_utils import setup_style
+
+setup_style()
 
 
 def apply_catboost(events, model_path: Path, features: list, threshold: float):
