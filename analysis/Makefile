@@ -80,9 +80,11 @@ studies: load-data study-mva study-trigger study-reweighting study-efficiency
         branching-ratios compare export-latex
 
 ## Steps 1–2: config validation + data/MC loading
+# --forcerun ensures the script always re-executes even if the sentinel is present.
+# This prevents stale caches going undetected when config files change.
 load-data:
 	@echo ">>> [Pipeline] Validate config + load data"
-	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) load_data $(SNAKEMAKE_CONFIG)
+	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) load_data $(SNAKEMAKE_CONFIG) --forcerun load_data
 
 ## Steps 1–3: selection optimization (per branch × category)
 optimize:
