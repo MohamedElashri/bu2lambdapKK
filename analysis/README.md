@@ -158,42 +158,6 @@ Calculates ε_sel = N_pass / N_generated from MC. All other efficiency component
 
 LL and DD yields summed; efficiency ratios yield-weighted. Normalization channel: B⁺ → J/ψ K⁺. Systematic uncertainties loaded from `systematics.json` (populated by Phase 3). Final results exported to LaTeX.
 
----
-
-## Output Structure
-
-After `make collect-results`, all key outputs are in `results/`:
-
-```
-results/
-  final/
-    bf_products.tex                  ← LaTeX BF product table (stat ± syst)
-    final_results_high_yield.md      ← Yields, efficiencies, BF ratios
-    final_results_low_yield.md
-    branch_comparison.md             ← High vs low yield consistency check
-    systematics_summary.md           ← Phase 4 systematics breakdown
-  tables/
-    branching_fraction_ratios_{branch}.csv
-    systematics_{branch}.json
-  plots/
-    mass_fits/
-      high_yield_LL/  mass_fit_{year}.pdf ...
-      high_yield_DD/
-      low_yield_LL/
-      low_yield_DD/
-  studies/
-    mva/        CatBoost models + reports
-    efficiency/ Efficiencies + trigger ratios
-    reweighting/ Kinematic weight maps
-    pid/        PID cancellation plots + bootstrap systematics
-    fit_syst/   fit_systematics_{branch}_{cat}.json
-    sel_syst/   selection_systematics_{branch}_{cat}.json
-```
-
-The full intermediate pipeline tree lives in `analysis_output/mva/` (or `analysis_output/box/`).
-
----
-
 ## Snakemake Configuration
 
 All pipeline parameters are in `snakemake_config.yaml` and overridable at the command line.
