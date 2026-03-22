@@ -255,5 +255,8 @@ output
 *.rar
 *.7z
 
-## JSON
+# JSON
 *.json
+
+# old garbage/plans
+old
