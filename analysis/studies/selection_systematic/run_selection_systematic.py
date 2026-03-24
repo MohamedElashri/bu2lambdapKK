@@ -98,7 +98,8 @@ def compute_selection_systematics(
         sys.exit(1)
 
     # Load nominal BDT threshold and features
-    cuts_path = Path(output_dir).parent / branch / category / "models" / "optimized_cuts.json"
+    mva_dir = project_root / "analysis_output" / "mva"
+    cuts_path = mva_dir / branch / category / "models" / "optimized_cuts.json"
     mva_features = config.fitting.get("xgboost", {}).get(
         "features", ["Bu_DTF_chi2", "Bu_FDCHI2_OWNPV", "Bu_IPCHI2_OWNPV", "Bu_PT"]
     )
@@ -113,7 +114,7 @@ def compute_selection_systematics(
         threshold_nom = cuts_data.get("mva_threshold_high", threshold_nom)
     logger.info(f"Nominal MVA threshold = {threshold_nom:.4f}")
 
-    model_path = Path(output_dir).parent / branch / category / "models" / "mva_model.cbm"
+    model_path = mva_dir / branch / category / "models" / "mva_model.cbm"
 
     logger.info(f"=== Selection systematics: branch={branch}, category={category} ===")
 

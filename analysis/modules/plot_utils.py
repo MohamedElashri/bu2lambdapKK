@@ -26,8 +26,10 @@ from typing import Any, Sequence
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-import mplhep
 import numpy as np
+
+# ── Reference colour palette (matches reference analysis) ────────────────────
+LHCB_COLORS = ["darkgreen", "#6F4F59", "#003366", "#D35400", "black"]
 
 # ── Particle label map (matplotlib LaTeX) ───────────────────────────────────
 # Used by mass_fitter and any script that needs consistent state labels.
@@ -39,18 +41,18 @@ STATE_LABELS = {
     "etac_2s": r"$\eta_c(2S)$",
 }
 
-# Per-state colors for overlaid signal components
+# Per-state colors — drawn from reference palette
 STATE_COLORS = {
-    "jpsi": "crimson",
-    "etac": "darkorange",
-    "chic0": "mediumseagreen",
-    "chic1": "mediumpurple",
-    "etac_2s": "dodgerblue",
+    "jpsi": LHCB_COLORS[0],  # darkgreen
+    "etac": LHCB_COLORS[3],  # #D35400
+    "chic0": LHCB_COLORS[2],  # #003366
+    "chic1": LHCB_COLORS[1],  # #6F4F59
+    "etac_2s": LHCB_COLORS[4],  # black
 }
 
 # Default curve colors
-COLOR_TOTAL = "royalblue"
-COLOR_BACKGROUND = "dimgray"
+COLOR_TOTAL = LHCB_COLORS[2]  # #003366
+COLOR_BACKGROUND = LHCB_COLORS[4]  # black (dashed)
 COLOR_DATA = "black"
 
 
@@ -58,8 +60,14 @@ COLOR_DATA = "black"
 
 
 def setup_style() -> None:
-    """Apply LHCb2 style globally.  Call once at the start of each script."""
-    mplhep.style.use("LHCb2")
+    """Apply reference style (mass_spectrums.py equivalent).  Call once per script.
+
+    The reference has LHCb1 commented out for mass spectra plots — uses only
+    STIX math + serif font, which gives clean publication-quality text sizes.
+    """
+    mpl.rcParams.update({"mathtext.fontset": "stix"})
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = ["Times New Roman"]
 
 
 # ── Figure construction ───────────────────────────────────────────────────────
@@ -119,31 +127,37 @@ def plot_data_points(
     x: np.ndarray,
     y: np.ndarray,
     yerr: np.ndarray | None = None,
+    xerr: np.ndarray | None = None,
     color: str = COLOR_DATA,
     marker: str = "o",
-    markersize: float = 4.0,
+    markersize: float = 6.0,
     label: str = "Data",
     zorder: int = 5,
     **kwargs: Any,
 ) -> None:
     """
-    Plot binned data as points with error bars.
+    Plot binned data as points with error bars (matches reference style).
 
     Parameters
     ----------
     x :    Bin centres.
     y :    Bin contents.
-    yerr : Bin uncertainties (Poisson or ``sqrt(N)``).
+    yerr : Bin uncertainties (Poisson: ``sqrt(|N|+1)``).
+    xerr : Half-bin widths for horizontal error bars.
     """
     ax.errorbar(
         x,
         y,
         yerr=yerr,
-        fmt=marker,
+        xerr=xerr,
+        fmt=" ",
+        marker=marker,
+        ecolor=color,
+        mfc=color,
         color=color,
         markersize=markersize,
         capsize=0,
-        elinewidth=1.0,
+        elinewidth=2.0,
         label=label,
         zorder=zorder,
         **kwargs,
@@ -160,7 +174,7 @@ def plot_curve(
     label: str = "",
     color: str = COLOR_TOTAL,
     linestyle: str = "-",
-    lw: float = 1.8,
+    lw: float = 4.0,
     zorder: int = 4,
     **kwargs: Any,
 ) -> None:
@@ -219,15 +233,15 @@ def plot_histogram(
     bins: int | np.ndarray = 50,
     range: tuple[float, float] | None = None,
     density: bool = False,
-    color: str = "steelblue",
-    alpha: float = 0.75,
-    edgecolor: str = "white",
-    lw: float = 0.5,
+    color: str = LHCB_COLORS[0],
+    histtype: str = "step",
+    linestyle: str = "--",
+    lw: float = 4.0,
     label: str = "",
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Draw a styled histogram.
+    Draw a styled step histogram (MC style matching reference).
 
     Returns
     -------
@@ -239,13 +253,21 @@ def plot_histogram(
         range=range,
         density=density,
         color=color,
-        alpha=alpha,
-        edgecolor=edgecolor,
+        histtype=histtype,
+        linestyle=linestyle,
         linewidth=lw,
         label=label,
         **kwargs,
     )
     return counts, edges
+
+
+def make_scalar_formatter() -> ticker.ScalarFormatter:
+    """Return a ScalarFormatter with scientific notation (matches reference style)."""
+    fmt = ticker.ScalarFormatter(useMathText=True)
+    fmt.set_scientific(True)
+    fmt.set_powerlimits((0, 0))
+    return fmt
 
 
 # ── 2-D histogram ─────────────────────────────────────────────────────────────

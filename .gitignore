@@ -260,3 +260,6 @@ output
 
 # old garbage/plans
 old
+reference
+make_*
+ana_note
