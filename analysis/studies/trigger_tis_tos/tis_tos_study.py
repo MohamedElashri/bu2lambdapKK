@@ -13,10 +13,17 @@ Here we use sideband subtraction as a simpler, robust method for counting.
 
 import argparse
 import json
+import sys
+from pathlib import Path
 
 import awkward as ak
 import numpy as np
 import uproot
+
+# Add analysis/ to sys.path so modules.* are importable
+_ANALYSIS_DIR = Path(__file__).resolve().parents[2]  # studies/trigger_tis_tos/ → analysis/
+if str(_ANALYSIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_ANALYSIS_DIR))
 
 
 def apply_lambda_selection(tree, category):

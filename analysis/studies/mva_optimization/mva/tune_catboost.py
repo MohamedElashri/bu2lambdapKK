@@ -1,16 +1,23 @@
 """
-Optuna Tuning script for CatBoost MVA
+Optuna Tuning script for CatBoost MVA  [FROZEN — MVA optimisation complete]
 """
 
 import json
 import logging
+import sys
 from pathlib import Path
 
 import numpy as np
 import optuna
 from catboost import CatBoostClassifier
-from config_loader import StudyConfig
-from data_preparation import load_and_prepare_data
+
+# Make the mva/ sub-directory importable from any working directory
+_MVA_DIR = Path(__file__).resolve().parent
+if str(_MVA_DIR) not in sys.path:
+    sys.path.insert(0, str(_MVA_DIR))
+
+from config_loader import StudyConfig  # local mva config (mva_config.toml)
+from data_preparation import load_and_prepare_data  # uses modules.* internally
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 

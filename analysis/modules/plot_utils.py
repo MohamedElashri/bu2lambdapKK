@@ -26,10 +26,17 @@ from typing import Any, Sequence
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+
+# Force non-interactive Agg backend. Called here so importing plot_utils
+# switches the backend before any figure is created, even when the calling
+# script has already done `import matplotlib.pyplot as plt` with TkAgg.
+plt.switch_backend("Agg")
 import numpy as np
 
 # ── Reference colour palette (matches reference analysis) ────────────────────
 LHCB_COLORS = ["darkgreen", "#6F4F59", "#003366", "#D35400", "black"]
+# Alias used by ana_note_plots scripts
+COLORS = LHCB_COLORS
 
 # ── Particle label map (matplotlib LaTeX) ───────────────────────────────────
 # Used by mass_fitter and any script that needs consistent state labels.
@@ -54,6 +61,31 @@ STATE_COLORS = {
 COLOR_TOTAL = LHCB_COLORS[2]  # #003366
 COLOR_BACKGROUND = LHCB_COLORS[4]  # black (dashed)
 COLOR_DATA = "black"
+
+# ── MC histogram style (matches reference reweight_plot.py) ──────────────────
+HISTSTYLE = {"histtype": "step", "linestyle": "--", "linewidth": 4, "density": True}
+
+# ── Centralized binning ───────────────────────────────────────────────────────
+BINNING = {
+    "lambda_mass_full": {"range": (1090, 1155), "bins": 65},  # 1.0 MeV/bin
+    "lambda_mass_tight": {"range": (1108, 1126), "bins": 18},  # 1.0 MeV/bin
+    "bu_mass_fit": {"range": (5100, 5500), "bins": 80},  # 5 MeV/bin
+    "bu_mass_display": {"range": (5100, 5500), "bins": 40},  # 10 MeV/bin
+    "charmonium_mass": {"range": (2800, 3800), "bins": 50},  # 20 MeV/bin
+    "pid": {"range": (0.0, 1.0), "bins": 20},  # 0.05/bin
+    "log_ipchi2": {"range": (-2.0, 4.0), "bins": 30},  # 0.2/bin
+    "bu_pt": {"range": (0, 25000), "bins": 50},  # 500 MeV/bin
+    "delta_z_ll": {"range": (0, 150), "bins": 30},  # 5 mm/bin
+    "delta_z_dd": {"range": (0, 150), "bins": 30},  # 5 mm/bin
+    "dtf_chi2": {"range": (0, 50), "bins": 25},  # 2/bin
+    "bu_fdchi2": {"range": (0, 5000), "bins": 25},  # 200/bin
+    "l0_fdchi2": {"range": (0, 3000), "bins": 30},  # 100/bin
+    "probnnp": {"range": (0, 1), "bins": 20},  # 0.05/bin
+}
+
+# ── Figure directory for ana_note_plots outputs ───────────────────────────────
+ANA_NOTE_FIGS_DIR = Path(__file__).resolve().parents[1] / "studies" / "ana_note_plots" / "figs"
+FIGS_DIR = ANA_NOTE_FIGS_DIR  # alias
 
 
 # ── Style ────────────────────────────────────────────────────────────────────
@@ -270,6 +302,10 @@ def make_scalar_formatter() -> ticker.ScalarFormatter:
     return fmt
 
 
+# Alias used by ana_note_plots scripts
+make_formatter = make_scalar_formatter
+
+
 # ── 2-D histogram ─────────────────────────────────────────────────────────────
 
 
@@ -325,6 +361,89 @@ def save_figure(
     fig.savefig(path, dpi=dpi, bbox_inches=bbox_inches, **kwargs)
     if close:
         plt.close(fig)
+
+
+# ── Legacy-style data plot (used by ana_note_plots scripts) ──────────────────
+
+
+def plot_data(
+    ax: plt.Axes,
+    data: np.ndarray,
+    label: str,
+    histstyle: dict,
+    weights=None,
+    color: str = "black",
+    errorbar: bool = True,
+    mkstyle: str = "o",
+):
+    """
+    Plot binned data as error bars (legacy API matching reference bu2lambdappp/utils/plot.py).
+
+    Parameters
+    ----------
+    histstyle : dict with 'range', 'bins', and optionally 'density'
+
+    Returns
+    -------
+    ax, data_hist, data_hist_errors
+    """
+    data_hist, bins = np.histogram(data, weights=weights, **histstyle)
+    data_hist_errors = np.sqrt(np.abs(data_hist) + 1)
+    try:
+        if histstyle.get("density"):
+            data_hist_errors = np.sqrt(data_hist / len(data) * np.sum(data_hist))
+    except Exception:
+        pass
+    bin_center = (bins[1:] + bins[:-1]) / 2
+    bin_width = (bins[1:] - bins[:-1]) / 2
+    nonzero = data_hist > 0
+
+    if errorbar:
+        ax.errorbar(
+            x=bin_center[nonzero],
+            y=data_hist[nonzero],
+            xerr=bin_width[nonzero],
+            yerr=data_hist_errors[nonzero],
+            label=label,
+            ecolor=color,
+            mfc=color,
+            color=color,
+            elinewidth=1.5,
+            markersize=4,
+            marker=mkstyle,
+            fmt=" ",
+        )
+    else:
+        ax.errorbar(
+            x=bin_center[nonzero],
+            y=data_hist[nonzero],
+            xerr=bin_width[nonzero],
+            fmt=mkstyle,
+            label=label,
+            ecolor=color,
+            mfc=color,
+            color=color,
+            elinewidth=3,
+        )
+    return ax, data_hist, data_hist_errors
+
+
+# ── Ana-note figure path helpers ──────────────────────────────────────────────
+
+
+def figs_path(cat: str, *parts: str) -> Path:
+    """Return a path under the ana_note_plots figs directory.
+
+    Example:
+        figs_path("LL", "backgrounds", "ks0_veto.pdf")
+        → .../studies/ana_note_plots/figs/LambdaLL/backgrounds/ks0_veto.pdf
+    """
+    return ANA_NOTE_FIGS_DIR / f"Lambda{cat}" / Path(*parts)
+
+
+def save_fig(fig: plt.Figure, path: Path) -> None:
+    """Save figure, creating parent directories as needed (alias for save_figure)."""
+    save_figure(fig, path)
 
 
 # ── High-level mass-fit figure ────────────────────────────────────────────────

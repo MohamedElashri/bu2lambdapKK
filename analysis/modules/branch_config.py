@@ -310,7 +310,7 @@ class BranchConfig:
         if missing:
             # Only show warning if data loading messages are enabled
             try:
-                from utils.logging_config import show_data_loading_messages
+                from modules.logging_config import show_data_loading_messages
 
                 if show_data_loading_messages():
                     self.logger.warning(

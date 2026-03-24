@@ -32,7 +32,7 @@ Follows reference reweight_plot.py style exactly:
   - Colors: COLORS[0] (darkgreen), COLORS[1] (#6F4F59), COLORS[2] (#003366)
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_reweighting.py
+    uv run python studies/kinematic_reweighting/plot_reweighting.py
 """
 
 import json
@@ -46,16 +46,14 @@ import numpy as np
 import uproot
 
 # ── paths ──────────────────────────────────────────────────────────────────────
-SCRIPTS_DIR = Path(__file__).resolve().parent
-ANALYSIS_DIR = SCRIPTS_DIR.resolve().parents[3]  # analysis/
-sys.path.insert(0, str(SCRIPTS_DIR))
-sys.path.insert(0, str(ANALYSIS_DIR))
+STUDY_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(STUDY_DIR.parents[1]))  # analysis/ for modules.*
 
-from plot_helpers import COLORS, figs_path, make_formatter, save_fig, setup_style
+from modules.plot_utils import COLORS, figs_path, make_formatter, save_fig, setup_style
 
 DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
 MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-WEIGHT_DIR = SCRIPTS_DIR.parents[1] / "kinematic_reweighting" / "output"
+WEIGHT_DIR = STUDY_DIR / "output"
 
 M_LAMBDA_PDG = 1115.683
 YEARS = ["16", "17", "18"]

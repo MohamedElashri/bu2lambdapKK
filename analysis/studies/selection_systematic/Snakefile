@@ -1,4 +1,15 @@
-# Phase 4.5 — Selection Systematic Snakefile
+# Phase 4.5 — Selection Systematic
+#
+# This study is now integrated into the main pipeline Snakefile (analysis/Snakefile)
+# as rule `selection_systematic`.  Run from the analysis/ directory:
+#
+#   uv run snakemake selection_systematic -j4
+#
+# This standalone Snakefile is kept for reference only.
+# It still works for manual debugging:
+#
+#   cd studies/selection_systematic
+#   uv run snakemake -j4
 
 import sys
 from pathlib import Path

@@ -28,8 +28,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 ANALYSIS_DIR = SCRIPTS_DIR.resolve().parents[3]  # bu2lambdapKK root
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(ANALYSIS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
-from plot_helpers import figs_path
+from modules.plot_utils import figs_path
 
 # Pipeline output location (high_yield = Set1 optimized cuts, combined Run2 fit)
 PIPELINE_OUT = SCRIPTS_DIR.parents[2] / "analysis_output" / "mva" / "high_yield"

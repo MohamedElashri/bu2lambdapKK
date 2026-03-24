@@ -7,13 +7,17 @@
 # Quick reference:
 #   make                        Full A-Z run (studies → pipeline → systematics → collect)
 #   make clean                  Remove all generated outputs (keeps lxplus PID histograms)
-#   make studies                Run prerequisite studies only
-#   make main-pipeline          Run main Snakemake pipeline only
-#   make systematics            Run systematic studies + aggregate
+#   make studies                Run prerequisite studies only (MVA, trigger, reweighting, efficiency)
+#   make main-pipeline          Run main Snakemake pipeline only (includes fit/sel systematics)
+#   make systematics            Re-run systematic studies + aggregate (PID bootstrap + main pipeline)
 #   make collect-results        Copy all outputs into results/
 #   make dry-run                Show what Snakemake would execute (no actual work)
 #   make dag                    Render pipeline DAG to dag.pdf
 #   make help                   Print this reference
+#
+# NOTE: fit_systematics and selection_systematic are now integrated into the main
+# Snakemake pipeline (Phase D). They are triggered automatically by compute_systematics.
+# Use 'make study-fit-syst' or 'make study-sel-syst' only to run them in isolation.
 # =============================================================================
 
 OPT_METHOD ?= mva
@@ -62,8 +66,13 @@ study-trigger:
 
 ## Derive per-category kinematic reweighting weights
 study-reweighting:
-	@echo ">>> [Study] Kinematic reweighting"
-	cd studies/kinematic_reweighting && uv run python derive_weights.py
+	@echo ">>> [Study] Kinematic reweighting (derive weights)"
+	$(SNAKEMAKE) -s studies/kinematic_reweighting/Snakefile -j$(CORES) derive_weights
+
+## Plot kinematic reweighting before/after comparisons (§6 figures)
+plot-reweighting:
+	@echo ">>> [Plots] Kinematic reweighting figures"
+	$(SNAKEMAKE) -s studies/kinematic_reweighting/Snakefile -j$(CORES) plot_reweighting
 
 ## Compute cumulative efficiency table (uses trigger + reweighting)
 study-efficiency:
@@ -116,7 +125,8 @@ compare:
 	@echo ">>> [Pipeline] Branch comparison"
 	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) compare_branches $(SNAKEMAKE_CONFIG) --debug-dag
 
-## Steps 9+10: systematics aggregation + LaTeX export (requires Phase 4 studies)
+## Steps 9a/9b/9/10: fit+sel systematics → aggregate → LaTeX export
+## fit_systematics and selection_systematic run automatically as Snakemake dependencies.
 export-latex:
 	@echo ">>> [Pipeline] Compute systematics + export LaTeX"
 	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) compute_systematics export_latex_results \
@@ -128,32 +138,63 @@ main-pipeline:
 	$(SNAKEMAKE) $(SNAKEMAKE_FLAGS) --debug-dag
 
 # =============================================================================
+# ANALYSIS NOTE PLOTS
+#
+# Three groups of plot scripts — each runs from analysis/ via its own Snakefile:
+#
+#   background_studies/  — §4 background study figures (K_S0, non-resonant, misID)
+#   kinematic_reweighting/ — §6 reweighting validation figures
+#   ana_note_plots/      — §3+§5 pure visualization (preselection, PID, fits, spectrum)
+# =============================================================================
+.PHONY: plots plot-backgrounds plot-reweighting plot-note
+
+## §4 background study figures (K_S0 veto, non-resonant MC, partial reco, misID)
+plot-backgrounds:
+	@echo ">>> [Plots] Background study figures"
+	$(SNAKEMAKE) -s studies/background_studies/Snakefile -j$(CORES)
+
+## §3+§5 analysis note visualization figures (preselection, PID, MC fits, data fit, spectrum)
+plot-note:
+	@echo ">>> [Plots] Analysis note visualization figures"
+	$(SNAKEMAKE) -s studies/ana_note_plots/Snakefile -j$(CORES)
+
+## All analysis note figures (background + reweighting + visualization)
+plots: plot-backgrounds plot-reweighting plot-note
+	@echo ">>> [Plots] All analysis note figures complete"
+
+# =============================================================================
 # PHASE 4: Systematic uncertainty studies
+#
+# fit_systematics and selection_systematic are now Snakemake rules in the main
+# pipeline (Phase D integration). They run automatically as dependencies of
+# compute_systematics. The targets below are convenience wrappers to run them
+# in isolation (e.g. for debugging a single variation).
 # =============================================================================
 .PHONY: systematics study-fit-syst study-sel-syst study-pid-bootstrap
 
-## Fit model systematic (5 variations per branch × category)
+## Fit model systematic — runs via the main Snakemake pipeline (5 variations per branch × category)
 study-fit-syst:
-	@echo ">>> [Systematics] Fit model variations"
-	cd studies/fit_systematics && $(SNAKEMAKE) -j$(CORES)
+	@echo ">>> [Systematics] Fit model variations (via main Snakefile rule fit_systematics)"
+	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) fit_systematics $(SNAKEMAKE_CONFIG)
 
-## Selection threshold systematic (BDT ±1 step)
+## Selection threshold systematic — runs via the main Snakemake pipeline (BDT ±1 step)
 study-sel-syst:
-	@echo ">>> [Systematics] Selection threshold"
-	cd studies/selection_systematic && $(SNAKEMAKE) -j$(CORES)
+	@echo ">>> [Systematics] Selection threshold (via main Snakefile rule selection_systematic)"
+	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) selection_systematic $(SNAKEMAKE_CONFIG)
 
-## PID bootstrap systematic (100 Gaussian smearing iterations)
+## PID bootstrap systematic (100 Gaussian smearing iterations — standalone, not in main pipeline)
 study-pid-bootstrap:
 	@echo ">>> [Systematics] PID bootstrap"
 	cd studies/pid_cancellation && uv run python apply_pidcalib.py \
 	    --bootstrap-n 100 --bootstrap-seed 42
 
-## Run all studies then aggregate + re-export LaTeX with systematics
-systematics: study-fit-syst study-sel-syst study-pid-bootstrap
+## Run PID bootstrap then re-aggregate + re-export LaTeX.
+## fit_systematics and selection_systematic are pulled in automatically by compute_systematics.
+systematics: study-pid-bootstrap
 	@echo ">>> [Systematics] Aggregate + update final outputs"
 	$(SNAKEMAKE) $(SNAKEMAKE_JOBS) compute_systematics export_latex_results \
 	    $(SNAKEMAKE_CONFIG) \
-	    --forcerun compute_systematics --forcerun branching_ratios
+	    --forcerun compute_systematics
 
 # =============================================================================
 # COLLECT: gather everything into results/
@@ -188,7 +229,6 @@ clean-intermediate:
 	@echo "Removing intermediate dirs (analysis_output/ + studies/*/output/) ..."
 	rm -rf analysis_output/
 	rm -rf studies/mva_optimization/output/
-	rm -rf studies/mva_optimization/mva_optimization_completed.txt
 	rm -rf studies/trigger_tis_tos/output/
 	rm -rf studies/kinematic_reweighting/output/
 	rm -rf studies/efficiency_steps/output/
@@ -198,10 +238,11 @@ clean-intermediate:
 	@echo "results/ preserved."
 
 ## Remove study outputs (PIDCalib histograms in pidcalib_output/ are preserved)
+## NOTE: mva_optimization/output/ is NOT removed here — the trained BDT models
+##       are the result of a long training run and are preserved by default.
+##       Use 'make retrain-mva' to explicitly rebuild them.
 clean-studies:
-	@echo "Removing study outputs (pid_cancellation/pidcalib_output/ preserved) ..."
-	rm -rf studies/mva_optimization/output/
-	rm -rf studies/mva_optimization/mva_optimization_completed.txt
+	@echo "Removing study outputs (mva_optimization/output/ and pid_cancellation/pidcalib_output/ preserved) ..."
 	rm -rf studies/trigger_tis_tos/output/
 	rm -rf studies/kinematic_reweighting/output/
 	rm -rf studies/efficiency_steps/output/
@@ -253,12 +294,12 @@ help:
 	@echo "  make CORES=8           Use 8 parallel jobs"
 	@echo ""
 	@echo "Individual phases:"
-	@echo "  make studies           Prerequisite studies (MVA skipped if models exist)"
-	@echo "  make main-pipeline     Main Snakemake pipeline (steps 1-10)"
-	@echo "  make systematics       Phase 4 systematic studies + aggregation"
+	@echo "  make studies           Prerequisite standalone studies (MVA, trigger, reweighting, efficiency)"
+	@echo "  make main-pipeline     Main Snakemake pipeline (all steps incl. fit/sel systematics)"
+	@echo "  make systematics       PID bootstrap + re-aggregate + re-export LaTeX"
 	@echo "  make collect-results   Copy all outputs into results/"
 	@echo ""
-	@echo "Prerequisite studies:"
+	@echo "Prerequisite studies (run before main pipeline):"
 	@echo "  make study-mva         BDT training (skipped if models already present)"
 	@echo "  make retrain-mva       Force BDT retraining (use after data/feature changes)"
 	@echo "  make study-trigger     TIS/TOS trigger efficiency"
@@ -266,19 +307,23 @@ help:
 	@echo "  make study-efficiency  Cumulative efficiency table"
 	@echo ""
 	@echo "Main pipeline steps (each includes all prior steps):"
-	@echo "  make load-data         Steps 1-2: config validation + data loading"
-	@echo "  make optimize          Steps 1-3: selection optimization"
-	@echo "  make apply-cuts        Steps 1-4: apply optimized cuts"
-	@echo "  make mass-fitting      Steps 1-5: mass fitting"
-	@echo "  make efficiency        Step 6:    efficiency calculation"
-	@echo "  make branching-ratios  Step 7:    branching fraction ratios"
-	@echo "  make compare           Step 8:    high/low yield branch comparison"
-	@echo "  make export-latex      Steps 9-10: systematics + LaTeX table"
+	@echo "  make load-data         Steps 1-2:      config validation + data loading"
+	@echo "  make optimize          Steps 1-3:      selection optimization"
+	@echo "  make apply-cuts        Steps 1-4:      apply optimized cuts"
+	@echo "  make mass-fitting      Steps 1-5:      mass fitting"
+	@echo "  make efficiency        Step  6:        efficiency calculation"
+	@echo "  make branching-ratios  Step  7:        branching fraction ratios"
+	@echo "  make compare           Step  8:        high/low yield branch comparison"
+	@echo "  make export-latex      Steps 9a/9b/9/10: fit+sel systs → aggregate → LaTeX"
 	@echo ""
-	@echo "Systematic studies (Phase 4):"
-	@echo "  make study-fit-syst      Fit model variations (ARGUS/poly2/resolution)"
-	@echo "  make study-sel-syst      Selection threshold ±1 step"
-	@echo "  make study-pid-bootstrap PID bootstrap (100 iterations)"
+	@echo "Systematic studies:"
+	@echo "  make study-fit-syst      Fit model variations (via main pipeline rule)"
+	@echo "  make study-sel-syst      Selection threshold ±1 step (via main pipeline rule)"
+	@echo "  make study-pid-bootstrap PID bootstrap (100 iterations — standalone)"
+	@echo ""
+	@echo "  NOTE: fit_systematics and selection_systematic are Snakemake rules in the"
+	@echo "  main pipeline and run automatically before compute_systematics. The targets"
+	@echo "  above are convenience wrappers to run them in isolation."
 	@echo ""
 	@echo "Reporting:"
 	@echo "  make collect-results   Copy all outputs into results/"
@@ -293,7 +338,7 @@ help:
 	@echo "  make clean                Remove all outputs (pidcalib_output/ preserved)"
 	@echo "  make clean-intermediate   Remove intermediate dirs only (keeps results/)"
 	@echo "  make clean-main           Remove analysis_output/ and results/ only"
-	@echo "  make clean-studies        Remove study outputs only"
+	@echo "  make clean-studies        Remove study outputs (mva models preserved)"
 	@echo "  make clean-snakemake      Remove .snakemake metadata/locks only"
 	@echo ""
 	@echo "Variables (override on command line):"

@@ -33,8 +33,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 ANALYSIS_DIR = SCRIPTS_DIR.resolve().parents[3]  # analysis/
 sys.path.insert(0, str(SCRIPTS_DIR))
 sys.path.insert(0, str(ANALYSIS_DIR))
+sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
-from plot_helpers import COLORS, figs_path, make_formatter, save_fig, setup_style
+from modules.plot_utils import COLORS, figs_path, make_formatter, save_fig, setup_style
 
 MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
 

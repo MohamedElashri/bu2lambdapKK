@@ -1,0 +1,94 @@
+# Analysis Note Plots Snakefile
+#
+# Produces publication-quality figures for the B+ → Λ̄pK⁻K⁺ analysis note.
+# All outputs go to figs/LambdaLL/ and figs/LambdaDD/.
+#
+# Background study figures and reweighting figures are produced by their
+# own study Snakefiles:
+#   studies/background_studies/Snakefile   → figs/*/backgrounds/, figs/*/misID_*
+#   studies/kinematic_reweighting/Snakefile → figs/*/reweight/
+#
+# Scripts in this directory (pure visualization, no study logic):
+#   plot_preselection.py     §3 — preselection cut distributions
+#   plot_pid.py              §3 — PID variable comparisons
+#   plot_normchannel.py      §3/§5 — J/ψ normalization channel
+#   plot_mcfits.py           §5 — signal MC mass fits
+#   plot_charmonium_spectrum.py  §5 — charmonium mass spectrum (money plot)
+#   plot_datafit.py          §5 — data mass fit (reads pipeline output)
+#
+# Prerequisites:
+#   Main pipeline must have run (for plot_datafit.py to read cached fits).
+#   Kinematic weights must exist (for plot_preselection.py weights option).
+#
+# Run from analysis/:
+#   uv run snakemake -s studies/ana_note_plots/Snakefile -j4
+# Or via Make:
+#   make plots
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+FIGS    = "studies/ana_note_plots/figs"
+CATS    = ["LL", "DD"]
+STATES  = ["Jpsi", "Etac", "Chic0", "Chic1"]
+
+rule all:
+    input:
+        # §3 preselection + PID
+        expand(f"{FIGS}/Lambda{{cat}}/Preselections/Delta_Z.pdf",              cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/Preselections/Bu_M_after_preselection.pdf", cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/L0_M_after_preselection.pdf",            cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/logIPCHI2run2_Sig.pdf",                  cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/pidcmp.pdf",                             cat=CATS),
+        # §5 signal MC + data fits
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_To{{state}}_Run2MDU_MC.pdf",
+               cat=CATS, state=STATES),
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_todata_signal.pdf",              cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_to_sideband.pdf",                cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/charmonium_spectrum.pdf",                cat=CATS),
+
+rule preselection:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/Preselections/Delta_Z.pdf",                 cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/Preselections/Bu_M_after_preselection.pdf", cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/L0_M_after_preselection.pdf",               cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/logIPCHI2run2_Sig.pdf",                     cat=CATS),
+    shell:
+        "uv run python studies/ana_note_plots/scripts/plot_preselection.py"
+
+rule pid:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/pidcmp.pdf",   cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/pidcmp_p.pdf", cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/pidcmp_k1.pdf",cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/pidcmp_k2.pdf",cat=CATS),
+    shell:
+        "uv run python studies/ana_note_plots/scripts/plot_pid.py"
+
+rule normchannel:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_to_sideband.pdf",               cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_ToNormal_Run2MDU_MC_mB.pdf",    cat=CATS),
+    shell:
+        "uv run python studies/ana_note_plots/scripts/plot_normchannel.py"
+
+rule mcfits:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_To{{state}}_Run2MDU_MC.pdf",
+               cat=CATS, state=STATES),
+    shell:
+        "uv run python studies/ana_note_plots/scripts/plot_mcfits.py"
+
+rule charmonium_spectrum:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/charmonium_spectrum.pdf", cat=CATS),
+    shell:
+        "uv run python studies/ana_note_plots/scripts/plot_charmonium_spectrum.py"
+
+rule datafit:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/fit/fit_todata_signal.pdf", cat=CATS),
+    shell:
+        "uv run python studies/ana_note_plots/scripts/plot_datafit.py"

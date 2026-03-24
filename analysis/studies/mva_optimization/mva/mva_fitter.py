@@ -1,15 +1,22 @@
 """
-Final Fit Execution for MVA
+Final Fit Execution for MVA  [FROZEN — MVA optimisation complete]
 """
 
 import logging
+import sys
 from pathlib import Path
 
 import awkward as ak
 import numpy as np
 import pandas as pd
-from config_loader import StudyConfig
-from mass_fitter import MassFitter
+
+# Make the mva/ sub-directory importable from any working directory
+_MVA_DIR = Path(__file__).resolve().parent
+if str(_MVA_DIR) not in sys.path:
+    sys.path.insert(0, str(_MVA_DIR))
+
+from config_loader import StudyConfig  # local mva config (mva_config.toml)
+from mass_fitter import MassFitter  # local frozen snapshot (different API from modules/)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)

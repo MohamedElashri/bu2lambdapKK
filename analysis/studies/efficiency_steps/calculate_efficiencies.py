@@ -23,6 +23,7 @@ Phase 3 fixes:
 import argparse
 import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -32,6 +33,11 @@ import pandas as pd
 import tomli
 import uproot
 from catboost import CatBoostClassifier
+
+# Add analysis/ to sys.path so modules.* are importable
+_ANALYSIS_DIR = Path(__file__).resolve().parents[2]  # studies/efficiency_steps/ → analysis/
+if str(_ANALYSIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_ANALYSIS_DIR))
 
 
 def get_gen_eff_from_config(

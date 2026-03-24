@@ -1,8 +1,12 @@
 """
-Mass Fitting Module for B+ -> Lambda pK-K+ Analysis
+Mass Fitting Module for B+ -> Lambda pK-K+ Analysis  [FROZEN SNAPSHOT]
 
-Implements RooFit-based simultaneous mass fitting for charmonium states.
-MODIFIED: plot_fit_result method updated to match official LHCb publication style
+FROZEN: This is a standalone copy frozen at the time the MVA optimisation was
+completed. It has a different API from modules/mass_fitter.py (uses 'plot_tag'
+instead of 'fit_label' / 'plot_dir' in perform_fit). Do NOT sync or merge;
+the MVA optimisation will not be re-run.
+
+If you need the current fitter, import from modules.mass_fitter instead.
 """
 
 from __future__ import annotations

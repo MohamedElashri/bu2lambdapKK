@@ -1,0 +1,43 @@
+# Kinematic Reweighting Snakefile
+#
+# Step 1 (derive_weights.py): compute per-category pT × nTracks weights
+#   from data/MC comparison using J/ψ-tagged events.
+#   Output: output/kinematic_weights_{LL,DD}.json
+#
+# Step 2 (plot_reweighting.py): produce §6 validation figures comparing
+#   data/MC distributions before and after applying the weights.
+#   Output: studies/ana_note_plots/figs/Lambda{LL,DD}/reweight/*.pdf
+#
+# Run from analysis/:
+#   uv run snakemake -s studies/kinematic_reweighting/Snakefile -j2
+# Or via Make:
+#   make study-reweighting        # weights only
+#   make plot-reweighting         # plots (requires weights)
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+ANA_NOTE_FIGS = "studies/ana_note_plots/figs"
+WEIGHT_DIR    = "studies/kinematic_reweighting/output"
+CATEGORIES    = ["LL", "DD"]
+
+rule all:
+    input:
+        expand(f"{WEIGHT_DIR}/kinematic_weights_{{cat}}.json", cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/reweight/reweight_Bu_PT_cmp.pdf", cat=CATEGORIES),
+
+rule derive_weights:
+    output:
+        expand(f"{WEIGHT_DIR}/kinematic_weights_{{cat}}.json", cat=CATEGORIES),
+    shell:
+        "uv run python studies/kinematic_reweighting/derive_weights.py"
+
+rule plot_reweighting:
+    input:
+        expand(f"{WEIGHT_DIR}/kinematic_weights_{{cat}}.json", cat=CATEGORIES),
+    output:
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/reweight/reweight_Bu_PT_cmp.pdf", cat=CATEGORIES),
+    shell:
+        "uv run python studies/kinematic_reweighting/plot_reweighting.py"

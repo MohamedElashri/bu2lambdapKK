@@ -6,7 +6,7 @@ throughout the analysis pipeline.
 
 Usage:
     # At the start of the file:
-    from utils.logging_config import suppress_warnings
+    from modules.logging_config import suppress_warnings
     suppress_warnings()  # Suppress all warnings by default
 
     # Or with more control:

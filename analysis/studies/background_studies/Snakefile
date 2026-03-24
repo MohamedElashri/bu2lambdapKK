@@ -1,0 +1,50 @@
+# Background Studies Snakefile
+#
+# Produces §4 figures documenting four background sources:
+#   1. Partially reconstructed B decays  (plot_background_studies.py)
+#   2. K_S^0 contamination check         (plot_background_studies.py)
+#   3. Non-resonant B+→ΛpK-K+ MC shape  (plot_background_studies.py)
+#   4. Misidentified B+→ΛpK+K+ MC       (plot_backgrounds.py)
+#
+# All figures are written to:
+#   studies/ana_note_plots/figs/LambdaLL|DD/backgrounds/
+#   studies/ana_note_plots/figs/LambdaLL|DD/misID_*
+#
+# Run from analysis/:
+#   uv run snakemake -s studies/background_studies/Snakefile -j2
+# Or via Make:
+#   make plot-backgrounds
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
+
+ANA_NOTE_FIGS = "studies/ana_note_plots/figs"
+
+CATEGORIES = ["LL", "DD"]
+
+rule all:
+    input:
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/ks0_veto.pdf",        cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/nonresonant_mLpK.pdf", cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/nonresonant_Bcorr.pdf",cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/partial_reco.pdf",     cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/misID_{{cat}}_beforePID.pdf",      cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/misID_{{cat}}_afterPID.pdf",       cat=CATEGORIES),
+
+rule background_studies:
+    output:
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/ks0_veto.pdf",        cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/nonresonant_mLpK.pdf", cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/nonresonant_Bcorr.pdf",cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/backgrounds/partial_reco.pdf",     cat=CATEGORIES),
+    shell:
+        "uv run python studies/background_studies/plot_background_studies.py"
+
+rule misid_backgrounds:
+    output:
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/misID_{{cat}}_beforePID.pdf", cat=CATEGORIES),
+        expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/misID_{{cat}}_afterPID.pdf",  cat=CATEGORIES),
+    shell:
+        "uv run python studies/background_studies/plot_backgrounds.py"

@@ -271,18 +271,75 @@ rule compare_branches:
         "scripts/compare_branches.py"
 
 # ---------------------------------------------------------------------------
-# Step 9: Compute systematic uncertainties (Phase 4)
-# Reads fit_systematics + selection_systematic study outputs and aggregates
-# into a per-state systematic table consumed by branching_ratios.py.
-# Run the studies first:
-#   cd studies/fit_systematics  && uv run snakemake -j4
-#   cd studies/selection_systematic && uv run snakemake -j4
+# Step 9a: Fit model systematics — one job per (branch, category)
+#
+# Runs 5 fit variations (resolution ±2 MeV, ARGUS endpoint ±50 MeV,
+# Chebyshev background alternative) and records δN per charmonium state.
+# Depends on apply_cuts because it reads the cut-filtered data from the cache.
+# ---------------------------------------------------------------------------
+rule fit_systematics:
+    input:
+        cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
+    output:
+        "studies/fit_systematics/output/fit_systematics_{branch}_{category}.json",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+    shell:
+        """
+        uv run python studies/fit_systematics/run_fit_systematics.py \
+            --branch     {wildcards.branch} \
+            --category   {wildcards.category} \
+            --config-dir {params.config_dir} \
+            --cache-dir  {params.cache_dir} \
+            --output-dir studies/fit_systematics/output
+        """
+
+# ---------------------------------------------------------------------------
+# Step 9b: MVA selection threshold systematic — one job per (branch, category)
+#
+# Shifts the BDT threshold by ±0.01 and re-fits, recording the yield change.
+# Depends on apply_cuts because it re-runs the fit on the cached cut data.
+# ---------------------------------------------------------------------------
+rule selection_systematic:
+    input:
+        cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
+    output:
+        "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+    params:
+        config_dir=CONFIG_DIR,
+        cache_dir=CACHE_DIR,
+    shell:
+        """
+        uv run python studies/selection_systematic/run_selection_systematic.py \
+            --branch     {wildcards.branch} \
+            --category   {wildcards.category} \
+            --config-dir {params.config_dir} \
+            --cache-dir  {params.cache_dir} \
+            --output-dir studies/selection_systematic/output
+        """
+
+# ---------------------------------------------------------------------------
+# Step 9: Aggregate systematic uncertainties
+#
+# Reads fit_systematics + selection_systematic JSON outputs (now produced by
+# rules 9a/9b above) and aggregates into per-state systematics tables.
 # ---------------------------------------------------------------------------
 rule compute_systematics:
     input:
-        expand(
+        branching_ratios=expand(
             f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
             branch=BRANCHES,
+        ),
+        fit_systs=expand(
+            "studies/fit_systematics/output/fit_systematics_{branch}_{category}.json",
+            branch=BRANCHES,
+            category=CATEGORIES,
+        ),
+        sel_systs=expand(
+            "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+            branch=BRANCHES,
+            category=CATEGORIES,
         ),
     output:
         expand(f"{OUTPUT_DIR}/{{branch}}/tables/systematics.json", branch=BRANCHES),

@@ -1,10 +1,13 @@
-# Phase 4.1 — Fit Model Systematics Snakefile
+# Phase 4.1 — Fit Model Systematics
 #
-# Runs 5 fit variations per (branch, category) and saves δN per state.
-# Output consumed by scripts/compute_systematics.py.
+# This study is now integrated into the main pipeline Snakefile (analysis/Snakefile)
+# as rule `fit_systematics`.  Run from the analysis/ directory:
 #
-# Run order:
-#   cd analysis/                   # main pipeline must have been run first
+#   uv run snakemake fit_systematics -j4
+#
+# This standalone Snakefile is kept for reference only.
+# It still works for manual debugging:
+#
 #   cd studies/fit_systematics
 #   uv run snakemake -j4
 

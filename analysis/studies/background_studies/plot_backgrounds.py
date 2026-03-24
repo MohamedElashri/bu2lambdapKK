@@ -12,7 +12,7 @@ Background MC available:
   KpKp — B+ → Λ̄pK⁺K⁺ (same-sign kaons, mis-ID background)
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_backgrounds.py
+    uv run python studies/background_studies/plot_backgrounds.py
 """
 
 import logging
@@ -25,12 +25,10 @@ import numpy as np
 import uproot
 
 # ── paths ──────────────────────────────────────────────────────────────────────
-SCRIPTS_DIR = Path(__file__).resolve().parent
-ANALYSIS_DIR = SCRIPTS_DIR.resolve().parents[3]  # bu2lambdapKK root
-sys.path.insert(0, str(SCRIPTS_DIR))
-sys.path.insert(0, str(ANALYSIS_DIR))
+STUDY_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(STUDY_DIR.parents[1]))  # analysis/ for modules.*
 
-from plot_helpers import COLORS, figs_path, save_fig, setup_style
+from modules.plot_utils import COLORS, figs_path, save_fig, setup_style
 
 DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
 MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
