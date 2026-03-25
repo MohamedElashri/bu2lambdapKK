@@ -131,27 +131,42 @@ rule load_data:
         "scripts/load_data.py"
 
 # ---------------------------------------------------------------------------
-# Step 3: Selection optimization — one per (branch, category)
-# Each category gets its own cut set. This allows LL and DD to be independently
-# optimised (reference analysis finds different optimal cuts per category).
+# Step 3: Selection optimisation — one per (branch, category)
+#
+# In "passthrough" mode the optimisation is skipped entirely.  A trivial
+# optimized_cuts.json (opt_type = "passthrough") is written so that
+# apply_cuts.py simply forwards the pre-selected events unchanged.
 # ---------------------------------------------------------------------------
-rule optimize_selection:
-    input:
-        f"{OUTPUT_DIR}/.data_loaded",
-    output:
-        f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
-    params:
-        use_manual_cuts=USE_MANUAL_CUTS,
-        no_cache=NO_CACHE,
-        config_dir=CONFIG_DIR,
-        cache_dir=CACHE_DIR,
-        output_dir=OUTPUT_DIR,
-        years=YEARS,
-        category="{category}",
-        branch="{branch}",
-        opt_method=OPT_METHOD,
-    script:
-        "scripts/optimize_selection.py"
+if OPT_METHOD == "passthrough":
+    rule passthrough_selection:
+        """Passthrough: skip optimisation, write trivial cuts file."""
+        input:
+            f"{OUTPUT_DIR}/.data_loaded",
+        output:
+            f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
+        params:
+            branch="{branch}",
+            category="{category}",
+        script:
+            "scripts/passthrough_selection.py"
+else:
+    rule optimize_selection:
+        input:
+            f"{OUTPUT_DIR}/.data_loaded",
+        output:
+            f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
+        params:
+            use_manual_cuts=USE_MANUAL_CUTS,
+            no_cache=NO_CACHE,
+            config_dir=CONFIG_DIR,
+            cache_dir=CACHE_DIR,
+            output_dir=OUTPUT_DIR,
+            years=YEARS,
+            category="{category}",
+            branch="{branch}",
+            opt_method=OPT_METHOD,
+        script:
+            "scripts/optimize_selection.py"
 
 # ---------------------------------------------------------------------------
 # Step 4: Apply optimized cuts — one per (branch, category)
@@ -296,28 +311,39 @@ rule fit_systematics:
         """
 
 # ---------------------------------------------------------------------------
-# Step 9b: MVA selection threshold systematic — one job per (branch, category)
+# Step 9b: Selection threshold systematic — one job per (branch, category)
 #
-# Shifts the BDT threshold by ±0.01 and re-fits, recording the yield change.
-# Depends on apply_cuts because it re-runs the fit on the cached cut data.
+# In passthrough mode there is no threshold to vary, so the systematic is
+# written as zero for all states.  In optimised modes the BDT threshold is
+# shifted ±1 step and the mass fit is repeated.
 # ---------------------------------------------------------------------------
-rule selection_systematic:
-    input:
-        cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
-    output:
-        "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
-    params:
-        config_dir=CONFIG_DIR,
-        cache_dir=CACHE_DIR,
-    shell:
-        """
-        uv run python studies/selection_systematic/run_selection_systematic.py \
-            --branch     {wildcards.branch} \
-            --category   {wildcards.category} \
-            --config-dir {params.config_dir} \
-            --cache-dir  {params.cache_dir} \
-            --output-dir studies/selection_systematic/output
-        """
+if OPT_METHOD == "passthrough":
+    rule passthrough_selection_systematic:
+        """Passthrough: write zero selection systematic (no selection to vary)."""
+        input:
+            cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
+        output:
+            "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+        script:
+            "scripts/passthrough_selection_systematic.py"
+else:
+    rule selection_systematic:
+        input:
+            cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
+        output:
+            "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+        params:
+            config_dir=CONFIG_DIR,
+            cache_dir=CACHE_DIR,
+        shell:
+            """
+            uv run python studies/selection_systematic/run_selection_systematic.py \
+                --branch     {wildcards.branch} \
+                --category   {wildcards.category} \
+                --config-dir {params.config_dir} \
+                --cache-dir  {params.cache_dir} \
+                --output-dir studies/selection_systematic/output
+            """
 
 # ---------------------------------------------------------------------------
 # Step 9: Aggregate systematic uncertainties

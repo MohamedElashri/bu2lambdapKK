@@ -75,10 +75,23 @@ with open(cuts_file, "r") as f:
 
 opt_type = config.data.get("cut_application", {}).get("optimization_type", "box")
 
+# Passthrough override: if the cuts file was written by passthrough_selection.py
+# the opt_type stored inside it takes priority over selection.toml.
+if isinstance(optimized_cuts, dict) and optimized_cuts.get("opt_type") == "passthrough":
+    opt_type = "passthrough"
+
 data_final = {}
 mc_final = {}
 
-if opt_type == "box":
+if opt_type == "passthrough":
+    logger.info(
+        f"Passthrough mode [{category}]: no additional cuts applied "
+        "beyond trigger + stripping + Lambda pre-selection."
+    )
+    data_final = dict(data_dict)
+    mc_final = dict(mc_dict)
+
+elif opt_type == "box":
     logger.info(f"Applying Box Cuts for branch={branch}, category={category}")
     target_fom = "S/sqrt(S+B)"
     target_state = "jpsi" if branch == "high_yield" else "chic1"
