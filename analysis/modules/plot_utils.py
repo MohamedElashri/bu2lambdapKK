@@ -100,6 +100,11 @@ def setup_style() -> None:
     mpl.rcParams.update({"mathtext.fontset": "stix"})
     plt.rcParams["font.family"] = "serif"
     plt.rcParams["font.serif"] = ["Times New Roman"]
+    plt.rcParams["font.size"] = 13
+    plt.rcParams["axes.labelsize"] = 13
+    plt.rcParams["xtick.labelsize"] = 12
+    plt.rcParams["ytick.labelsize"] = 12
+    plt.rcParams["legend.fontsize"] = 11
 
 
 # ── Figure construction ───────────────────────────────────────────────────────
@@ -574,7 +579,7 @@ def make_mass_fit_figure(
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="lightgray", alpha=0.8),
         )
 
-    ax.legend(loc="upper center", frameon=False, fontsize=9)
+    ax.legend(loc="upper center", frameon=False)
 
     # ── Pull panel ────────────────────────────────────────────────────────────
     if with_pulls and ax_pull is not None and pulls is not None:

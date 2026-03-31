@@ -94,7 +94,7 @@ def generate_mass_sculpting_plot(category="LL", cut_threshold=0.44):
     plt.title(f"$B^+$ Mass Combinatorial Sidebands - Sculpting Check ({category})")
     plt.xlabel("$M(B^+)$ corrected [MeV/$c^2$]")
     plt.ylabel("Normalized Events")
-    plt.legend(loc="best")
+    plt.legend(loc="best", fontsize=12)
     plt.grid(True, alpha=0.3)
 
     out_dir = Path("../output/plots/mva")

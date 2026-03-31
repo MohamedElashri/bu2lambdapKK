@@ -270,7 +270,7 @@ def plot_fit_to_sideband(cat: str, bu: np.ndarray):
     ax.set_xlabel(r"$m(\bar{\Lambda}pKK)_{\rm DTF}$ [MeV/$c^2$]")
     ax.set_ylabel(rf"Candidates / ({int(bw)} MeV/$c^2$)")
     ax.set_xlim(SB_LO[0] - 10, SB_HI[1] + 10)
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(frameon=False, fontsize=12)
 
     out = figs_path(cat, "fit", "fit_to_sideband.pdf")
     save_fig(fig, out)
@@ -350,7 +350,7 @@ def plot_fit_normal_mc(cat: str, bu: np.ndarray):
             transform=ax.transAxes,
             va="top",
             ha="right",
-            fontsize=9,
+            fontsize=12,
             bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.7),
         )
         log.info(f"    MC fit: μ={mu:.2f}±{perr[1]:.2f}, σ={sigma:.2f}±{perr[2]:.2f}")
@@ -361,7 +361,7 @@ def plot_fit_normal_mc(cat: str, bu: np.ndarray):
     ax.set_xlabel(r"$m(\bar{\Lambda}pKK)_{\rm DTF}$ [MeV/$c^2$]")
     ax.set_ylabel(rf"Candidates / ({int(width)} MeV/$c^2$)")
     ax.set_xlim(*x_range)
-    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    ax.legend(frameon=False, fontsize=12, loc="upper left")
 
     out = figs_path(cat, "fit", "fit_ToNormal_Run2MDU_MC_mB.pdf")
     save_fig(fig, out)

@@ -498,7 +498,7 @@ def _two_panel_cmp(
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Normalized")
     ax.set_title(rf"$\Lambda_{{{cat}}}$ sample")
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(frameon=False, fontsize=12)
     if log_y:
         ax.set_yscale("log")
 
@@ -559,7 +559,7 @@ def _sweight_cmp(
     ax.set_xlabel(xlabel)
     ax.set_ylabel("Normalized")
     ax.set_title(rf"$\Lambda_{{{cat}}}$ sample")
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(frameon=False, fontsize=12)
 
     out = figs_path(cat, "reweight", outfile)
     save_fig(fig, out)
