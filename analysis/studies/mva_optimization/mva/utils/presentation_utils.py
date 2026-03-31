@@ -156,9 +156,8 @@ def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path,
 
     plot_dir.mkdir(parents=True, exist_ok=True)
 
-    # 2D Histograms
     logger.info("Plotting 2D histograms for top features...")
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7), constrained_layout=True)
 
     # Determine scale for the second feature (often highly skewed, e.g. IPCHI2/FDCHI2)
     # Applying log10 if the variable name implies chi2 or PT for better visualization
@@ -180,13 +179,11 @@ def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path,
     axes[1].set_ylabel(y_label)
     fig.colorbar(h2[3], ax=axes[1])
 
-    plt.tight_layout()
-    plt.savefig(plot_dir / f"top2_features_2d{suffix}.pdf")
+    plt.savefig(plot_dir / f"top2_features_2d{suffix}.pdf", bbox_inches="tight")
     plt.close()
 
-    # 1D Distributions
     logger.info("Plotting 1D distributions for top features...")
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7), constrained_layout=True)
 
     axes[0].hist(f1_sig, bins=50, alpha=0.5, label="Signal", density=True, color="blue")
     axes[0].hist(f1_bkg, bins=50, alpha=0.5, label="Background", density=True, color="red")
@@ -202,8 +199,7 @@ def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path,
     axes[1].set_ylabel("Density")
     axes[1].legend()
 
-    plt.tight_layout()
-    plt.savefig(plot_dir / f"top2_features_1d{suffix}.pdf")
+    plt.savefig(plot_dir / f"top2_features_1d{suffix}.pdf", bbox_inches="tight")
     plt.close()
 
 
