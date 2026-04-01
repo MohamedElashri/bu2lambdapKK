@@ -241,7 +241,7 @@ def plot_ks0_veto(cat: str) -> None:
 
     ax.set_xlabel(r"$m(\pi^+\pi^-)$ under $p\to\pi$ hypothesis [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
-    ax.legend(fontsize=12, frameon=False)
+    ax.legend(fontsize=11, frameon=False)
 
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
@@ -251,7 +251,7 @@ def plot_ks0_veto(cat: str) -> None:
         transform=ax.transAxes,
         ha="right",
         va="top",
-        fontsize=12,
+        fontsize=11,
     )
 
     out = figs_path(cat, "backgrounds", "ks0_veto.pdf")
@@ -368,7 +368,7 @@ def plot_nonresonant_shape(cat: str) -> None:
         ax.axvline(mass, linestyle=":", color=color, linewidth=1, alpha=0.7)
     ax.set_xlabel(r"$m(\bar{\Lambda}pK^-)$ [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (20 MeV/$c^2$)")
-    ax.legend(fontsize=12, frameon=False, loc="upper left")
+    ax.legend(fontsize=11, frameon=False, loc="upper left")
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
         0.97,
@@ -377,7 +377,7 @@ def plot_nonresonant_shape(cat: str) -> None:
         transform=ax.transAxes,
         ha="right",
         va="top",
-        fontsize=12,
+        fontsize=11,
     )
     out1 = figs_path(cat, "backgrounds", "nonresonant_mLpK.pdf")
     save_fig(fig, out1)
@@ -403,7 +403,7 @@ def plot_nonresonant_shape(cat: str) -> None:
     )
     ax2.set_xlabel(r"$m_{\rm corr}(\bar{\Lambda}pK^+K^-)$ [MeV/$c^2$]")
     ax2.set_ylabel("Candidates / bin")
-    ax2.legend(fontsize=12, frameon=False)
+    ax2.legend(fontsize=11, frameon=False)
     ax2.text(
         0.97,
         0.97,
@@ -411,7 +411,7 @@ def plot_nonresonant_shape(cat: str) -> None:
         transform=ax2.transAxes,
         ha="right",
         va="top",
-        fontsize=12,
+        fontsize=11,
     )
     out2 = figs_path(cat, "backgrounds", "nonresonant_Bcorr.pdf")
     save_fig(fig2, out2)
@@ -506,7 +506,7 @@ def plot_partial_reco(cat: str) -> None:
 
     ax.set_xlabel(r"$m_{\rm corr}(\bar{\Lambda}pK^+K^-)$ [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
-    ax.legend(fontsize=12, frameon=False)
+    ax.legend(fontsize=11, frameon=False)
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
         0.97,
@@ -515,7 +515,7 @@ def plot_partial_reco(cat: str) -> None:
         transform=ax.transAxes,
         ha="right",
         va="top",
-        fontsize=12,
+        fontsize=11,
     )
 
     # Annotate the below-signal region

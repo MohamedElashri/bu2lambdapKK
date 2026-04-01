@@ -48,19 +48,19 @@ STATE_LABELS = {
     "etac_2s": r"$\eta_c(2S)$",
 }
 
-# Per-state colors — drawn from reference palette
+# Per-state colors — distinct, well-separated palette
 STATE_COLORS = {
-    "jpsi": LHCB_COLORS[0],  # darkgreen
-    "etac": LHCB_COLORS[3],  # #D35400
-    "chic0": LHCB_COLORS[2],  # #003366
-    "chic1": LHCB_COLORS[1],  # #6F4F59
-    "etac_2s": LHCB_COLORS[4],  # black
+    "jpsi": "#117733",  # forest green
+    "etac": "#D35400",  # burnt orange
+    "chic0": "#0099BB",  # cyan-blue (distinct from total fit navy)
+    "chic1": "#882255",  # deep purple
+    "etac_2s": "#AA3377",  # pink-purple (was black — now clearly distinct)
 }
 
 # Default curve colors
-COLOR_TOTAL = LHCB_COLORS[2]  # #003366
-COLOR_BACKGROUND = LHCB_COLORS[4]  # black (dashed)
-COLOR_DATA = "black"
+COLOR_TOTAL = "#0044AA"  # medium blue
+COLOR_BACKGROUND = "#CC4411"  # vivid orange-red (was black dashed — now clearly visible)
+COLOR_DATA = "#333333"  # dark gray with transparency (not solid black)
 
 # ── MC histogram style (matches reference reweight_plot.py) ──────────────────
 HISTSTYLE = {"histtype": "step", "linestyle": "--", "linewidth": 4, "density": True}
@@ -100,11 +100,11 @@ def setup_style() -> None:
     mpl.rcParams.update({"mathtext.fontset": "stix"})
     plt.rcParams["font.family"] = "serif"
     plt.rcParams["font.serif"] = ["Times New Roman"]
-    plt.rcParams["font.size"] = 13
-    plt.rcParams["axes.labelsize"] = 13
+    plt.rcParams["font.size"] = 14
+    plt.rcParams["axes.labelsize"] = 14
     plt.rcParams["xtick.labelsize"] = 12
     plt.rcParams["ytick.labelsize"] = 12
-    plt.rcParams["legend.fontsize"] = 11
+    plt.rcParams["legend.fontsize"] = 12
 
 
 # ── Figure construction ───────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ def plot_data_points(
     xerr: np.ndarray | None = None,
     color: str = COLOR_DATA,
     marker: str = "o",
-    markersize: float = 6.0,
+    markersize: float = 4.0,
     label: str = "Data",
     zorder: int = 5,
     **kwargs: Any,
@@ -194,7 +194,8 @@ def plot_data_points(
         color=color,
         markersize=markersize,
         capsize=0,
-        elinewidth=2.0,
+        elinewidth=1.0,
+        alpha=0.75,
         label=label,
         zorder=zorder,
         **kwargs,
@@ -211,7 +212,7 @@ def plot_curve(
     label: str = "",
     color: str = COLOR_TOTAL,
     linestyle: str = "-",
-    lw: float = 4.0,
+    lw: float = 2.0,
     zorder: int = 4,
     **kwargs: Any,
 ) -> None:
@@ -273,7 +274,7 @@ def plot_histogram(
     color: str = LHCB_COLORS[0],
     histtype: str = "step",
     linestyle: str = "--",
-    lw: float = 4.0,
+    lw: float = 2.0,
     label: str = "",
     **kwargs: Any,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -471,7 +472,7 @@ def make_mass_fit_figure(
     year: str = "",
     context_label: str = "",
     info_lines: Sequence[str] | None = None,
-    figsize: tuple[float, float] = (9, 8),
+    figsize: tuple[float, float] = (7, 6.3),
     total_color: str = COLOR_TOTAL,
     background_color: str = COLOR_BACKGROUND,
 ) -> tuple[plt.Figure, Any]:
@@ -574,7 +575,7 @@ def make_mass_fit_figure(
             transform=ax.transAxes,
             va="top",
             ha="right",
-            fontsize=8,
+            fontsize=10,
             family="monospace",
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="lightgray", alpha=0.8),
         )

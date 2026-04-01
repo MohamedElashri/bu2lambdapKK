@@ -255,7 +255,7 @@ def plot_spectrum(cat: str, data: dict):
     ax.set_xlim(*x_range)
     ax.set_ylim(bottom=0)
     # Legend above the axes so it never overlaps state labels or data
-    ax.legend(frameon=False, fontsize=13, ncols=2, loc="upper center", bbox_to_anchor=(0.5, 1.13))
+    ax.legend(frameon=False, fontsize=12, ncols=2, loc="upper center", bbox_to_anchor=(0.5, 1.13))
 
     # ── Charmonium state markers ──────────────────────────────────────────────
     # Use axes-fraction y so labels are always just inside the top edge.
@@ -272,7 +272,7 @@ def plot_spectrum(cat: str, data: dict):
                 transform=ax.get_xaxis_transform(),  # x=data, y=axes fraction
                 ha="center",
                 va="top",
-                fontsize=11,
+                fontsize=10,
                 color="dimgray",
                 rotation=90,
             )
