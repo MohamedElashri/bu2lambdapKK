@@ -22,6 +22,8 @@ Produces three sets of plots documenting the actual background studies:
 Outputs (per category LL/DD):
    figs/LambdaLL/backgrounds/ks0_veto.pdf
    figs/LambdaDD/backgrounds/ks0_veto.pdf
+   figs/LambdaLL/backgrounds/ks0_veto_bcorr_before_after.pdf
+   figs/LambdaDD/backgrounds/ks0_veto_bcorr_before_after.pdf
    figs/LambdaLL/backgrounds/nonresonant_mLpK.pdf
    figs/LambdaDD/backgrounds/nonresonant_mLpK.pdf
    figs/LambdaLL/backgrounds/nonresonant_Bcorr.pdf
@@ -57,6 +59,7 @@ setup_style()
 M_LAMBDA_PDG = 1115.683  # MeV/c²
 M_PI = 139.57018  # MeV/c²
 M_KS0_PDG = 497.611  # MeV/c²  (for labelling only)
+KS0_VETO_HALF_WIDTH = 20.0  # MeV/c²
 BU_CORR_MIN = 5255.0  # MeV/c²  B+ signal window
 BU_CORR_MAX = 5305.0
 LAMBDA_MIN = 1108.0  # MeV/c²  offline Λ mass window
@@ -159,8 +162,8 @@ def _ks0_mass_from_event(ev: dict) -> np.ndarray:
     return np.sqrt(m2)
 
 
-def _load_data_for_ks0(cat: str) -> np.ndarray:
-    """Load data events for K_S^0 study: trigger + Λ mass window."""
+def _load_data_for_ks0(cat: str) -> tuple[np.ndarray, np.ndarray]:
+    """Load data for the K_S^0 study: return (m_pi_pi, B+ corrected mass)."""
     need = [
         "Bu_DTFL0_M",
         "L0_MM",
@@ -179,7 +182,8 @@ def _load_data_for_ks0(cat: str) -> np.ndarray:
         "Bu_Hlt2Topo4BodyDecision_TOS",
     ]
     tree_name = TREE_NAMES[cat]
-    arrs = []
+    mpipi_arrs = []
+    bcorr_arrs = []
     for yr in YEARS:
         for mag in MAGNETS:
             p = DATA_BASE / f"dataBu2L0barPHH_{yr}{mag}.root"
@@ -188,17 +192,22 @@ def _load_data_for_ks0(cat: str) -> np.ndarray:
             try:
                 t = uproot.open(p)[tree_name]
                 avail = [b for b in need if b in t.keys()]
-                ev = t.arrays(avail, library="np")
-                n = len(ev["L0_MM"])
-                mask = _trigger_mask(ev, n)
-                mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
-                # Compute and store Λ→ππ mass for passing events
-                ev_masked = {k: v[mask] for k, v in ev.items()}
-                m_pipi = _ks0_mass_from_event(ev_masked)
-                arrs.append(m_pipi)
+                for ev in t.iterate(avail, library="np", step_size="100 MB"):
+                    n = len(ev["L0_MM"])
+                    mask = _trigger_mask(ev, n)
+                    mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
+                    if not np.any(mask):
+                        continue
+                    ev_masked = {k: v[mask] for k, v in ev.items()}
+                    m_pipi = _ks0_mass_from_event(ev_masked)
+                    bcorr = _bu_corrected_mass(ev_masked)
+                    mpipi_arrs.append(m_pipi)
+                    bcorr_arrs.append(bcorr)
             except Exception as e:
                 log.warning(f"  Skip {p} [{cat}]: {e}")
-    return np.concatenate(arrs) if arrs else np.array([])
+    m_pipi = np.concatenate(mpipi_arrs) if mpipi_arrs else np.array([])
+    bcorr = np.concatenate(bcorr_arrs) if bcorr_arrs else np.array([])
+    return m_pipi, bcorr
 
 
 def plot_ks0_veto(cat: str) -> None:
@@ -206,7 +215,7 @@ def plot_ks0_veto(cat: str) -> None:
     Plot the Λ→ππ invariant mass to demonstrate absence of K_S^0 contamination.
     """
     log.info(f"  K_S^0 veto study [{cat}]")
-    m_pipi = _load_data_for_ks0(cat)
+    m_pipi, _ = _load_data_for_ks0(cat)
     if len(m_pipi) == 0:
         log.warning(f"  No data for K_S^0 study [{cat}]")
         return
@@ -238,6 +247,13 @@ def plot_ks0_veto(cat: str) -> None:
         linewidth=1.5,
         label=r"$K_S^0$ mass ($497.6\,\mathrm{MeV}/c^2$)",
     )
+    ax.axvspan(
+        M_KS0_PDG - KS0_VETO_HALF_WIDTH,
+        M_KS0_PDG + KS0_VETO_HALF_WIDTH,
+        color="red",
+        alpha=0.08,
+        label=rf"Veto window ($\pm {KS0_VETO_HALF_WIDTH:.0f}$ MeV/$c^2$)",
+    )
 
     ax.set_xlabel(r"$m(\pi^+\pi^-)$ under $p\to\pi$ hypothesis [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
@@ -255,6 +271,64 @@ def plot_ks0_veto(cat: str) -> None:
     )
 
     out = figs_path(cat, "backgrounds", "ks0_veto.pdf")
+    save_fig(fig, out)
+    log.info(f"  Saved: {out}")
+
+
+def plot_ks0_veto_before_after(cat: str) -> None:
+    """Overlay B+ corrected mass before/after the K_S^0 veto."""
+    log.info(f"  K_S^0 veto before/after [{cat}]")
+    m_pipi, bcorr = _load_data_for_ks0(cat)
+    if len(m_pipi) == 0 or len(bcorr) == 0:
+        log.warning(f"  No data for K_S^0 before/after study [{cat}]")
+        return
+
+    keep_mask = np.abs(m_pipi - M_KS0_PDG) >= KS0_VETO_HALF_WIDTH
+    kept_frac = 100.0 * np.count_nonzero(keep_mask) / len(keep_mask)
+
+    fig, ax = plt.subplots()
+    bins = np.linspace(4900, 5500, 61)  # 10 MeV/bin
+
+    ax.hist(
+        bcorr,
+        bins=bins,
+        histtype="step",
+        linewidth=2,
+        color="black",
+        label="Before veto",
+    )
+    ax.hist(
+        bcorr[keep_mask],
+        bins=bins,
+        histtype="step",
+        linewidth=2,
+        color=COLORS[3],
+        label=rf"After veto ({kept_frac:.2f}\% retained)",
+    )
+
+    ax.axvspan(
+        BU_CORR_MIN,
+        BU_CORR_MAX,
+        alpha=0.12,
+        color="#003366",
+        label=rf"Signal window $[{BU_CORR_MIN:.0f},{BU_CORR_MAX:.0f}]\,\mathrm{{MeV}}/c^2$",
+    )
+    ax.set_xlabel(r"$m_{\rm corr}(\bar{\Lambda}pK^+K^-)$ [MeV/$c^2$]")
+    ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
+    ax.legend(fontsize=10, frameon=False, loc="upper left")
+
+    lcat = "LL" if cat == "LL" else "DD"
+    ax.text(
+        0.97,
+        0.97,
+        rf"$\Lambda_{{\rm {lcat}}}$",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=11,
+    )
+
+    out = figs_path(cat, "backgrounds", "ks0_veto_bcorr_before_after.pdf")
     save_fig(fig, out)
     log.info(f"  Saved: {out}")
 
@@ -449,13 +523,16 @@ def _load_data_bu_corr(cat: str, bu_min: float = 4900.0, bu_max: float = 5500.0)
             try:
                 t = uproot.open(p)[tree_name]
                 avail = [b for b in need if b in t.keys()]
-                ev = t.arrays(avail, library="np")
-                n = len(ev["L0_MM"])
-                mask = _trigger_mask(ev, n)
-                mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
-                bcorr = _bu_corrected_mass(ev)
-                mask &= (bcorr > bu_min) & (bcorr < bu_max)
-                arrs.append(bcorr[mask])
+                for ev in t.iterate(avail, library="np", step_size="100 MB"):
+                    n = len(ev["L0_MM"])
+                    mask = _trigger_mask(ev, n)
+                    mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
+                    if not np.any(mask):
+                        continue
+                    bcorr = _bu_corrected_mass(ev)
+                    mask &= (bcorr > bu_min) & (bcorr < bu_max)
+                    if np.any(mask):
+                        arrs.append(bcorr[mask])
             except Exception as e:
                 log.warning(f"  Skip {p} [{cat}]: {e}")
     return np.concatenate(arrs) if arrs else np.array([])
@@ -506,27 +583,29 @@ def plot_partial_reco(cat: str) -> None:
 
     ax.set_xlabel(r"$m_{\rm corr}(\bar{\Lambda}pK^+K^-)$ [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
-    ax.legend(fontsize=11, frameon=False)
+    ax.legend(fontsize=11, frameon=False, loc="upper left")
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
-        0.97,
+        0.12,
         0.97,
         rf"$\Lambda_{{\rm {lcat}}}$",
         transform=ax.transAxes,
-        ha="right",
+        ha="left",
         va="top",
         fontsize=11,
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.8),
     )
 
-    # Annotate the below-signal region
+    y_max = ax.get_ylim()[1]
     ax.annotate(
-        "Partially reconstructed\n(below signal window)",
-        xy=(5150, ax.get_ylim()[1] * 0.85),
+        "Partial-reco tail",
+        xy=(5150, y_max * 0.42),
+        xytext=(5000, y_max * 0.78),
         fontsize=11,
-        ha="center",
+        ha="left",
         color="dimgray",
-        arrowprops=dict(arrowstyle="->", color="dimgray"),
-        xytext=(5150, ax.get_ylim()[1] * 0.85),
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.8),
+        arrowprops=dict(arrowstyle="->", color="dimgray", lw=1.2),
     )
 
     out = figs_path(cat, "backgrounds", "partial_reco.pdf")
@@ -544,6 +623,7 @@ def main() -> None:
         log.info(f"\n=== Lambda{cat} ===")
         log.info("--- K_S^0 contamination study ---")
         plot_ks0_veto(cat)
+        plot_ks0_veto_before_after(cat)
         log.info("--- Non-resonant shape ---")
         plot_nonresonant_shape(cat)
         log.info("--- Partially reconstructed background ---")
