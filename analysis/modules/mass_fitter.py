@@ -7,6 +7,7 @@ MODIFIED: plot_fit_result method updated to match official LHCb publication styl
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -348,12 +349,109 @@ class MassFitter:
 
         return total_pdf, year_yields
 
+    @staticmethod
+    def _iter_roorealvars(argset: Any):
+        """Yield RooRealVar-like objects from a RooArgSet."""
+        for obj in argset:
+            if obj.InheritsFrom("RooRealVar"):
+                yield obj
+
+    def _snapshot_parameters(self, argset: Any) -> dict[str, dict[str, Any]]:
+        """Capture current parameter values and const-ness for later restoration."""
+        snapshot = {}
+        for var in self._iter_roorealvars(argset):
+            snapshot[var.GetName()] = {
+                "var": var,
+                "value": float(var.getVal()),
+                "constant": bool(var.isConstant()),
+            }
+        return snapshot
+
+    @staticmethod
+    def _restore_parameters(snapshot: dict[str, dict[str, Any]]) -> None:
+        """Restore a previously captured parameter snapshot."""
+        for entry in snapshot.values():
+            entry["var"].setVal(entry["value"])
+            entry["var"].setConstant(entry["constant"])
+
+    def _compute_profile_significances(
+        self,
+        dataset_name: str,
+        dataset: Any,
+        model: Any,
+        yields: dict[str, Any],
+        fit_result: Any,
+        states: tuple[str, ...],
+    ) -> dict[str, dict[str, float | int]]:
+        """
+        Compute one-sided profile-likelihood significances for selected states.
+
+        For each target state X, the null hypothesis is N_X = 0 with all other
+        nuisance parameters profiled. The test statistic is
+        q0 = 2 * (NLL_null - NLL_best), and Z = sqrt(q0).
+        """
+        best_nll = float(fit_result.minNll())
+        best_status = int(fit_result.status())
+        params = model.getParameters(dataset)
+        snapshot = self._snapshot_parameters(params)
+        results: dict[str, dict[str, float | int]] = {}
+
+        for state in states:
+            yield_var = yields.get(state)
+            if yield_var is None:
+                continue
+
+            # Start each state from the nominal best-fit point.
+            self._restore_parameters(snapshot)
+            best_fit_yield = float(yield_var.getVal())
+            best_fit_error = float(yield_var.getError())
+
+            yield_var.setVal(0.0)
+            yield_var.setConstant(True)
+
+            null_result = model.fitTo(
+                dataset,
+                ROOT.RooFit.Save(),  # type: ignore
+                ROOT.RooFit.Extended(True),  # type: ignore
+                ROOT.RooFit.PrintLevel(-1),  # type: ignore
+                ROOT.RooFit.NumCPU(4),  # type: ignore
+                ROOT.RooFit.Strategy(2),  # type: ignore
+            )
+
+            null_nll = float(null_result.minNll())
+            null_status = int(null_result.status())
+            q0 = max(0.0, 2.0 * (null_nll - best_nll))
+            z_value = math.sqrt(q0)
+
+            results[state] = {
+                "best_fit_yield": best_fit_yield,
+                "best_fit_error": best_fit_error,
+                "best_nll": best_nll,
+                "best_status": best_status,
+                "null_nll": null_nll,
+                "null_status": null_status,
+                "q0": q0,
+                "z": z_value,
+            }
+
+            if null_status != 0:
+                print(
+                    f"  WARNING: Null-hypothesis fit for {state} in {dataset_name} "
+                    f"returned status={null_status}"
+                )
+
+        # Leave the caller with the nominal best-fit parameters restored.
+        self._restore_parameters(snapshot)
+        return results
+
     def perform_fit(
         self,
         data_by_year: dict[str, ak.Array],
         fit_combined: bool = True,
         plot_dir: "Path | None" = None,
         fit_label: str = "",
+        profile_significance_states: tuple[str, ...] | None = None,
+        profile_significance_datasets: set[str] | None = None,
     ) -> dict[str, Any]:
         """
         Perform mass fits to all years (per-year AND combined).
@@ -383,6 +481,7 @@ class MassFitter:
 
         all_yields = {}
         all_fit_results = {}
+        all_profile_significances = {}
 
         print("\n" + "=" * 80)
         print("MASS FITTING WITH ROOFIT - ALL 5 CHARMONIUM STATES")
@@ -520,6 +619,20 @@ class MassFitter:
                 all_yields[dataset_name] = dataset_yields
                 all_fit_results[dataset_name] = fit_result
 
+                should_compute_profile = bool(profile_significance_states) and (
+                    profile_significance_datasets is None
+                    or dataset_name in profile_significance_datasets
+                )
+                if should_compute_profile:
+                    all_profile_significances[dataset_name] = self._compute_profile_significances(
+                        dataset_name=dataset_name,
+                        dataset=dataset,
+                        model=model,
+                        yields=yields,
+                        fit_result=fit_result,
+                        states=tuple(profile_significance_states or ()),
+                    )
+
                 # Plot results only when a target directory is explicitly provided
                 if plot_dir is not None:
                     self.plot_fit_result(
@@ -567,6 +680,7 @@ class MassFitter:
             "widths": widths_result,
             "resolution": (res_val, res_err),
             "fit_results": all_fit_results,
+            "profile_significances": all_profile_significances,
         }
 
     def plot_fit_result(

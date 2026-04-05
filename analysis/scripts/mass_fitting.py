@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 from pathlib import Path
@@ -65,6 +66,8 @@ fit_result = fitter.perform_fit(
     fit_combined=True,
     plot_dir=out_path,
     fit_label=f"{branch} / {category}",
+    profile_significance_states=("chic0", "chic1"),
+    profile_significance_datasets={"combined"},
 )
 
 import pandas as pd
@@ -89,7 +92,12 @@ df_yields = pd.DataFrame(rows)
 Path(yields_file).parent.mkdir(parents=True, exist_ok=True)
 df_yields.to_csv(yields_file, index=False)
 
+profile_sig_file = Path(yields_file).with_name("profile_significances.json")
+with open(profile_sig_file, "w") as f:
+    json.dump(fit_result.get("profile_significances", {}), f, indent=2, sort_keys=True)
+
 logger.info(
     f"Mass fitting complete for branch={branch}, category={category}. "
     f"Yields saved to {yields_file}"
 )
+logger.info(f"Profile-likelihood significances saved to {profile_sig_file}")

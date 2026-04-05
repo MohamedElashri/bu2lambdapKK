@@ -10,6 +10,7 @@
 #
 # Scripts in this directory (pure visualization, no study logic):
 #   plot_preselection.py     §3 — preselection cut distributions
+#   plot_bdt_variables.py    §3 — post-BDT data/MC validation plots
 #   plot_pid.py              §3 — PID variable comparisons
 #   plot_normchannel.py      §3/§5 — J/ψ normalization channel
 #   plot_mcfits.py           §5 — signal MC mass fits
@@ -41,6 +42,10 @@ rule all:
         expand(f"{FIGS}/Lambda{{cat}}/Preselections/Bu_M_after_preselection.pdf", cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/L0_M_after_preselection.pdf",            cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/logIPCHI2run2_Sig.pdf",                  cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_DTFchi2_Sig.pdf",      cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_FDCHI2_Sig.pdf",       cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_IPCHI2_Sig.pdf",       cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_PT_Sig.pdf",           cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/pidcmp.pdf",                             cat=CATS),
         # §5 signal MC + data fits
         expand(f"{FIGS}/Lambda{{cat}}/fit/fit_To{{state}}_Run2MDU_MC.pdf",
@@ -57,6 +62,15 @@ rule preselection:
         expand(f"{FIGS}/Lambda{{cat}}/logIPCHI2run2_Sig.pdf",                     cat=CATS),
     shell:
         "uv run python studies/ana_note_plots/scripts/plot_preselection.py"
+
+rule bdt_variables:
+    output:
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_DTFchi2_Sig.pdf", cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_FDCHI2_Sig.pdf",  cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_IPCHI2_Sig.pdf",  cat=CATS),
+        expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_PT_Sig.pdf",      cat=CATS),
+    shell:
+        "../.venv/bin/python studies/ana_note_plots/scripts/plot_bdt_variables.py"
 
 rule pid:
     output:
