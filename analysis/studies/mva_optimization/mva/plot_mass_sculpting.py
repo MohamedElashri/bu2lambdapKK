@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -9,8 +10,30 @@ from config_loader import StudyConfig
 from data_preparation import load_and_prepare_data
 
 
-def generate_mass_sculpting_plot(category="LL", cut_threshold=0.44):
-    print(f"Generating Mass Sculpting Plot for {category} with cut {cut_threshold}")
+def _load_pipeline_threshold(category: str, branch: str) -> float:
+    """Read the deployed threshold from the main pipeline output."""
+    cuts_path = (
+        Path(__file__).resolve().parents[3]
+        / "analysis_output"
+        / "mva"
+        / branch
+        / category
+        / "models"
+        / "optimized_cuts.json"
+    )
+    with open(cuts_path, "r") as f:
+        cuts = json.load(f)
+    key = "mva_threshold_high" if branch == "high_yield" else "mva_threshold_low"
+    return float(cuts[key])
+
+
+def generate_mass_sculpting_plot(category="LL", branch="high_yield", cut_threshold=None):
+    if cut_threshold is None:
+        cut_threshold = _load_pipeline_threshold(category, branch)
+    print(
+        f"Generating Mass Sculpting Plot for {category} using branch={branch} "
+        f"with cut {cut_threshold:.2f}"
+    )
 
     # 1. Load config and data
     config_path = Path("mva_config.toml")
@@ -86,12 +109,15 @@ def generate_mass_sculpting_plot(category="LL", cut_threshold=0.44):
         color="dodgerblue",
         alpha=0.5,
         density=True,
-        label=f"After MVA > {cut_threshold} (Normalized)",
+        label=f"After MVA > {cut_threshold:.2f} (Normalized)",
     )
 
     plt.axvspan(5255, 5305, color="gray", alpha=0.2, label="B+ Signal Window (Blinded)")
 
-    plt.title(f"$B^+$ Mass Combinatorial Sidebands - Sculpting Check ({category})")
+    plt.title(
+        f"$B^+$ Mass Combinatorial Sidebands - Sculpting Check "
+        f"({category}, {branch.replace('_', ' ')})"
+    )
     plt.xlabel("$M(B^+)$ corrected [MeV/$c^2$]")
     plt.ylabel("Normalized Events")
     plt.legend(loc="best", fontsize=12)
@@ -107,4 +133,4 @@ def generate_mass_sculpting_plot(category="LL", cut_threshold=0.44):
 
 
 if __name__ == "__main__":
-    generate_mass_sculpting_plot("LL", 0.44)
+    generate_mass_sculpting_plot("LL", branch="high_yield")
