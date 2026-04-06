@@ -539,7 +539,7 @@ def make_mass_fit_figure(
         ax,
         mass_points,
         background_curve,
-        label="Background",
+        label="BKG",
         color=background_color,
         linestyle="--",
     )

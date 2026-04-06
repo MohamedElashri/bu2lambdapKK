@@ -65,7 +65,7 @@ fit_result = fitter.perform_fit(
     data_dict,
     fit_combined=True,
     plot_dir=out_path,
-    fit_label=f"{branch} / {category}",
+    fit_label=f"Lambda {category}",
     profile_significance_states=("chic0", "chic1"),
     profile_significance_datasets={"combined"},
 )

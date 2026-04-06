@@ -495,10 +495,11 @@ def _two_panel_cmp(
     )
 
     ax.yaxis.set_major_formatter(_fmt)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("Normalized")
-    ax.set_title(rf"$\Lambda_{{{cat}}}$ sample")
-    ax.legend(frameon=False, fontsize=11)
+    ax.set_xlabel(xlabel, fontsize=18)
+    ax.set_ylabel("Normalized", fontsize=18)
+    ax.set_title(rf"$\Lambda_{{{cat}}}$ sample", fontsize=18)
+    ax.tick_params(axis="both", which="major", labelsize=15)
+    ax.legend(frameon=False, fontsize=15)
     if log_y:
         ax.set_yscale("log")
 

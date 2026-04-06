@@ -110,7 +110,7 @@ fit_result = fitter.perform_fit(
     data_combined,
     fit_combined=True,
     plot_dir=plot_dir,
-    fit_label=f"{branch} / LL+DD combined",
+    fit_label="Lambda LL+DD",
 )
 
 # ---------------------------------------------------------------------------
