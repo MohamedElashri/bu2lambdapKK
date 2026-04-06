@@ -13,11 +13,12 @@ Produces three sets of plots documenting the actual background studies:
    B+ corrected mass signal window [5255, 5305] MeV.  Demonstrates the smooth
    phase-space shape absorbed by the ARGUS background.
 
-3. Partially reconstructed background (plot_partial_reco):
-   Show the B+ corrected mass for real data in a wide window [4900, 5500] MeV.
-   The smooth tail below the signal window [5255, 5305] MeV visualises where
-   partially reconstructed events accumulate and confirms the signal window
-   efficiently isolates the B+ peak.
+3. Partial-reconstruction study (plot_partial_reco):
+   Fit the wide B+ corrected-mass spectrum after the deployed high-yield MVA,
+   but before the nominal B+ mass window, using a narrow B+ peak, an ARGUS-like
+   low-mass partial-reco component, and a smooth combinatorial term.  This gives
+   a data-driven estimate of how much low-mass background leaks into the nominal
+   signal window.
 
 Outputs (per category LL/DD):
    figs/LambdaLL/backgrounds/ks0_veto.pdf
@@ -37,13 +38,18 @@ Run from analysis/ directory:
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import uproot
+from catboost import CatBoostClassifier
+from scipy.optimize import curve_fit
+from scipy.stats import norm
 
 STUDY_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(STUDY_DIR.parents[1]))  # analysis/ for modules.*
@@ -62,8 +68,12 @@ M_KS0_PDG = 497.611  # MeV/c²  (for labelling only)
 KS0_VETO_HALF_WIDTH = 20.0  # MeV/c²
 BU_CORR_MIN = 5255.0  # MeV/c²  B+ signal window
 BU_CORR_MAX = 5305.0
+BU_PDG = 5279.34
 LAMBDA_MIN = 1108.0  # MeV/c²  offline Λ mass window
 LAMBDA_MAX = 1126.0
+PARTIAL_RECO_FIT_MIN = 5100.0
+PARTIAL_RECO_FIT_MAX = 5450.0
+PARTIAL_RECO_WINDOW_SUMMARY = (BU_CORR_MIN, BU_CORR_MAX)
 
 # ── File paths ────────────────────────────────────────────────────────────────
 DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
@@ -236,7 +246,7 @@ def plot_ks0_veto(cat: str) -> None:
         color="black",
         markersize=4,
         elinewidth=1.5,
-        label=r"Data ($\Lambda^0 \to p\pi^-$ candidates, $p \to \pi$ mass hypothesis)",
+        label="Data",
     )
 
     # Mark K_S^0 mass
@@ -245,19 +255,28 @@ def plot_ks0_veto(cat: str) -> None:
         color="red",
         linestyle="--",
         linewidth=1.5,
-        label=r"$K_S^0$ mass ($497.6\,\mathrm{MeV}/c^2$)",
+        label=r"$K_S^0$ mass",
     )
     ax.axvspan(
         M_KS0_PDG - KS0_VETO_HALF_WIDTH,
         M_KS0_PDG + KS0_VETO_HALF_WIDTH,
         color="red",
         alpha=0.08,
-        label=rf"Veto window ($\pm {KS0_VETO_HALF_WIDTH:.0f}$ MeV/$c^2$)",
+        label="Veto window",
     )
 
     ax.set_xlabel(r"$m(\pi^+\pi^-)$ under $p\to\pi$ hypothesis [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
-    ax.legend(fontsize=11, frameon=False)
+    ax.legend(
+        fontsize=10.5,
+        frameon=False,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.03),
+        ncol=3,
+        columnspacing=1.2,
+        handletextpad=0.5,
+        borderaxespad=0.2,
+    )
 
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
@@ -315,7 +334,16 @@ def plot_ks0_veto_before_after(cat: str) -> None:
     )
     ax.set_xlabel(r"$m_{\rm corr}(\bar{\Lambda}pK^+K^-)$ [MeV/$c^2$]")
     ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
-    ax.legend(fontsize=10, frameon=False, loc="upper left")
+    ax.legend(
+        fontsize=9.5,
+        frameon=False,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.01),
+        ncol=2,
+        columnspacing=1.0,
+        handletextpad=0.5,
+        borderaxespad=0.2,
+    )
 
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
@@ -497,120 +525,481 @@ def plot_nonresonant_shape(cat: str) -> None:
 # ════════════════════════════════════════════════════════════════════════════════
 
 
-def _load_data_bu_corr(cat: str, bu_min: float = 4900.0, bu_max: float = 5500.0) -> np.ndarray:
+def _flatten_numeric(arr: np.ndarray) -> np.ndarray:
+    """Return a flat float array, taking the first entry for jagged/object branches."""
+    arr = np.asarray(arr)
+    if arr.dtype != object:
+        return arr.astype(float, copy=False)
+    return np.array(
+        [float(x[0]) if hasattr(x, "__len__") and len(x) > 0 else float(x) for x in arr],
+        dtype=float,
+    )
+
+
+def _load_mva_working_point(cat: str) -> tuple[CatBoostClassifier, float, list[str]]:
+    """Load the deployed high-yield CatBoost model and threshold for one category."""
+    model_dir = STUDY_DIR.parents[1] / "analysis_output" / "mva" / "high_yield" / cat / "models"
+    model = CatBoostClassifier()
+    model.load_model(str(model_dir / "mva_model.cbm"))
+    with open(model_dir / "optimized_cuts.json", "r") as f:
+        cfg = json.load(f)
+    return model, float(cfg["mva_threshold_high"]), list(cfg["features"])
+
+
+def _deduplicate_candidates(
+    masses: np.ndarray, run_numbers: np.ndarray | None, event_numbers: np.ndarray | None
+) -> np.ndarray:
+    """Mirror the pipeline multiple-candidate handling with a deterministic choice."""
+    if run_numbers is None or event_numbers is None or len(masses) == 0:
+        return masses
+    keys = run_numbers.astype(np.int64) * (10**10) + event_numbers.astype(np.int64)
+    _, first_idx = np.unique(keys, return_index=True)
+    return masses[np.sort(first_idx)]
+
+
+def _load_post_mva_bcorr(cat: str) -> np.ndarray:
     """
-    Load B+ corrected mass from data in a wide window [bu_min, bu_max] MeV,
-    after trigger + Λ mass window.  Includes both below-signal and signal regions.
+    Load the wide B+ corrected-mass spectrum after the deployed high-yield MVA.
+
+    This mirrors the current real-data pipeline up to the MVA threshold, but
+    deliberately does not impose the nominal B+ mass window so the low-mass
+    partial-reconstruction component can be studied directly.
     """
-    need = [
-        "Bu_DTFL0_M",
+    model, threshold, features = _load_mva_working_point(cat)
+    tree_name = KPKM_TREE[cat]
+    delta_z_cut = 20.0 if cat == "LL" else 5.0
+
+    branches = [
+        "Bu_MM",
         "L0_MM",
-        "Bu_L0Global_TIS",
-        "Bu_L0HadronDecision_TOS",
+        "L0_ENDVERTEX_Z",
+        "Bu_ENDVERTEX_Z",
+        "Bu_FDCHI2_OWNPV",
+        "Bu_IPCHI2_OWNPV",
+        "Bu_PT",
+        "L0_FDCHI2_OWNPV",
+        "Lp_MC15TuneV1_ProbNNp",
+        "p_MC15TuneV1_ProbNNp",
+        "h1_MC15TuneV1_ProbNNk",
+        "h2_MC15TuneV1_ProbNNk",
+        "Bu_DTF_chi2",
+        "Bu_DTF_CHI2",
+        "runNumber",
+        "eventNumber",
+        "Bu_L0GlobalDecision_TIS",
+        "Bu_L0PhysDecision_TIS",
+        "Bu_L0HadronDecision_TIS",
+        "Bu_L0MuonDecision_TIS",
+        "Bu_L0MuonHighDecision_TIS",
+        "Bu_L0DiMuonDecision_TIS",
+        "Bu_L0PhotonDecision_TIS",
+        "Bu_L0ElectronDecision_TIS",
         "Bu_Hlt1TrackMVADecision_TOS",
         "Bu_Hlt1TwoTrackMVADecision_TOS",
         "Bu_Hlt2Topo2BodyDecision_TOS",
         "Bu_Hlt2Topo3BodyDecision_TOS",
         "Bu_Hlt2Topo4BodyDecision_TOS",
     ]
-    tree_name = TREE_NAMES[cat]
-    arrs = []
+
+    l0_candidates = [
+        "Bu_L0GlobalDecision_TIS",
+        "Bu_L0PhysDecision_TIS",
+        "Bu_L0HadronDecision_TIS",
+        "Bu_L0MuonDecision_TIS",
+        "Bu_L0MuonHighDecision_TIS",
+        "Bu_L0DiMuonDecision_TIS",
+        "Bu_L0PhotonDecision_TIS",
+        "Bu_L0ElectronDecision_TIS",
+    ]
+    hlt1_candidates = ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"]
+    hlt2_candidates = [
+        "Bu_Hlt2Topo2BodyDecision_TOS",
+        "Bu_Hlt2Topo3BodyDecision_TOS",
+        "Bu_Hlt2Topo4BodyDecision_TOS",
+    ]
+
+    mass_chunks: list[np.ndarray] = []
+    run_chunks: list[np.ndarray] = []
+    event_chunks: list[np.ndarray] = []
+
     for yr in YEARS:
         for mag in MAGNETS:
-            p = DATA_BASE / f"dataBu2L0barPHH_{yr}{mag}.root"
-            if not p.exists():
+            path = DATA_BASE / f"dataBu2L0barPHH_{yr}{mag}.root"
+            if not path.exists():
                 continue
+
             try:
-                t = uproot.open(p)[tree_name]
-                avail = [b for b in need if b in t.keys()]
-                for ev in t.iterate(avail, library="np", step_size="100 MB"):
-                    n = len(ev["L0_MM"])
-                    mask = _trigger_mask(ev, n)
-                    mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
+                tree = uproot.open(path)[tree_name]
+                avail = [b for b in branches if b in tree.keys()]
+                dtf_branch = "Bu_DTF_chi2" if "Bu_DTF_chi2" in avail else "Bu_DTF_CHI2"
+                l0_keys = [b for b in l0_candidates if b in avail]
+                hlt1_keys = [b for b in hlt1_candidates if b in avail]
+                hlt2_keys = [b for b in hlt2_candidates if b in avail]
+
+                for chunk in tree.iterate(avail, library="np", step_size="100 MB"):
+                    n = len(chunk["Bu_MM"])
+                    mask_l0 = np.zeros(n, dtype=bool)
+                    for key in l0_keys:
+                        mask_l0 |= np.asarray(chunk[key]) > 0
+                    if not l0_keys:
+                        mask_l0[:] = True
+
+                    mask_hlt1 = np.zeros(n, dtype=bool)
+                    for key in hlt1_keys:
+                        mask_hlt1 |= np.asarray(chunk[key]) > 0
+                    if not hlt1_keys:
+                        mask_hlt1[:] = True
+
+                    mask_hlt2 = np.zeros(n, dtype=bool)
+                    for key in hlt2_keys:
+                        mask_hlt2 |= np.asarray(chunk[key]) > 0
+                    if not hlt2_keys:
+                        mask_hlt2[:] = True
+
+                    delta_z = np.abs(
+                        np.asarray(chunk["L0_ENDVERTEX_Z"]) - np.asarray(chunk["Bu_ENDVERTEX_Z"])
+                    )
+                    prod_prob_kk = np.asarray(chunk["h1_MC15TuneV1_ProbNNk"]) * np.asarray(
+                        chunk["h2_MC15TuneV1_ProbNNk"]
+                    )
+                    pid_product = np.asarray(chunk["p_MC15TuneV1_ProbNNp"]) * prod_prob_kk
+
+                    mask = mask_l0 & mask_hlt1 & mask_hlt2
+                    mask &= np.asarray(chunk["Bu_FDCHI2_OWNPV"]) > 175.0
+                    mask &= np.asarray(chunk["Bu_IPCHI2_OWNPV"]) < 10.0
+                    mask &= delta_z > 2.5
+                    mask &= np.asarray(chunk["Lp_MC15TuneV1_ProbNNp"]) > 0.05
+                    mask &= np.asarray(chunk["p_MC15TuneV1_ProbNNp"]) > 0.05
+                    mask &= prod_prob_kk > 0.05
+                    mask &= np.asarray(chunk["Bu_PT"]) > 3000.0
+
+                    mask &= np.asarray(chunk["L0_MM"]) > 1111.0
+                    mask &= np.asarray(chunk["L0_MM"]) < 1121.0
+                    mask &= np.asarray(chunk["L0_FDCHI2_OWNPV"]) > 50.0
+                    mask &= delta_z > delta_z_cut
+                    mask &= np.asarray(chunk["Lp_MC15TuneV1_ProbNNp"]) > 0.30
+                    mask &= pid_product > 0.20
+
                     if not np.any(mask):
                         continue
-                    bcorr = _bu_corrected_mass(ev)
-                    mask &= (bcorr > bu_min) & (bcorr < bu_max)
-                    if np.any(mask):
-                        arrs.append(bcorr[mask])
-            except Exception as e:
-                log.warning(f"  Skip {p} [{cat}]: {e}")
-    return np.concatenate(arrs) if arrs else np.array([])
+
+                    feature_data: dict[str, np.ndarray] = {}
+                    for feat in features:
+                        if feat == "Bu_DTF_chi2":
+                            feature_data[feat] = _flatten_numeric(chunk[dtf_branch])[mask]
+                        else:
+                            feature_data[feat] = np.asarray(chunk[feat])[mask]
+
+                    scores = model.predict_proba(pd.DataFrame(feature_data)[features])[:, 1]
+                    keep_idx = np.flatnonzero(mask)[scores > threshold]
+                    if len(keep_idx) == 0:
+                        continue
+
+                    bu_corr = np.asarray(chunk["Bu_MM"]) - np.asarray(chunk["L0_MM"]) + M_LAMBDA_PDG
+                    mass_chunks.append(bu_corr[keep_idx])
+
+                    if "runNumber" in chunk and "eventNumber" in chunk:
+                        run_chunks.append(np.asarray(chunk["runNumber"])[keep_idx])
+                        event_chunks.append(np.asarray(chunk["eventNumber"])[keep_idx])
+            except Exception as exc:
+                log.warning(f"  Skip {path} [{cat}]: {exc}")
+
+    if not mass_chunks:
+        return np.array([])
+
+    masses = np.concatenate(mass_chunks)
+    runs = np.concatenate(run_chunks) if run_chunks else None
+    events = np.concatenate(event_chunks) if event_chunks else None
+    return _deduplicate_candidates(masses, runs, events)
+
+
+def _argus_raw(x: np.ndarray, shape: float, endpoint: float = BU_PDG) -> np.ndarray:
+    """ARGUS-like threshold shape for low-mass partially reconstructed backgrounds."""
+    x = np.asarray(x, dtype=float)
+    term = 1.0 - (x / endpoint) ** 2
+    vals = np.zeros_like(x)
+    mask = term > 0.0
+    vals[mask] = x[mask] * np.sqrt(term[mask]) * np.exp(shape * term[mask])
+    return vals
+
+
+def _partial_reco_model(
+    x: np.ndarray,
+    n_sig: float,
+    mu: float,
+    sigma: float,
+    n_part: float,
+    shape_part: float,
+    n_comb: float,
+    slope_comb: float,
+) -> np.ndarray:
+    """Signal Gaussian + ARGUS-like partial-reco + exponential combinatorial density."""
+    x = np.asarray(x, dtype=float)
+
+    sig = n_sig * norm.pdf(x, mu, sigma)
+
+    part_grid = np.linspace(PARTIAL_RECO_FIT_MIN, min(PARTIAL_RECO_FIT_MAX, BU_PDG), 2000)
+    part_norm = np.trapezoid(_argus_raw(part_grid, shape_part), part_grid)
+    part = n_part * _argus_raw(x, shape_part) / max(part_norm, 1e-12)
+
+    slope = max(float(slope_comb), 1e-8)
+    exp_norm = 1.0 - np.exp(-slope * (PARTIAL_RECO_FIT_MAX - PARTIAL_RECO_FIT_MIN))
+    comb = n_comb * slope * np.exp(-slope * (x - PARTIAL_RECO_FIT_MIN)) / exp_norm
+
+    return sig + part + comb
+
+
+def _fit_partial_reco_components(mass: np.ndarray) -> dict[str, float | np.ndarray]:
+    """Fit the wide post-MVA corrected-mass spectrum and summarise window leakage."""
+    mass = np.asarray(mass)
+    fit_mass = mass[(mass > PARTIAL_RECO_FIT_MIN) & (mass < PARTIAL_RECO_FIT_MAX)]
+    if len(fit_mass) == 0:
+        raise RuntimeError("No events in the partial-reco fit range")
+
+    bins = np.linspace(PARTIAL_RECO_FIT_MIN, PARTIAL_RECO_FIT_MAX, 71)  # 5 MeV/bin
+    counts, edges = np.histogram(fit_mass, bins=bins)
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    bin_width = edges[1] - edges[0]
+    errors = np.sqrt(np.maximum(counts, 1.0))
+
+    n_sig0 = max(np.count_nonzero((fit_mass > BU_CORR_MIN) & (fit_mass < BU_CORR_MAX)) * 0.65, 50.0)
+    n_part0 = max(
+        np.count_nonzero((fit_mass > PARTIAL_RECO_FIT_MIN) & (fit_mass < BU_CORR_MIN)) * 0.60, 50.0
+    )
+    n_comb0 = max(
+        np.count_nonzero((fit_mass > BU_CORR_MAX) & (fit_mass < PARTIAL_RECO_FIT_MAX)) * 0.80, 50.0
+    )
+
+    popt, pcov = curve_fit(
+        lambda x, *p: _partial_reco_model(x, *p) * bin_width,
+        centres,
+        counts,
+        p0=[n_sig0, BU_PDG, 11.0, n_part0, -18.0, n_comb0, 0.012],
+        sigma=errors,
+        absolute_sigma=True,
+        bounds=(
+            [0.0, 5270.0, 6.0, 0.0, -80.0, 0.0, 1e-5],
+            [
+                5.0 * len(fit_mass),
+                5288.0,
+                22.0,
+                5.0 * len(fit_mass),
+                25.0,
+                5.0 * len(fit_mass),
+                0.08,
+            ],
+        ),
+        maxfev=20000,
+    )
+    perr = np.sqrt(np.diag(pcov))
+
+    grid = np.linspace(PARTIAL_RECO_FIT_MIN, PARTIAL_RECO_FIT_MAX, 3000)
+    total = _partial_reco_model(grid, *popt)
+    signal = popt[0] * norm.pdf(grid, popt[1], popt[2])
+    part_grid = np.linspace(PARTIAL_RECO_FIT_MIN, min(PARTIAL_RECO_FIT_MAX, BU_PDG), 2000)
+    part_norm = np.trapezoid(_argus_raw(part_grid, popt[4]), part_grid)
+    partial = popt[3] * _argus_raw(grid, popt[4]) / max(part_norm, 1e-12)
+    slope = max(float(popt[6]), 1e-8)
+    exp_norm = 1.0 - np.exp(-slope * (PARTIAL_RECO_FIT_MAX - PARTIAL_RECO_FIT_MIN))
+    combinatorial = popt[5] * slope * np.exp(-slope * (grid - PARTIAL_RECO_FIT_MIN)) / exp_norm
+
+    wmin, wmax = PARTIAL_RECO_WINDOW_SUMMARY
+    window_mask = (grid >= wmin) & (grid <= wmax)
+    signal_win = float(np.trapezoid(signal[window_mask], grid[window_mask]))
+    partial_win = float(np.trapezoid(partial[window_mask], grid[window_mask]))
+    comb_win = float(np.trapezoid(combinatorial[window_mask], grid[window_mask]))
+    total_win = signal_win + partial_win + comb_win
+    observed_win = int(np.count_nonzero((fit_mass >= wmin) & (fit_mass <= wmax)))
+
+    expected = _partial_reco_model(centres, *popt) * bin_width
+    chi2 = float(np.sum(((counts - expected) / errors) ** 2))
+    ndf = max(len(counts) - len(popt), 1)
+
+    return {
+        "fit_mass": fit_mass,
+        "counts": counts,
+        "edges": edges,
+        "centres": centres,
+        "errors": errors,
+        "bin_width": bin_width,
+        "grid": grid,
+        "total_curve": total,
+        "signal_curve": signal,
+        "partial_curve": partial,
+        "comb_curve": combinatorial,
+        "params": popt,
+        "param_errors": perr,
+        "observed_window": observed_win,
+        "signal_window": signal_win,
+        "partial_window": partial_win,
+        "comb_window": comb_win,
+        "total_window": total_win,
+        "partial_fraction_window": partial_win / total_win if total_win > 0 else 0.0,
+        "chi2_ndf": chi2 / ndf,
+    }
 
 
 def plot_partial_reco(cat: str) -> None:
     """
-    Show the B+ corrected mass in a wide window to visualise the partially
-    reconstructed background accumulating below the signal window.
+    Data-driven post-MVA partial-reconstruction study in the wide corrected-mass spectrum.
     """
-    log.info(f"  Partially reconstructed background [{cat}]")
-    bu_min, bu_max = 4900.0, 5500.0
-    bcorr = _load_data_bu_corr(cat, bu_min, bu_max)
+    log.info(f"  Partial-reconstruction fit study [{cat}]")
+    bcorr = _load_post_mva_bcorr(cat)
     if len(bcorr) == 0:
-        log.warning(f"  No data [{cat}]")
+        log.warning(f"  No post-MVA data [{cat}]")
         return
-    log.info(f"  Events in wide B+ window: {len(bcorr)}")
+    log.info(f"  Post-MVA candidates before B+ window [{cat}]: {len(bcorr)}")
 
-    fig, ax = plt.subplots()
-    bins = np.linspace(bu_min, bu_max, 61)  # 10 MeV/bin
+    fit = _fit_partial_reco_components(bcorr)
+    log.info(
+        "  Window summary [%s]: observed=%d, signal=%.1f, partial=%.1f, combinatorial=%.1f",
+        cat,
+        fit["observed_window"],
+        fit["signal_window"],
+        fit["partial_window"],
+        fit["comb_window"],
+    )
 
-    counts, edges = np.histogram(bcorr, bins=bins)
-    centres = (edges[:-1] + edges[1:]) / 2
-    errs = np.sqrt(counts)
-    nonzero = counts > 0
+    fig, ax = plt.subplots(figsize=(8.0, 5.2), layout="constrained")
     ax.errorbar(
-        centres[nonzero],
-        counts[nonzero],
-        yerr=errs[nonzero],
+        fit["centres"],
+        fit["counts"],
+        yerr=fit["errors"],
         fmt="o",
-        color="black",
-        markersize=4,
-        elinewidth=1.5,
+        color="#333333",
+        ecolor="#333333",
+        markersize=3.0,
+        elinewidth=1.0,
+        alpha=0.85,
         label="Data",
+        zorder=5,
+    )
+    ax.plot(
+        fit["grid"],
+        fit["total_curve"] * fit["bin_width"],
+        color="#0044AA",
+        lw=2.0,
+        label="Total fit",
+    )
+    ax.plot(
+        fit["grid"],
+        fit["signal_curve"] * fit["bin_width"],
+        color="#117733",
+        lw=1.8,
+        label=r"$B^+$ peak",
+    )
+    ax.plot(
+        fit["grid"],
+        fit["partial_curve"] * fit["bin_width"],
+        color="#D35400",
+        lw=1.8,
+        linestyle="--",
+        label="Partial reco",
+    )
+    ax.plot(
+        fit["grid"],
+        fit["comb_curve"] * fit["bin_width"],
+        color="0.35",
+        lw=1.5,
+        linestyle=":",
+        label="Comb. BKG",
     )
 
-    # Shade signal window
-    ax.axvspan(
-        BU_CORR_MIN,
-        BU_CORR_MAX,
-        alpha=0.15,
-        color="#003366",
-        label=rf"Signal window $[{BU_CORR_MIN:.0f},{BU_CORR_MAX:.0f}]\,\mathrm{{MeV}}/c^2$",
-    )
-    # Mark boundary
-    ax.axvline(BU_CORR_MIN, color="#003366", linestyle="--", linewidth=1)
-    ax.axvline(BU_CORR_MAX, color="#003366", linestyle="--", linewidth=1)
-
+    ax.axvspan(BU_CORR_MIN, BU_CORR_MAX, alpha=0.10, color="#003366")
+    ax.axvline(BU_CORR_MIN, color="#003366", linestyle="--", linewidth=1.0)
+    ax.axvline(BU_CORR_MAX, color="#003366", linestyle="--", linewidth=1.0)
+    ax.set_xlim(PARTIAL_RECO_FIT_MIN, PARTIAL_RECO_FIT_MAX)
     ax.set_xlabel(r"$m_{\rm corr}(\bar{\Lambda}pK^+K^-)$ [MeV/$c^2$]")
-    ax.set_ylabel("Candidates / (10 MeV/$c^2$)")
-    ax.legend(fontsize=11, frameon=False, loc="upper left")
+    ax.set_ylabel("Candidates / (5 MeV/$c^2$)")
+
     lcat = "LL" if cat == "LL" else "DD"
     ax.text(
-        0.12,
+        0.03,
         0.97,
-        rf"$\Lambda_{{\rm {lcat}}}$",
+        rf"$\Lambda_{{\rm {lcat}}}$, high-yield MVA",
         transform=ax.transAxes,
         ha="left",
         va="top",
         fontsize=11,
-        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.8),
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.85),
     )
-
-    y_max = ax.get_ylim()[1]
-    ax.annotate(
-        "Partial-reco tail",
-        xy=(5150, y_max * 0.42),
-        xytext=(5000, y_max * 0.78),
-        fontsize=11,
+    ax.text(
+        0.03,
+        0.87,
+        "Wide spectrum before nominal $B^+$ window",
+        transform=ax.transAxes,
         ha="left",
+        va="top",
+        fontsize=9.5,
         color="dimgray",
-        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.8),
-        arrowprops=dict(arrowstyle="->", color="dimgray", lw=1.2),
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.80),
     )
+    ax.text(
+        0.97,
+        0.97,
+        "Nominal $B^+$ window",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=10.5,
+        color="#003366",
+        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.85),
+    )
+    ax.text(
+        0.97,
+        0.70,
+        (
+            f"Observed in window: {fit['observed_window']:.0f}\n"
+            f"Peak fit: {fit['signal_window']:.0f}\n"
+            f"Partial reco: {fit['partial_window']:.0f}\n"
+            f"Partial fraction: {100.0 * fit['partial_fraction_window']:.1f}%"
+        ),
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=9.5,
+        bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="0.7", alpha=0.92),
+    )
+    ax.legend(fontsize=9, frameon=False, loc="upper right", ncol=2, bbox_to_anchor=(0.98, 0.56))
 
     out = figs_path(cat, "backgrounds", "partial_reco.pdf")
     save_fig(fig, out)
     log.info(f"  Saved: {out}")
+
+    summary_path = figs_path(cat, "backgrounds", "partial_reco_summary.json")
+    summary = {
+        "category": cat,
+        "fit_range": [PARTIAL_RECO_FIT_MIN, PARTIAL_RECO_FIT_MAX],
+        "window": [BU_CORR_MIN, BU_CORR_MAX],
+        "observed_window": int(fit["observed_window"]),
+        "signal_window": float(fit["signal_window"]),
+        "partial_window": float(fit["partial_window"]),
+        "comb_window": float(fit["comb_window"]),
+        "partial_fraction_window": float(fit["partial_fraction_window"]),
+        "chi2_ndf": float(fit["chi2_ndf"]),
+        "params": {
+            "n_sig": float(fit["params"][0]),
+            "mu": float(fit["params"][1]),
+            "sigma": float(fit["params"][2]),
+            "n_part": float(fit["params"][3]),
+            "shape_part": float(fit["params"][4]),
+            "n_comb": float(fit["params"][5]),
+            "slope_comb": float(fit["params"][6]),
+        },
+        "param_errors": {
+            "n_sig": float(fit["param_errors"][0]),
+            "mu": float(fit["param_errors"][1]),
+            "sigma": float(fit["param_errors"][2]),
+            "n_part": float(fit["param_errors"][3]),
+            "shape_part": float(fit["param_errors"][4]),
+            "n_comb": float(fit["param_errors"][5]),
+            "slope_comb": float(fit["param_errors"][6]),
+        },
+    }
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    log.info(f"  Saved: {summary_path}")
 
 
 # ════════════════════════════════════════════════════════════════════════════════
