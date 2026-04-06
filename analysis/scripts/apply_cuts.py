@@ -79,6 +79,12 @@ opt_type = config.data.get("cut_application", {}).get("optimization_type", "box"
 # the opt_type stored inside it takes priority over selection.toml.
 if isinstance(optimized_cuts, dict) and optimized_cuts.get("opt_type") == "passthrough":
     opt_type = "passthrough"
+elif isinstance(optimized_cuts, list):
+    # Box optimisation outputs are stored as a list of cut rows, whereas the
+    # MVA and passthrough modes write dictionaries.  This allows the box
+    # reference workflow to coexist with a selection.toml whose nominal method
+    # is currently set to "mva".
+    opt_type = "box"
 
 data_final = {}
 mc_final = {}
