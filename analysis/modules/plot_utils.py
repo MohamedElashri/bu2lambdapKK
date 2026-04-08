@@ -99,7 +99,16 @@ def setup_style() -> None:
     """
     mpl.rcParams.update({"mathtext.fontset": "stix"})
     plt.rcParams["font.family"] = "serif"
-    plt.rcParams["font.serif"] = ["Times New Roman"]
+    # Use Times New Roman when available, but fall back to metrically similar
+    # serif fonts on systems where it is not installed.
+    plt.rcParams["font.serif"] = [
+        "Times New Roman",
+        "Liberation Serif",
+        "Nimbus Roman",
+        "STIX Two Text",
+        "STIX",
+        "DejaVu Serif",
+    ]
     plt.rcParams["font.size"] = 14
     plt.rcParams["axes.labelsize"] = 14
     plt.rcParams["xtick.labelsize"] = 12
