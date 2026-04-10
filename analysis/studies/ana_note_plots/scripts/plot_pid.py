@@ -57,11 +57,16 @@ setup_style()
 
 def _load_data_pid(path: Path, cat: str) -> dict:
     """
-    Load data PID variables for events in:
+    Load data PID variables selected by:
+      - Trigger (L0 TIS, HLT1 TOS, HLT2 TOS)
+      - Lambda mass window [1108, 1126] MeV
       - B+ corrected mass signal window [5255, 5305] MeV
-      - J/ψ mass window |m(ΛpK) − 3096.9| < 30 MeV
+      - J/ψ mass window |m(Λ̄pK⁻) − 3096.9| < 30 MeV
 
-    These events are signal-dominated — no sideband subtraction needed.
+    The charmonium mass is m(L0 + p + h2), consistent with M_LpKm_h2 in the
+    pipeline (h2 = K⁻). The B+ mass window is required: without it only ~6% of
+    J/ψ-window events are genuine B+ decays; the rest are combinatorial background
+    with random (near-zero) PID that creates a spurious peak at zero.
     """
     pid_data = [
         "p_MC15TuneV1_ProbNNp",
@@ -77,10 +82,10 @@ def _load_data_pid(path: Path, cat: str) -> dict:
         "p_PX",
         "p_PY",
         "p_PZ",
-        "h1_PE",
-        "h1_PX",
-        "h1_PY",
-        "h1_PZ",
+        "h2_PE",
+        "h2_PX",
+        "h2_PY",
+        "h2_PZ",
     ]
     trig_branches = [
         "Bu_L0GlobalDecision_TIS",
@@ -92,7 +97,7 @@ def _load_data_pid(path: Path, cat: str) -> dict:
         "Bu_Hlt2Topo3BodyDecision_TOS",
         "Bu_Hlt2Topo4BodyDecision_TOS",
     ]
-    want = pid_data + mom_branches + trig_branches + ["Bu_MM", "L0_MM", "Bu_DTFL0_M"]
+    want = pid_data + mom_branches + trig_branches + ["Bu_MM", "L0_MM"]
 
     tree = uproot.open(path)[f"B2L0barPKpKm_{cat}/DecayTree"]
     avail = [b for b in want if b in tree.keys()]
@@ -132,15 +137,15 @@ def _load_data_pid(path: Path, cat: str) -> dict:
     ev = {k: v[mask] for k, v in ev.items()}
     n = len(ev["L0_MM"])
 
-    # Charmonium mass m(ΛpK) = m(L0 + p + h1)
+    # Charmonium mass m(Λ̄pK⁻) = m(L0 + p + h2)
     mom_ok = all(k in avail for k in mom_branches)
     if not mom_ok or n == 0:
         return {}
 
-    E = ev["L0_PE"] + ev["p_PE"] + ev["h1_PE"]
-    px = ev["L0_PX"] + ev["p_PX"] + ev["h1_PX"]
-    py = ev["L0_PY"] + ev["p_PY"] + ev["h1_PY"]
-    pz = ev["L0_PZ"] + ev["p_PZ"] + ev["h1_PZ"]
+    E = ev["L0_PE"] + ev["p_PE"] + ev["h2_PE"]
+    px = ev["L0_PX"] + ev["p_PX"] + ev["h2_PX"]
+    py = ev["L0_PY"] + ev["p_PY"] + ev["h2_PY"]
+    pz = ev["L0_PZ"] + ev["p_PZ"] + ev["h2_PZ"]
     ccbar_M = np.sqrt(np.maximum(E**2 - px**2 - py**2 - pz**2, 0.0))
 
     # J/ψ mass window
@@ -175,11 +180,29 @@ def _collect_data_pid(cat: str) -> dict:
 
 
 def _load_mc_pid(path: Path, cat: str) -> dict:
-    """Load MC PID arrays after trigger + Lambda mass cuts."""
+    """Load MC PID arrays with the same selection as data:
+    trigger + Lambda mass + B+ corrected mass signal window + J/ψ window on m(L0+p+h2).
+    MC is pure J/ψ signal so the J/ψ window retains almost all events, but applying
+    it keeps the comparison apples-to-apples with the data selection.
+    """
     pid_mc = [
-        "p_MC12TuneV4_ProbNNp",
-        "h1_MC12TuneV4_ProbNNk",
-        "h2_MC12TuneV4_ProbNNk",
+        "p_MC15TuneV1_ProbNNp",
+        "h1_MC15TuneV1_ProbNNk",
+        "h2_MC15TuneV1_ProbNNk",
+    ]
+    mom_branches = [
+        "L0_PE",
+        "L0_PX",
+        "L0_PY",
+        "L0_PZ",
+        "p_PE",
+        "p_PX",
+        "p_PY",
+        "p_PZ",
+        "h2_PE",
+        "h2_PX",
+        "h2_PY",
+        "h2_PZ",
     ]
     trig = [
         "Bu_L0Global_TIS",
@@ -190,7 +213,7 @@ def _load_mc_pid(path: Path, cat: str) -> dict:
         "Bu_Hlt2Topo3BodyDecision_TOS",
         "Bu_Hlt2Topo4BodyDecision_TOS",
     ]
-    want = pid_mc + trig + ["L0_MM"]
+    want = pid_mc + mom_branches + trig + ["Bu_MM", "L0_MM"]
     tree = uproot.open(path)[f"B2L0barPKpKm_{cat}/DecayTree"]
     avail = [b for b in want if b in tree.keys()]
     ev = tree.arrays(avail, library="np")
@@ -218,6 +241,28 @@ def _load_mc_pid(path: Path, cat: str) -> dict:
     )
     mask &= (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
 
+    # B+ corrected mass signal window — same as data
+    if "Bu_MM" in ev:
+        bu_corr = ev["Bu_MM"] - ev["L0_MM"] + M_LAMBDA_PDG
+        mask &= (bu_corr >= 5255) & (bu_corr <= 5305)
+
+    # J/ψ window on m(L0 + p + h2) — consistent with data and pipeline M_LpKm_h2
+    mom_ok = all(k in avail for k in mom_branches)
+    if mom_ok:
+        ev_m = {k: v[mask] for k, v in ev.items()}
+        E = ev_m["L0_PE"] + ev_m["p_PE"] + ev_m["h2_PE"]
+        px = ev_m["L0_PX"] + ev_m["p_PX"] + ev_m["h2_PX"]
+        py = ev_m["L0_PY"] + ev_m["p_PY"] + ev_m["h2_PY"]
+        pz = ev_m["L0_PZ"] + ev_m["p_PZ"] + ev_m["h2_PZ"]
+        ccbar_M = np.sqrt(np.maximum(E**2 - px**2 - py**2 - pz**2, 0.0))
+        jpsi_mask = np.abs(ccbar_M - M_JPSI) < 30.0
+        result = {}
+        for b in pid_mc:
+            if b in avail:
+                result[b] = ev_m[b][jpsi_mask]
+        return result
+
+    # Fallback: no momentum branches — return trigger+Lambda-filtered events
     result = {}
     for b in pid_mc:
         if b in avail:
@@ -276,7 +321,9 @@ def _pid_plot(
 
     h_d_n = h_d / total_d
     h_m_n = h_m / total_m
-    err_d_n = np.sqrt(h_d + 1) / total_d
+    # Standard Poisson error: σ = √N / (N_total × bin_width).
+    # Using √(N+1) was wrong — it inflates errors by 41% for N=1 bins.
+    err_d_n = np.sqrt(h_d) / total_d
     centers = (edges[1:] + edges[:-1]) / 2
     mask = h_d > 0
 
@@ -346,9 +393,9 @@ def main():
         d_p = "p_MC15TuneV1_ProbNNp"
         d_h1 = "h1_MC15TuneV1_ProbNNk"
         d_h2 = "h2_MC15TuneV1_ProbNNk"
-        m_p = "p_MC12TuneV4_ProbNNp"
-        m_h1 = "h1_MC12TuneV4_ProbNNk"
-        m_h2 = "h2_MC12TuneV4_ProbNNk"
+        m_p = "p_MC15TuneV1_ProbNNp"
+        m_h1 = "h1_MC15TuneV1_ProbNNk"
+        m_h2 = "h2_MC15TuneV1_ProbNNk"
 
         if all(b in data for b in [d_p, d_h1, d_h2]) and all(b in mc for b in [m_p, m_h1, m_h2]):
             data_prod = data[d_p] * data[d_h1] * data[d_h2]
@@ -359,14 +406,16 @@ def main():
                 mc_prod,
                 xlabel=r"$p \cdot \mathrm{ProbNNp} \times h_1 \cdot \mathrm{ProbNNk}"
                 r"\times h_2 \cdot \mathrm{ProbNNk}$",
-                bins=BINNING["pid"]["bins"],
+                bins=10,
                 x_range=list(BINNING["pid"]["range"]),
                 log_y=False,
                 outfile="pidcmp.pdf",
             )
 
-        # Individual tracks
-        _nb = BINNING["pid"]["bins"]
+        # Individual tracks — use 10 bins (not the default 20) so that each bin
+        # has ~9 events for LL (91 events) and ~18 for DD (180 events).
+        # 20 bins gives only ~4.5 events/bin for LL → errors ≥38% in most bins.
+        _nb = 10
         _xr = list(BINNING["pid"]["range"])
         configs = [
             (d_p, m_p, r"ProbNNp (bachelor $p$)", _nb, _xr, True, "pidcmp_p.pdf"),

@@ -73,11 +73,11 @@ def load_and_preprocess(
             if ev_branch in all_branches:
                 branches_to_load.append(ev_branch)
 
-        # Add PID (different tune names for data vs MC)
-        lp_p_k = "Lp_MC12TuneV4_ProbNNp" if is_mc else "Lp_MC15TuneV1_ProbNNp"
-        p_p_k = "p_MC12TuneV4_ProbNNp" if is_mc else "p_MC15TuneV1_ProbNNp"
-        h1_k_k = "h1_MC12TuneV4_ProbNNk" if is_mc else "h1_MC15TuneV1_ProbNNk"
-        h2_k_k = "h2_MC12TuneV4_ProbNNk" if is_mc else "h2_MC15TuneV1_ProbNNk"
+        # Add PID — MC15TuneV1 used for both data and MC.
+        lp_p_k = "Lp_MC15TuneV1_ProbNNp"
+        p_p_k = "p_MC15TuneV1_ProbNNp"
+        h1_k_k = "h1_MC15TuneV1_ProbNNk"
+        h2_k_k = "h2_MC15TuneV1_ProbNNk"
 
         branches_to_load.extend([lp_p_k, p_p_k, h1_k_k, h2_k_k])
 
