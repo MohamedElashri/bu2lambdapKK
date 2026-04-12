@@ -19,8 +19,10 @@ use_binned_fit = true
 [fixed_selection]
 # Variables fixed outside the ND optimizer (validated by fit_based_optimizer study).
 # PID proxy optimization is fundamentally broken (see studies/pid_proxy_comparison).
-# PID > 0.20 is applied as a hard pre-cut; fit-based FOM confirms it improves S/sqrt(B).
-pid_product_min = 0.20
+# PID > 0.25 is applied as a hard pre-cut; fit-based FOM (MC15TuneV1, 2026-04-10 study)
+# finds optimal product cut = 0.250 for both LL and DD.  Prior value was 0.20 from
+# the fit_based_optimizer study which used MC12TuneV4 for MC (incorrect tune).
+pid_product_min = 0.25
 
 [lambda_selection]
 delta_z_min_dd = 5.0
@@ -92,7 +94,11 @@ method = "mc_based_sequential"
 no_charmonium_mass_max = 6000.0
 no_charmonium_mass_min = 4000.0
 seq_step1_vars = ["bu_dtf_chi2", "bu_fdchi2", "bu_ipchi2"]
-seq_step2_vars = ["bu_pt", "pid_product"]
+seq_step2_vars = ["bu_pt"]
+# NOTE: pid_product removed — no [nd_optimizable_selection.pid_product] section exists,
+# and proxy-based PID optimization is fundamentally broken (see studies/pid_optimization_study).
+# PID is handled either as a fixed pre-cut (pid_product_min = 0.20 above) or via the
+# fit-based optimizer in studies/pid_optimization_study/scripts/fit_based_scan.py.
 signal_scale_factor = 10000.0
 state_dependent = false
 

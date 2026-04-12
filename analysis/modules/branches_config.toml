@@ -12,24 +12,24 @@ Define aliases here to use a common name in your analysis.
 Format: common_name = {data = "data_branch", mc = "mc_branch"}
 """
 
-# PID branches - Data uses MC15TuneV1, MC uses MC12TuneV2/V3/V4
-# We prefer MC15TuneV1 for data (more recent), MC12TuneV4 for MC
+# PID branches — MC15TuneV1 used for both data and MC (Run 2 tune).
+# clean_data_loader.py hardcodes MC15TuneV1 for all files; these alias entries
+# are kept for reference but are NOT read by clean_data_loader.py.
 [aliases.pid]
-# Add other particle PID if needed
-Lp_ProbNNp = {data = "Lp_MC15TuneV1_ProbNNp", mc = "Lp_MC12TuneV4_ProbNNp"}
-Lp_ProbNNpi = {data = "Lp_MC15TuneV1_ProbNNpi", mc = "Lp_MC12TuneV4_ProbNNpi"}
-Lpi_ProbNNp = {data = "Lpi_MC15TuneV1_ProbNNp", mc = "Lpi_MC12TuneV4_ProbNNp"}
-Lpi_ProbNNpi = {data = "Lpi_MC15TuneV1_ProbNNpi", mc = "Lpi_MC12TuneV4_ProbNNpi"}
-h1_ProbNNk = {data = "h1_MC15TuneV1_ProbNNk", mc = "h1_MC12TuneV4_ProbNNk"}
-h1_ProbNNmu = {data = "h1_MC15TuneV1_ProbNNmu", mc = "h1_MC12TuneV4_ProbNNmu"}
-h1_ProbNNp = {data = "h1_MC15TuneV1_ProbNNp", mc = "h1_MC12TuneV4_ProbNNp"}
-h1_ProbNNpi = {data = "h1_MC15TuneV1_ProbNNpi", mc = "h1_MC12TuneV4_ProbNNpi"}
-h2_ProbNNk = {data = "h2_MC15TuneV1_ProbNNk", mc = "h2_MC12TuneV4_ProbNNk"}
-h2_ProbNNmu = {data = "h2_MC15TuneV1_ProbNNmu", mc = "h2_MC12TuneV4_ProbNNmu"}
-h2_ProbNNp = {data = "h2_MC15TuneV1_ProbNNp", mc = "h2_MC12TuneV4_ProbNNp"}
-h2_ProbNNpi = {data = "h2_MC15TuneV1_ProbNNpi", mc = "h2_MC12TuneV4_ProbNNpi"}
-p_ProbNNp = {data = "p_MC15TuneV1_ProbNNp", mc = "p_MC12TuneV4_ProbNNp"}
-p_ProbNNpi = {data = "p_MC15TuneV1_ProbNNpi", mc = "p_MC12TuneV4_ProbNNpi"}
+Lp_ProbNNp = {data = "Lp_MC15TuneV1_ProbNNp", mc = "Lp_MC15TuneV1_ProbNNp"}
+Lp_ProbNNpi = {data = "Lp_MC15TuneV1_ProbNNpi", mc = "Lp_MC15TuneV1_ProbNNpi"}
+Lpi_ProbNNp = {data = "Lpi_MC15TuneV1_ProbNNp", mc = "Lpi_MC15TuneV1_ProbNNp"}
+Lpi_ProbNNpi = {data = "Lpi_MC15TuneV1_ProbNNpi", mc = "Lpi_MC15TuneV1_ProbNNpi"}
+h1_ProbNNk = {data = "h1_MC15TuneV1_ProbNNk", mc = "h1_MC15TuneV1_ProbNNk"}
+h1_ProbNNmu = {data = "h1_MC15TuneV1_ProbNNmu", mc = "h1_MC15TuneV1_ProbNNmu"}
+h1_ProbNNp = {data = "h1_MC15TuneV1_ProbNNp", mc = "h1_MC15TuneV1_ProbNNp"}
+h1_ProbNNpi = {data = "h1_MC15TuneV1_ProbNNpi", mc = "h1_MC15TuneV1_ProbNNpi"}
+h2_ProbNNk = {data = "h2_MC15TuneV1_ProbNNk", mc = "h2_MC15TuneV1_ProbNNk"}
+h2_ProbNNmu = {data = "h2_MC15TuneV1_ProbNNmu", mc = "h2_MC15TuneV1_ProbNNmu"}
+h2_ProbNNp = {data = "h2_MC15TuneV1_ProbNNp", mc = "h2_MC15TuneV1_ProbNNp"}
+h2_ProbNNpi = {data = "h2_MC15TuneV1_ProbNNpi", mc = "h2_MC15TuneV1_ProbNNpi"}
+p_ProbNNp = {data = "p_MC15TuneV1_ProbNNp", mc = "p_MC15TuneV1_ProbNNp"}
+p_ProbNNpi = {data = "p_MC15TuneV1_ProbNNpi", mc = "p_MC15TuneV1_ProbNNpi"}
 
 [branches]
 # Define branch sets - we can enable/disable entire categories
