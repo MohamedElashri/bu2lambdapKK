@@ -1,6 +1,8 @@
 # Efficiency Steps Calculation
 
-This standalone study calculates the efficiency for each step in the analysis pipeline.
+This is an active study owned by the top-level analysis workflow. It calculates
+the efficiency for each step in the analysis pipeline and writes the study-level
+JSON consumed by the main pipeline's `efficiency_calculation.py`.
 
 The steps are defined as:
 
@@ -9,17 +11,35 @@ The steps are defined as:
 3. $\varepsilon_{trig}$: The trigger efficiencies are defined as the ratio of events that pass the trigger requirements to those from stripping.
 4. $\varepsilon_{presel}$: We applied some pre-selection cuts when we prepare our ntuple data so we need to assess it with respect to triggered and stripped events.
 
-The final efficiency for each mode is $\varepsilon_{total} = \varepsilon_{gen} \times \varepsilon_{reco+str} \times \varepsilon_{trig} \times \varepsilon_{presel}$. The script outputs this as a formatted markdown table separated by state and $\Lambda^0$ category (LL/DD).
+The final efficiency for each mode is
+$\varepsilon_{total} = \varepsilon_{gen} \times \varepsilon_{reco+str}
+\times \varepsilon_{trig} \times \varepsilon_{presel} \times \varepsilon_{mva}$.
+The script outputs this as JSON plus formatted markdown tables separated by
+state and $\Lambda^0$ category (LL/DD).
+
+## Role In The Active Workflow
+
+- authoritative orchestration lives in the top-level `analysis/Snakefile`
+- branch-specific outputs are written as
+  `generated/output/studies/efficiency_steps/efficiencies_<branch>.json`
+- those outputs feed the main pipeline efficiency step
 
 ## Usage
 
-Run the study using Snakemake:
+For normal workflow execution, run it from the top-level analysis workflow:
+
+```bash
+cd analysis
+make study-efficiency
+```
+
+The study-local Snakefile can still be used for isolated study work:
 
 ```bash
 cd analysis/studies/efficiency_steps
 uv run snakemake -j1
 ```
 
-The generated JSON will be written under
-`generated/output/studies/efficiency_steps/efficiencies.json`
-and printed to the standard output as Markdown tables.
+The active branch-specific JSON outputs are written under
+`generated/output/studies/efficiency_steps/`, and markdown tables are written
+next to the JSON output.

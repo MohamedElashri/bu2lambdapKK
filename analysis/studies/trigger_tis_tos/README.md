@@ -1,6 +1,8 @@
 # Trigger TIS/TOS Efficiency Study
 
-This standalone study calculates the data-driven trigger efficiency using the TIS/TOS overlap method.
+This is an active study owned by the top-level analysis workflow. It calculates
+the data-driven trigger efficiency using the TIS/TOS overlap method and writes
+the correction factors consumed by `studies/efficiency_steps/`.
 
 Because Monte Carlo does not perfectly replicate the detector's trigger response, the trigger efficiency must be corrected using real data. The method relies on the assumption that for events where the rest of the underlying event fired the trigger (TIS: Trigger Independent of Signal), the signal itself is unbiased with respect to the signal-dependent trigger (TOS: Trigger On Signal).
 
@@ -21,7 +23,14 @@ This script computes this for the normalization channel ($B^+ \to J/\psi K^+$) o
 
 ## Usage
 
-Run the study using Snakemake:
+For normal workflow execution, run it from the top-level analysis workflow:
+
+```bash
+cd analysis
+make study-trigger
+```
+
+The study-local Snakefile can still be used for isolated study work:
 
 ```bash
 cd analysis/studies/trigger_tis_tos

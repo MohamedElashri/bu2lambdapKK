@@ -143,6 +143,7 @@ Presentation scripts now follow one shared runtime contract:
   `modules/presentation_config.py` instead of embedding their own copies
 - active presentation workflows now live under `analysis/presentation/`
 - exploratory one-off studies now live under `analysis/studies/standalone/`
+- active workflow-owned studies live directly under `analysis/studies/`
 - `analysis/studies/pid_cancellation/pidcalib2/` is intentionally kept as a
   vendored study-local dependency
 
@@ -261,11 +262,20 @@ Simultaneous binned maximum-likelihood fit to M(Λ̄pK⁻) in [2800, 4000] MeV u
 
 ### Step 6: Efficiency
 
-Builds per-category efficiency tables from the standalone `studies/efficiency_steps/` output, then writes `efficiencies.csv` and `efficiency_ratios.csv` for the main pipeline. The active implementation consumes the study-level total efficiencies rather than deriving a fresh `ε_sel = N_pass / N_generated` inside this step. `η_c(2S)` currently remains a placeholder state until MC is available.
+Builds per-category efficiency tables from the active `studies/efficiency_steps/`
+study outputs, then writes `efficiencies.csv` and `efficiency_ratios.csv` for
+the main pipeline. The active implementation consumes the study-level total
+efficiencies rather than deriving a fresh `ε_sel = N_pass / N_generated` inside
+this step. Year-combined category efficiencies are luminosity-weighted across
+Run 2. `η_c(2S)` currently remains a placeholder state until MC is available.
 
 ### Steps 7–10: Branching fractions
 
-LL and DD yields summed; efficiency ratios yield-weighted. Normalization channel: B⁺ → J/ψ K⁺. Systematic uncertainties loaded from `systematics.json` after the systematic studies run. Final results exported to LaTeX.
+LL and DD yields are summed, and LL/DD efficiencies are combined from the
+category efficiencies rather than from fitted-yield weights. Normalization
+channel: B⁺ → J/ψ K⁺. Systematic uncertainties are loaded from per-branch
+`systematics.json` after the systematic studies run. Final results are then
+exported to LaTeX.
 
 ## Snakemake Configuration
 
