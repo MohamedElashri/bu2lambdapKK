@@ -1,14 +1,14 @@
-# Phase 4.1 — Fit Model Systematics
+# Selection Systematic
 #
 # This study is now integrated into the main pipeline Snakefile (analysis/Snakefile)
-# as rule `fit_systematics`.  Run from the analysis/ directory:
+# as rule `selection_systematic`.  Run from the analysis/ directory:
 #
-#   uv run snakemake fit_systematics -j4
+#   uv run snakemake selection_systematic -j4
 #
 # This standalone Snakefile is kept for reference only.
 # It still works for manual debugging:
 #
-#   cd studies/fit_systematics
+#   cd studies/selection_systematic
 #   uv run snakemake -j4
 
 import sys
@@ -16,25 +16,26 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
-BRANCHES    = ["high_yield", "low_yield"]
-CATEGORIES  = ["LL", "DD"]
-CONFIG_DIR  = "../../config"
-CACHE_DIR   = "../../analysis_output/mva/cache"
+BRANCHES   = ["high_yield", "low_yield"]
+CATEGORIES = ["LL", "DD"]
+CONFIG_DIR = "../../config"
+CACHE_DIR  = "../../analysis_output/mva/cache"
+OUTPUT_DIR = "../../analysis_output/mva"
 
 rule all:
     input:
         expand(
-            "output/fit_systematics_{branch}_{category}.json",
+            "output/selection_systematics_{branch}_{category}.json",
             branch=BRANCHES,
             category=CATEGORIES,
         )
 
-rule run_fit_systematics:
+rule run_selection_systematic:
     output:
-        "output/fit_systematics_{branch}_{category}.json"
+        "output/selection_systematics_{branch}_{category}.json"
     shell:
         """
-        uv run python run_fit_systematics.py \
+        uv run python run_selection_systematic.py \
             --branch     {wildcards.branch} \
             --category   {wildcards.category} \
             --config-dir {CONFIG_DIR} \

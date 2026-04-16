@@ -1,18 +1,18 @@
 """
-Phase 4 — Systematic Uncertainty Aggregation
+Systematic Uncertainty Aggregation
 
 Reads per-source systematic JSON files from each study and combines them in quadrature
 into a total systematic per state per branch.
 
 Sources included:
-  4.1  Fit model     : studies/fit_systematics/output/fit_systematics_{branch}_{cat}.json
-  4.2  PID bootstrap : studies/pid_cancellation/output/pid_bootstrap_systematics.json
+  Fit model     : studies/fit_systematics/output/fit_systematics_{branch}_{cat}.json
+  PID bootstrap : studies/pid_cancellation/output/pid_bootstrap_systematics.json
        (relative systematic on efficiency ratio; applied to the branching fraction ratio)
-  4.3  Tracking      : 0% (ratio measurement — see studies/tracking_systematic/)
-  4.4  Kinematic     : not a separate JSON; the spread is bounded to < 2% based on the
+  Tracking      : 0% (ratio measurement — see studies/standalone/tracking_systematic/)
+  Kinematic     : not a separate JSON; the spread is bounded to < 2% based on the
        nominal weight range and is folded into the efficiency systematic via 4.2's error.
        If --kin-syst-rel is supplied, that fraction is used instead.
-  4.5  Selection     : studies/selection_systematic/output/selection_systematics_{branch}_{cat}.json
+  Selection     : studies/selection_systematic/output/selection_systematics_{branch}_{cat}.json
 
 Output:
   {output_dir}/{branch}/tables/systematics.json
@@ -157,7 +157,7 @@ def write_summary_markdown(all_results: dict, output_path: Path):
     """Write a human-readable systematics summary table."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("# Phase 4 — Systematic Uncertainty Summary\n\n")
+        f.write("# Systematic Uncertainty Summary\n\n")
         f.write(
             "All values are absolute (in units of yield) unless labelled as relative (%).\n"
             "J/ψ is the normalization reference and does not appear in the ratio systematic.\n\n"
@@ -184,18 +184,18 @@ def write_summary_markdown(all_results: dict, output_path: Path):
             f.write("\n")
 
         f.write("## Notes\n\n")
-        f.write("- **Fit syst** (4.1): max |δN| across 5 background/resolution variations\n")
-        f.write("- **Sel syst** (4.5): max |δN| from BDT threshold ±1 step\n")
-        f.write("- **PID syst** (4.2): RMS of efficiency ratio across 100 bootstrap iterations\n")
-        f.write("- **Kin syst** (4.4): conservative bound from weight map variation\n")
-        f.write("- **Tracking** (4.3): 0% — fully cancels in ratio (same final-state tracks)\n")
+        f.write("- **Fit syst**: max |δN| across 5 background/resolution variations\n")
+        f.write("- **Sel syst**: max |δN| from BDT threshold ±1 step\n")
+        f.write("- **PID syst**: RMS of efficiency ratio across 100 bootstrap iterations\n")
+        f.write("- **Kin syst**: conservative bound from weight map variation\n")
+        f.write("- **Tracking**: 0% — fully cancels in ratio (same final-state tracks)\n")
         f.write("- **etac_2s**: MC in LHCb production pipeline — excluded from this table\n")
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Phase 4 systematic uncertainty aggregation")
+    parser = argparse.ArgumentParser(description="Systematic uncertainty aggregation")
     parser.add_argument("--branches", nargs="+", default=["high_yield", "low_yield"])
     parser.add_argument("--categories", nargs="+", default=["LL", "DD"])
     parser.add_argument("--output-dir", default="analysis_output/mva")

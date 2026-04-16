@@ -32,7 +32,7 @@ Follows reference reweight_plot.py style exactly:
   - Colors: COLORS[0] (darkgreen), COLORS[1] (#6F4F59), COLORS[2] (#003366)
 
 Run from analysis/ directory:
-    uv run python studies/kinematic_reweighting/plot_reweighting.py
+    uv run python presentation/validation/plot_reweighting.py
 """
 
 import json
@@ -50,14 +50,26 @@ STUDY_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(STUDY_DIR.parents[1]))  # analysis/ for modules.*
 
 from modules.plot_utils import COLORS, figs_path, make_formatter, save_fig, setup_style
+from modules.presentation_config import (
+    DATA_L0_TIS_KEYS,
+    HLT1_TOS_KEYS,
+    HLT2_TOS_KEYS,
+    MC_L0_TIS_KEYS,
+    get_presentation_config,
+)
 
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-WEIGHT_DIR = STUDY_DIR / "output"
-
-M_LAMBDA_PDG = 1115.683
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
+PRESENTATION = get_presentation_config()
+DATA_BASE = PRESENTATION.data_base
+MC_BASE = PRESENTATION.mc_base
+WEIGHT_DIR = PRESENTATION.kinematic_weight_dir
+M_LAMBDA_PDG = PRESENTATION.lambda_mass_pdg
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
+SIG_LO, SIG_HI = PRESENTATION.bu_signal_window()
+SB_LO, SB_HI = PRESENTATION.bu_sideband_windows()
+SB_SCALE = PRESENTATION.sideband_scale()
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -149,22 +161,20 @@ def _load_data_vars(path: Path, cat: str) -> dict:
 
     mask = _trig_mask_ak(
         ev,
-        ["Bu_L0GlobalDecision_TIS", "Bu_L0PhysDecision_TIS", "Bu_L0HadronDecision_TIS"],
-        ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"],
-        [
-            "Bu_Hlt2Topo2BodyDecision_TOS",
-            "Bu_Hlt2Topo3BodyDecision_TOS",
-            "Bu_Hlt2Topo4BodyDecision_TOS",
-        ],
+        DATA_L0_TIS_KEYS,
+        HLT1_TOS_KEYS,
+        HLT2_TOS_KEYS,
         "Bu_PT",
     )
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
     ev = ev[mask]
 
     bu_corr = ak.to_numpy(ev["Bu_MM"]) - ak.to_numpy(ev["L0_MM"]) + M_LAMBDA_PDG
-    sig_mask = (bu_corr >= 5255) & (bu_corr <= 5305)
-    sb_mask = ((bu_corr >= 5150) & (bu_corr <= 5230)) | ((bu_corr >= 5330) & (bu_corr <= 5410))
-    scale = (5305 - 5255) / ((5230 - 5150) + (5410 - 5330))
+    sig_mask = (bu_corr >= SIG_LO) & (bu_corr <= SIG_HI)
+    sb_mask = ((bu_corr >= SB_LO[0]) & (bu_corr <= SB_LO[1])) | (
+        (bu_corr >= SB_HI[0]) & (bu_corr <= SB_HI[1])
+    )
+    scale = SB_SCALE
 
     # Compute derived variables
     P = ak.to_numpy(ev["Bu_P"])
@@ -210,16 +220,12 @@ def _load_mc_vars(path: Path, cat: str) -> dict:
 
     mask = _trig_mask_ak(
         ev,
-        ["Bu_L0Global_TIS", "Bu_L0HadronDecision_TIS"],
-        ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"],
-        [
-            "Bu_Hlt2Topo2BodyDecision_TOS",
-            "Bu_Hlt2Topo3BodyDecision_TOS",
-            "Bu_Hlt2Topo4BodyDecision_TOS",
-        ],
+        MC_L0_TIS_KEYS,
+        HLT1_TOS_KEYS,
+        HLT2_TOS_KEYS,
         "Bu_PT",
     )
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
     ev = ev[mask]
 
     P = ak.to_numpy(ev["Bu_PT"])
@@ -611,16 +617,12 @@ def _load_ccbar_window_data(path: Path, cat: str, window: str) -> dict:
 
     mask = _trig_mask_ak(
         ev,
-        ["Bu_L0GlobalDecision_TIS", "Bu_L0PhysDecision_TIS", "Bu_L0HadronDecision_TIS"],
-        ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"],
-        [
-            "Bu_Hlt2Topo2BodyDecision_TOS",
-            "Bu_Hlt2Topo3BodyDecision_TOS",
-            "Bu_Hlt2Topo4BodyDecision_TOS",
-        ],
+        DATA_L0_TIS_KEYS,
+        HLT1_TOS_KEYS,
+        HLT2_TOS_KEYS,
         "Bu_PT",
     )
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
     ev = ev[mask]
 
     # Charmonium mass (m(ΛpK⁻))
@@ -659,7 +661,7 @@ def _load_ccbar_window_data(path: Path, cat: str, window: str) -> dict:
     bu_corr = ak.to_numpy(ev["Bu_MM"]) - ak.to_numpy(ev["L0_MM"]) + M_LAMBDA_PDG
 
     # B+ signal window
-    bu_sel = (bu_corr >= 5255) & (bu_corr <= 5305)
+    bu_sel = (bu_corr >= SIG_LO) & (bu_corr <= SIG_HI)
 
     # Charmonium window
     M_ref = M_JPSI_LOCAL if window == "jpsi" else M_ETAC_LOCAL

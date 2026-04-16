@@ -15,7 +15,7 @@ Uses Gaussian fit to B+ corrected mass from signal MC.
 Plotting matches reference style: MC as error bars, fit as smooth line.
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_mcfits.py
+    uv run python presentation/ana_note_plots/scripts/plot_mcfits.py
 """
 
 import logging
@@ -36,12 +36,20 @@ sys.path.insert(0, str(ANALYSIS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
 from modules.plot_utils import COLORS, figs_path, make_formatter, save_fig, setup_style
+from modules.presentation_config import (
+    HLT1_TOS_KEYS,
+    HLT2_TOS_KEYS,
+    MC_L0_TIS_KEYS,
+    get_presentation_config,
+)
 
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-
-M_LAMBDA_PDG = 1115.683
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
+PRESENTATION = get_presentation_config()
+MC_BASE = PRESENTATION.mc_base
+M_LAMBDA_PDG = PRESENTATION.lambda_mass_pdg
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
 
 # State name → MC directory name + plot label
 STATES = {
@@ -127,13 +135,9 @@ def _load_mc(path: Path, cat: str) -> np.ndarray:
     ev = tree.arrays(avail, library="ak")
 
     # Trigger
-    l0_keys = ["Bu_L0Global_TIS", "Bu_L0HadronDecision_TIS"]
-    hlt1_keys = ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"]
-    hlt2_keys = [
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
-    ]
+    l0_keys = MC_L0_TIS_KEYS
+    hlt1_keys = HLT1_TOS_KEYS
+    hlt2_keys = HLT2_TOS_KEYS
     n = len(ev["Bu_MM"])
 
     def _or_mask(keys):
@@ -156,7 +160,7 @@ def _load_mc(path: Path, cat: str) -> np.ndarray:
     mask = ml0 & mhlt1 & mhlt2
 
     # Lambda mass window
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
 
     ev = ev[mask]
 

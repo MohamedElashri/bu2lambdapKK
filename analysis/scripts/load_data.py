@@ -9,6 +9,7 @@ if str(project_root) not in sys.path:
 
 from modules.cache_manager import CacheManager
 from modules.clean_data_loader import load_all_data, load_all_mc
+from modules.config_loader import StudyConfig
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -23,18 +24,27 @@ if "snakemake" in globals():
     cache_dir = snakemake.params.cache_dir
 else:
     # Fallback for manual running
-    years = ["2016", "2017", "2018"]
+    years = None
     track_types = ["LL", "DD"]
-    magnets = ["MD", "MU"]
-    states = ["jpsi", "etac", "chic0", "chic1"]
+    magnets = None
+    states = None
     no_cache = False
     config_dir = "config"
     cache_dir = "cache"
 
+config = StudyConfig.from_dir(config_dir)
+
+if years is None:
+    years = config.get_input_years() or ["2016", "2017", "2018"]
+if magnets is None:
+    magnets = config.get_input_magnets() or ["MD", "MU"]
+if states is None:
+    states = config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
+
 # Initialize CacheManager
 cache = CacheManager(cache_dir=cache_dir)
 dependencies = cache.compute_dependencies(
-    config_files=list(Path(config_dir).glob("*.toml")),
+    config_files=config.config_paths(),
     code_files=[
         project_root / "modules" / "clean_data_loader.py",
         project_root / "scripts" / "load_data.py",
@@ -51,16 +61,19 @@ if not no_cache:
         sys.exit(0)
     logger.info("Cache miss or invalidated - will compute")
 
-# Using the new loaders (already contains B+ and Lambda mass pre-selections based on definitions!)
-# Note: we are passing the base path directly as we expect it locally based on the shared directory.
-data_base_path = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-mc_base_path = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
+# Paths and fixed selections are owned by the shared config layer.
+data_base_path = config.get_input_data_base_path()
+mc_base_path = config.get_input_mc_base_path()
 
 logger.info("[Loading Real Data]")
-data_dict = load_all_data(data_base_path, years, track_types)
+data_dict = load_all_data(
+    data_base_path, years, magnets=magnets, track_types=track_types, config=config
+)
 
 logger.info("\n[Loading MC - Signal States]")
-mc_dict = load_all_mc(mc_base_path, states, years, track_types)
+mc_dict = load_all_mc(
+    mc_base_path, states, years, magnets=magnets, track_types=track_types, config=config
+)
 
 cache.save(
     "preprocessed_data", data_dict, dependencies=dependencies, description="Data Pre-processed"

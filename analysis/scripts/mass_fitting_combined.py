@@ -60,12 +60,11 @@ else:
     branch = "high_yield"
     yields_file = Path(output_dir) / branch / "LL_DD" / "tables" / "fitted_yields_combined.csv"
 
-config_path = Path(config_dir) / "selection.toml"
-config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 cache = CacheManager(cache_dir=cache_dir)
 
 cut_deps = cache.compute_dependencies(
-    config_files=list(Path(config_dir).glob("*.toml")),
+    config_files=config.config_paths(),
     code_files=[project_root / "scripts" / "apply_cuts.py"],
 )
 
@@ -116,8 +115,7 @@ fit_result = fitter.perform_fit(
 # ---------------------------------------------------------------------------
 # Save yields
 # ---------------------------------------------------------------------------
-plotting_cfg = config.fitting.get("plotting", {})
-all_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
+all_states = config.get_plotting_states()
 
 rows = []
 combined_yields = fit_result.get("yields", {}).get("combined", {})

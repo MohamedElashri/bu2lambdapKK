@@ -43,13 +43,13 @@ def build_box_reference(category: str) -> None:
     output_root = project_root / "analysis_output" / "box"
     cache_dir = output_root / "cache"
 
-    config = StudyConfig(config_file=str(config_dir / "selection.toml"), output_dir=output_root)
+    config = StudyConfig.from_dir(config_dir, output_dir=output_root)
     # Force the maintained grouped scan rather than the stale sequential path.
     config.optimization["method"] = "mc_based_grouped_reference"
 
     cache = CacheManager(cache_dir=cache_dir)
     deps = cache.compute_dependencies(
-        config_files=list(config_dir.glob("*.toml")),
+        config_files=config.config_paths(),
         code_files=[
             project_root / "modules" / "clean_data_loader.py",
             project_root / "scripts" / "load_data.py",

@@ -8,7 +8,7 @@ Produces:
   figs/LambdaDD/fit/fit_ToNormal_Run2MDU_MC_mB.pdf
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_normchannel.py
+    uv run python presentation/ana_note_plots/scripts/plot_normchannel.py
 """
 
 import logging
@@ -29,18 +29,25 @@ sys.path.insert(0, str(ANALYSIS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
 from modules.plot_utils import BINNING, COLORS, figs_path, save_fig, setup_style
+from modules.presentation_config import (
+    DATA_L0_TIS_KEYS,
+    HLT1_TOS_KEYS,
+    HLT2_TOS_KEYS,
+    MC_L0_TIS_KEYS,
+    get_presentation_config,
+)
 
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-JPSI_MC = MC_BASE / "Jpsi"
-
-# Sideband definitions (MeV)
-SB_LO = (5150, 5230)
-SB_HI = (5330, 5410)
+PRESENTATION = get_presentation_config()
+DATA_BASE = PRESENTATION.data_base
+MC_BASE = PRESENTATION.mc_base
+JPSI_MC = MC_BASE / PRESENTATION.mc_state_dir("jpsi")
+SB_LO, SB_HI = PRESENTATION.bu_sideband_windows()
 
 M_BPLUS = 5279.6
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -76,13 +83,9 @@ def _load_data(path: Path, cat: str) -> np.ndarray:
     ev = tree.arrays(avail, library="np")
     n = len(ev["L0_MM"])
 
-    l0_keys = ["Bu_L0GlobalDecision_TIS", "Bu_L0PhysDecision_TIS", "Bu_L0HadronDecision_TIS"]
-    hlt1_keys = ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"]
-    hlt2_keys = [
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
-    ]
+    l0_keys = DATA_L0_TIS_KEYS
+    hlt1_keys = HLT1_TOS_KEYS
+    hlt2_keys = HLT2_TOS_KEYS
 
     def _or(keys):
         m = np.zeros(n, dtype=bool)
@@ -92,7 +95,7 @@ def _load_data(path: Path, cat: str) -> np.ndarray:
         return m if any(k in avail for k in keys) else np.ones(n, dtype=bool)
 
     mask = _or(l0_keys) & _or(hlt1_keys) & _or(hlt2_keys)
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
     return ev["Bu_DTFL0_M"][mask]
 
 
@@ -120,9 +123,7 @@ def _load_mc_jpsi(path: Path, cat: str) -> np.ndarray:
     """
     want = [
         "L0_MM",
-        "Bu_L0GlobalDecision_TIS",
-        "Bu_L0PhysDecision_TIS",
-        "Bu_L0HadronDecision_TIS",
+        *MC_L0_TIS_KEYS,
         "Bu_Hlt1TrackMVADecision_TOS",
         "Bu_Hlt1TwoTrackMVADecision_TOS",
         "Bu_Hlt2Topo2BodyDecision_TOS",
@@ -137,13 +138,9 @@ def _load_mc_jpsi(path: Path, cat: str) -> np.ndarray:
     raw = tree.arrays(["Bu_DTFL0_M"], library="ak")["Bu_DTFL0_M"]
     dtf_mass = ak.to_numpy(ak.firsts(raw))
 
-    l0_keys = ["Bu_L0GlobalDecision_TIS", "Bu_L0PhysDecision_TIS", "Bu_L0HadronDecision_TIS"]
-    hlt1_keys = ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"]
-    hlt2_keys = [
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
-    ]
+    l0_keys = MC_L0_TIS_KEYS
+    hlt1_keys = HLT1_TOS_KEYS
+    hlt2_keys = HLT2_TOS_KEYS
 
     def _or(keys):
         m = np.zeros(n, dtype=bool)
@@ -153,7 +150,7 @@ def _load_mc_jpsi(path: Path, cat: str) -> np.ndarray:
         return m if any(k in avail for k in keys) else np.ones(n, dtype=bool)
 
     mask = _or(l0_keys) & _or(hlt1_keys) & _or(hlt2_keys)
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
     mask = mask & np.isfinite(dtf_mass) & (dtf_mass > 4000)
     return dtf_mass[mask]
 

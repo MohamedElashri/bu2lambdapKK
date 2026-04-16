@@ -15,11 +15,11 @@ else:
     config_dir = "config"
     output_dir = "analysis_output"
 
-config_path = Path(config_dir) / "selection.toml"
+config_path = Path(config_dir).resolve()
 
-print(f"Validating configuration at {config_path}")
+print(f"Validating configuration under {config_path}")
 try:
-    config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+    config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
     print("Configuration loaded successfully!")
 
     # Create root output directory if it doesn't exist

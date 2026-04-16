@@ -99,7 +99,7 @@ def compare_branches(high_path_prefix, low_path_prefix, output_file):
         report.append("## Branching Fraction Ratio Comparison\n")
         merged_br = pd.merge(high_br, low_br, on="state", suffixes=("_high", "_low"))
 
-        # Check for column names (Phase 5 refactor uses ratio_to_ref)
+        # Support both legacy and current branching-ratio column names.
         col_high = (
             "ratio_to_ref_high"
             if "ratio_to_ref_high" in merged_br.columns

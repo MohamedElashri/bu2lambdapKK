@@ -1,6 +1,6 @@
 # MVA Optimization Snakefile
 #
-# Phase 2 changes: separate BDT trained per Lambda category (LL and DD).
+# Separate BDTs are trained per Lambda category (LL and DD).
 # Per-category models are saved as:
 #   output/models/catboost_bdt_LL.cbm
 #   output/models/catboost_bdt_DD.cbm

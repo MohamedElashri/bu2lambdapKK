@@ -52,7 +52,7 @@ def generate_tuned_hyperparameters_table(best_params_path: Path, output_path: Pa
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("# Phase 1: Hyperparameter Tuning\n\n")
+        f.write("# Hyperparameter Tuning\n\n")
         f.write("| Hyperparameter | Default | Tuned |\n")
         f.write("| --- | --- | --- |\n")
         for k in tuned_params.keys():
@@ -123,7 +123,7 @@ def analyze_feature_importance_and_impact(
     df = pd.DataFrame(data)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("# Phase 2: Feature Importance and Impact Analysis\n\n")
+        f.write("# Feature Importance and Impact Analysis\n\n")
         f.write("### Top Features:\n")
         for i, idx in enumerate(sorted_idx, 1):
             f.write(f"{i}. `{features[idx]}`: {importance[idx]:.2f}%\n")
@@ -205,7 +205,7 @@ def plot_top_features_separation(ml_data: dict, top_2_idx: list, plot_dir: Path,
 
 def generate_final_comparison_summary(mva_opt_md_path: Path, output_path: Path):
     """
-    Combines the MVA optimization table with the final phase 4 summary.
+    Combines the MVA optimization table with the final summary.
     """
     if not mva_opt_md_path.exists():
         logger.warning(f"Could not find MVA optimization table at {mva_opt_md_path}")
@@ -216,7 +216,7 @@ def generate_final_comparison_summary(mva_opt_md_path: Path, output_path: Path):
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
-        f.write("# Phase 4: Final Comparison (MVA vs Baseline)\n\n")
+        f.write("# Final Comparison (MVA vs Baseline)\n\n")
         f.write("## 1. MVA Optimization Results (from tuned CatBoost)\n")
         f.write(mva_md)
         f.write("\n\n## 2. Invariant Mass Fits\n")

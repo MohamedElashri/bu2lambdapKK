@@ -113,7 +113,7 @@ class MassFitter:
             ROOT.RooRealVar for mass observable
         """
         if self.mass_var is None:
-            # Use labels from config if available (Phase 5 refactor)
+            # Use labels from config if available.
             labels_cfg = getattr(self.config, "labels", {})
             obs_name = labels_cfg.get("mass_observable_name", "M_LpKm")
             obs_label = labels_cfg.get(
@@ -456,7 +456,7 @@ class MassFitter:
         """
         Perform mass fits to all years (per-year AND combined).
 
-        Following Phase 5:
+        Current workflow behavior:
         - Fit each year individually (MagDown + MagUp already combined)
         - Share physical parameters (masses, widths, resolution) across years
         - Extract per-year yields for efficiency correction

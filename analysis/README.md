@@ -27,35 +27,45 @@ All commands run from the `analysis/` directory.
 ```bash
 cd analysis/
 
-make          # Full A-Z run (recommended for a clean slate)
+make          # Full unified run (studies -> pipeline -> systematics -> reports)
+make plots    # Optional presentation plots
 make help     # Print all available targets
 make clean    # Remove all outputs before a fresh run
 ```
 
 ---
 
-## Full A-Z Workflow
+## Full Workflow
 
-The analysis has four sequential phases. Running `make` executes all four:
+The top-level `Snakefile` is now the authoritative DAG. The `Makefile` is a
+thin wrapper around named workflow families. Running `make` executes the four
+core families:
 
 ```
-studies  →  main-pipeline  →  systematics  →  collect-results
+studies  →  main-pipeline  →  systematics  →  reports
 ```
 
-| Phase | Make target | What it does |
-|-------|-------------|--------------|
-| 1 | `make studies` | Train MVA, compute trigger ratios, derive kinematic weights, compute efficiency table |
-| 2 | `make main-pipeline` | Load data, optimize selection, fit mass spectra, compute efficiencies, calculate BF ratios |
-| 3 | `make systematics` | Fit model + selection + PID systematics; aggregate into final uncertainties |
-| 4 | `make collect-results` | Gather all key outputs into `results/` |
+| Workflow family | Make target | What it does |
+|-----------------|-------------|--------------|
+| Studies | `make studies` | Train MVA, compute trigger ratios, derive kinematic weights, compute efficiency table |
+| Main pipeline | `make main-pipeline` | Load data, optimize selection, fit mass spectra, compute efficiencies, calculate BF ratios, and compare branches |
+| Systematics | `make systematics` | Run PID bootstrap and aggregate the fit, selection, and PID systematics into final uncertainty products |
+| Reports | `make reports` | Collect key outputs into `results/` and generate the HEP-style final report |
 
-### Running individual phases
+Presentation plots are intentionally separate from the default physics run:
 
 ```bash
-make studies           # Phase 1 only
-make main-pipeline     # Phase 2 only
-make systematics       # Phase 3 only
-make collect-results   # Phase 4 only
+make plots
+```
+
+### Running individual workflow families
+
+```bash
+make studies           # Studies only
+make main-pipeline     # Main pipeline only
+make systematics       # Systematics only
+make reports           # Reporting only
+make plots             # Optional note/slides figures
 ```
 
 ### Controlling parallelism and method
@@ -74,12 +84,13 @@ make OPT_METHOD=box CORES=2
 
 | Target | Description |
 |--------|-------------|
-| `make` | **Full A-Z**: studies → pipeline → systematics → collect |
+| `make` | **Full unified run**: studies → pipeline → systematics → reports |
+| `make full-analysis` | Same as `make` |
 | `make dry-run` | Show what Snakemake would execute without running anything |
 | `make dag` | Render pipeline DAG to `dag.pdf` (requires graphviz) |
-| `make rerun` | Force complete main pipeline re-run (ignores existing outputs) |
+| `make rerun` | Force complete full-analysis re-run (ignores existing outputs) |
 
-### Prerequisite studies (Phase 1)
+### Prerequisite studies
 
 | Target | Description |
 |--------|-------------|
@@ -89,7 +100,7 @@ make OPT_METHOD=box CORES=2
 | `make study-reweighting` | Derive per-category kinematic reweighting weights |
 | `make study-efficiency` | Compute cumulative efficiency table |
 
-### Main pipeline steps (Phase 2)
+### Main pipeline steps
 
 Each target runs all preceding steps automatically.
 
@@ -102,32 +113,116 @@ Each target runs all preceding steps automatically.
 | `make efficiency` | 6 | `tables/efficiencies.csv`, `efficiency_ratios.csv` |
 | `make branching-ratios` | 7 | `tables/branching_fraction_ratios.csv`, `results/final_results.md` |
 | `make compare` | 8 | `comparison/branch_comparison.md` |
-| `make export-latex` | 9–10 | `results/bf_products.tex`, `results/systematics_summary.md` |
-| `make main-pipeline` | 1–10 | All of the above |
+| `make export-latex` | 9–10 | `results/bf_products.tex` after the required systematics summary is built |
+| `make main-pipeline` | 1–8 | All main-physics outputs through branch comparison |
 
-### Systematic studies (Phase 3)
+### Systematic studies
 
 | Target | Description |
 |--------|-------------|
-| `make systematics` | Run all three studies then aggregate into `systematics.json` |
+| `make systematics` | Run the PID bootstrap and aggregate the full systematic workflow |
 | `make study-fit-syst` | Fit model variations (ARGUS→poly2, endpoint ±50 MeV, resolution ±2 MeV) |
 | `make study-sel-syst` | Selection threshold systematic (BDT cut ±1 step) |
 | `make study-pid-bootstrap` | PID efficiency bootstrap (100 Gaussian-smeared iterations) |
 
-### Collect results (Phase 4)
+### Presentation workflows
+
+| Target | Description |
+|--------|-------------|
+| `make plots` | Run all optional presentation plots |
+| `make plot-backgrounds` | Background-study plots |
+| `make plot-reweighting` | Reweighting validation plots |
+| `make plot-note` | Analysis-note plots |
+
+Presentation scripts now follow one shared runtime contract:
+
+- plots that can consume stable pipeline products should do that directly
+  - examples: `plot_datafit.py`, `plot_bdt_variables.py`
+- plots that still need raw tuples for note-only diagnostics should read paths,
+  windows, trigger assumptions, and fixed PID cuts from
+  `modules/presentation_config.py` instead of embedding their own copies
+- active presentation workflows now live under `analysis/presentation/`
+- exploratory one-off studies now live under `analysis/studies/standalone/`
+- `analysis/studies/pid_cancellation/pidcalib2/` is intentionally kept as a
+  vendored study-local dependency
+
+### Reporting
 
 | Target | Description |
 |--------|-------------|
 | `make collect-results` | Copy all key outputs into `results/` |
+| `make report-hep` | Generate the HEP-style LaTeX and text summary |
+| `make reports` | Run `collect-results` and `report-hep` together |
+
+### Validation
+
+| Target | Description |
+|--------|-------------|
+| `make dry-run` | Full-analysis dry-run against the active DAG |
+| `make validate-config` | Run `validate_config` into `analysis_output_validation/` |
+| `make smoke-imports` | Import shared modules and instantiate shared config helpers |
+| `make smoke-subset` | Execute a real one-year/one-category `load_data` smoke run into `analysis_output_validation/` |
+| `make smoke` | Run the structural smoke suite: dry-run, imports, config validation, subset run, and presentation dry-run |
+
+The smoke subset is intentionally isolated from the real outputs. By default it
+uses:
+
+- `VALIDATION_OUTPUT_DIR=analysis_output_validation`
+- `SMOKE_YEAR=2016`
+- `SMOKE_TRACK=LL`
+- `SMOKE_MAGNET=MD`
+- `SMOKE_STATE=Jpsi`
+
+Example:
+
+```bash
+make smoke SMOKE_YEAR=2017 SMOKE_TRACK=DD SMOKE_MAGNET=MU
+```
 
 ### Cleaning
 
 | Target | What is removed |
 |--------|-----------------|
-| `make clean` | Everything — analysis_output/, results/, study outputs, .snakemake metadata. **`studies/pid_cancellation/pidcalib_output/` is preserved** (PIDCalib2 histograms from lxplus) |
-| `make clean-main` | `analysis_output/` and `results/` only |
-| `make clean-studies` | Study outputs only (same PKL preservation) |
-| `make clean-snakemake` | `.snakemake/metadata` and locks only |
+| `make clean` | Everything generated under `analysis/` — `analysis_output/`, `analysis_output_validation/`, `results/`, `cache/`, study outputs, MVA study artifacts, and `.snakemake/`. **`studies/pid_cancellation/pidcalib_output/` is preserved** (PIDCalib2 histograms from lxplus) |
+| `make clean-generated` | Alias for `make clean` |
+| `make clean-main` | `analysis_output/`, `analysis_output_validation/`, and `results/` only |
+| `make clean-studies` | Generated study outputs only, including MVA study artifacts |
+| `make clean-snakemake` | Top-level and study-local `.snakemake/` directories |
+
+## Tree Boundaries
+
+The tree is separated into three conceptual areas:
+
+- active source
+  - `analysis/config/`
+  - `analysis/modules/`
+  - `analysis/scripts/`
+  - active study code that is still referenced by the top-level `Snakefile`
+  - presentation workflows under `analysis/presentation/` that either consume stable
+    products or use the shared presentation config layer
+  - exploratory but intentionally kept one-off studies under
+    `analysis/studies/standalone/`
+- generated outputs
+  - `analysis/analysis_output/`
+  - `analysis/analysis_output_validation/`
+  - `analysis/results/`
+  - `analysis/cache/`
+  - `analysis/studies/*/output/`
+  - `analysis/.snakemake/`
+- archived historical/reference material
+  - `analysis/archive/`
+
+Archive examples:
+
+- `analysis/archive/reference_workflows/`
+
+Additional ownership notes:
+
+- `analysis/presentation/` contains optional note, slide, and validation plots
+- `analysis/studies/standalone/` contains exploratory or documentation-only
+  studies that are intentionally kept outside the active DAG
+- `analysis/studies/pid_cancellation/` owns the vendored `pidcalib2/` payload
+  and the externally prepared `pidcalib_output/` area
 
 ---
 
@@ -135,9 +230,9 @@ Each target runs all preceding steps automatically.
 
 ### Steps 1–2: Config validation + data loading
 
-Validates all TOML config files, then loads data and MC from ROOT files for all configured years (2016–2018), track types (LL/DD), and magnet polarities (MagDown/MagUp). Applies fixed Λ pre-selection (mass window, flight distance, proton PID). Results cached as pickle files (~19 MB).
+Validates the active analysis configuration, then loads data and MC from ROOT files for all configured years (2016–2018), track types (LL/DD), and magnet polarities (MagDown/MagUp). Applies fixed Λ pre-selection (mass window, flight distance, proton PID). Results are cached for downstream optimization and fitting.
 
-**Cache note:** Modifying `data_handler.py` or `selection.toml` invalidates this cache. Rebuild with `make load-data`.
+**Cache note:** The load-data cache depends on the active `config/*.toml` files plus the loader path (`scripts/load_data.py`, `modules/clean_data_loader.py`). Rebuild with `make load-data` after changing those inputs.
 
 ### Step 3: Selection optimization
 
@@ -148,15 +243,15 @@ Per (branch, category): either a box grid-scan (`OPT_METHOD=box`) or MVA BDT thr
 
 ### Step 5: Mass fitting
 
-Simultaneous binned maximum-likelihood fit to M(Λ̄pK⁻) in [2800, 4000] MeV using RooFit. Models 5 charmonium states with Double Crystal Ball signals and ARGUS background. Fit plots saved to `{branch}/{category}/plots/fits/mass_fit_{year}.pdf`.
+Simultaneous binned maximum-likelihood fit to M(Λ̄pK⁻) in [2800, 4000] MeV using RooFit. The active fitter models the charmonium signals with RooVoigtian shapes (PDG mass/width convolved with a shared Gaussian resolution) and uses an ARGUS background in the nominal fit. Fit plots are saved to `{branch}/{category}/plots/fits/mass_fit_{year}.pdf`.
 
 ### Step 6: Efficiency
 
-Calculates ε_sel = N_pass / N_generated from MC. All other efficiency components (ε_reco, ε_strip, ε_trig, ε_PID) cancel in ratios because all channels share the identical Λ̄pK⁻K⁺ final state.
+Builds per-category efficiency tables from the standalone `studies/efficiency_steps/` output, then writes `efficiencies.csv` and `efficiency_ratios.csv` for the main pipeline. The active implementation consumes the study-level total efficiencies rather than deriving a fresh `ε_sel = N_pass / N_generated` inside this step. `η_c(2S)` currently remains a placeholder state until MC is available.
 
 ### Steps 7–10: Branching fractions
 
-LL and DD yields summed; efficiency ratios yield-weighted. Normalization channel: B⁺ → J/ψ K⁺. Systematic uncertainties loaded from `systematics.json` (populated by Phase 3). Final results exported to LaTeX.
+LL and DD yields summed; efficiency ratios yield-weighted. Normalization channel: B⁺ → J/ψ K⁺. Systematic uncertainties loaded from `systematics.json` after the systematic studies run. Final results exported to LaTeX.
 
 ## Snakemake Configuration
 
@@ -195,11 +290,20 @@ Located in `config/`:
 |------|---------|
 | `physics.toml` | PDG masses, widths, branching fractions |
 | `detector.toml` | Mass windows, signal regions, luminosity |
-| `fitting.toml` | Fit method (binned), signal model (DCB), background (ARGUS) |
+| `fitting.toml` | Reference fit/plot configuration; not yet the single operational source for the active pipeline |
 | `selection.toml` | Λ cuts, B⁺ cuts, optimizable variables, optimization strategy |
 | `triggers.toml` | L0, HLT1, HLT2 trigger requirements |
 | `data.toml` | Input ROOT file paths, cache settings |
+| `generator_effs.toml` | Generator-level efficiencies used by the efficiency study |
 | `efficiencies.toml` | Which efficiency components cancel in ratios |
+
+**Operational note:** active pipeline rules and active prerequisite studies now load config through the shared `modules.config_loader.StudyConfig` layer rooted at `analysis/config/`. The current ownership split inside that shared layer is:
+
+- `selection.toml` owns active cuts, optimization settings, and operational fitter knobs
+- `physics.toml` owns normalization constants and PDG masses/widths
+- `data.toml` owns input paths, years, and magnet lists
+- `generator_effs.toml` owns generator efficiencies consumed by the efficiency study
+- `fitting.toml` contributes plotting/reference metadata that is merged into the active config view
 
 ### Key analysis choices
 
@@ -209,7 +313,7 @@ Located in `config/`:
 | B⁺ mass window | M_corr ∈ [5255, 5305] MeV | `selection.toml` |
 | Λ mass window | [1111, 1121] MeV | `selection.toml` |
 | Fit type | Binned ML, 5 MeV/bin | `fitting.toml` |
-| Signal model | Double Crystal Ball | `fitting.toml` |
+| Signal model | RooVoigtian (nominal fitter implementation) | `modules/mass_fitter.py` |
 | Background model | ARGUS function | `fitting.toml` |
-| PID cut | PID_product > 0.20 (fixed) | `selection.toml` |
+| PID cut | PID_product > 0.25 (fixed) | `selection.toml` |
 | Normalization channel | B⁺ → J/ψ K⁺ | `physics.toml` |

@@ -40,9 +40,9 @@ class BranchingFractionCalculator:
     These ratios are physics-meaningful and don't require
     knowing individual branching fractions!
 
-    Phase 7 Implementation:
-    - Uses yields from Phase 5 (mass fitting)
-    - Uses efficiency ratios from Phase 6 (ε_sel only)
+    Current implementation:
+    - Uses yields from mass fitting
+    - Uses efficiency ratios (ε_sel only)
     - Combines all years with proper error propagation
     - Statistical uncertainties only (draft analysis)
 

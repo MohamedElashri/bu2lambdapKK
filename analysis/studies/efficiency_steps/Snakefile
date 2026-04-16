@@ -1,6 +1,6 @@
 # Efficiency Steps Snakefile
 #
-# Phase 3 changes:
+# Workflow notes:
 # - Passes --tis-tos flag to load data/MC trigger correction factors.
 # - Passes --kin-weights-dir so 1D pT weights are applied per category.
 # - Passes --mva-output-dir and --branch for per-category MVA model loading.

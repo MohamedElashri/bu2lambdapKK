@@ -1,45 +1,42 @@
-# TMVA Optimization Study
+# MVA Optimization Study
 
-This directory contains two ways to perform the MVA (Multivariate Analysis) optimization for the B⁺ → Λ̄pK⁻K⁺ decay.
+This directory contains the active multivariate-selection study used by the
+top-level workflow, plus some local comparison material that is intentionally
+kept study-local.
 
-## 1. Modern Python Approach (Default)
-The standard Snakefile and `main.py` run an optimization using XGBoost, LightGBM, and CatBoost. It utilizes Python-native libraries (`scikit-learn`, `catboost`, etc.) and Awkward Array for data handling.
+## What Is Active
 
-To run:
-```bash
-uv run snakemake -j1
-```
-Or directly:
-```bash
-uv run python main.py
-```
+The active production outputs consumed by the main pipeline are the per-category
+CatBoost models and related optimization products written under `output/`:
 
-## 2. Classic TMVA Approach (Particle Physics Standard)
-We have also implemented the exact same study using ROOT's TMVA (Toolkit for Multivariate Data Analysis), which is the traditional tool used in high energy physics.
+- `output/models/catboost_bdt_LL.cbm`
+- `output/models/catboost_bdt_DD.cbm`
 
-The script `run_tmva.py` uses the exact same data preparation pipeline (`data_preparation.py` and `clean_data_loader.py`) to apply the baseline cuts and sideband selection. It then exports the data to a `.root` file and runs TMVA on it.
+The authoritative orchestration path is the top-level `analysis/Snakefile`
+through `make study-mva` or `uv run snakemake study_mva`.
 
-### How to run the TMVA study
-Because the current `uv` environment relies on the PyPI `root` package which is currently missing the `libTMVA.so` compiled library, we need to run `run_tmva.py` in an environment where a full ROOT installation is available (e.g., conda `bphysics` environment).
+## What Is Study-Local
 
-**Step 1: Export data, run TMVA, and generate plots**
-Activate an environment with full ROOT + TMVA support (The wheels published on PyPi for `ROOT` does not have `TMVA`), then run:
-```bash
-cd tmva
-conda activate bphysics
-python run_tmva.py
-```
-*(Note: Do not use `uv run` here. If we are missing `scikit-learn` in our bphysics environment, run `pip install scikit-learn` first.)*
+This directory still contains helper code and comparison paths that are kept
+for study-local reproducibility, but are not shared source-of-truth for the
+rest of the analysis:
 
-**Step 2: View the TMVA Plots**
-The script will automatically generate PNG and PDF plots (ROC curve, Overtraining check) in `analysis_output/plots/tmva/`.
+- internal model-comparison logic used while choosing CatBoost
+- the TMVA comparison path under `tmva/`
+- local helper scripts that should not be imported as general shared modules
 
-If we prefer the classic interactive TMVA GUI, we can run:
-```bash
-root -l -e 'TMVA::TMVAGui("analysis_output/tmva/TMVA_Output.root")'
-```
+Those files remain here intentionally so the study stays reproducible without
+duplicating the active pipeline logic elsewhere.
 
-### Comparison
-By maintaining both pipelines, we ensure that:
-1. We can validate the new Python-based Machine Learning models against the field's standard TMVA results.
-2. The exact same training data, testing data, weights, and features are passed to both frameworks, allowing for an apples-to-apples comparison of AUC, ROC curves, and feature importance.
+## Guidance
+
+- use the top-level `analysis/Snakefile` for normal workflow execution
+- treat this directory as the owned implementation area for the MVA study
+- do not treat its local comparison helpers as shared framework code unless
+  they are deliberately promoted into `analysis/modules/` later
+
+## TMVA Comparison
+
+The TMVA path is retained for cross-checks and historical comparison only. It
+is not part of the active production run and may require an environment with a
+full ROOT installation that includes TMVA.

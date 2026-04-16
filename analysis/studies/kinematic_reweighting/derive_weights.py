@@ -2,7 +2,7 @@
 Derive MC kinematic weights using the high-statistics J/psi control channel.
 
 Method:
-1. Load J/psi data (both LL and DD) and apply the Phase 0 pre-selection.
+1. Load J/psi data (both LL and DD) and apply the current shared pre-selection.
 2. Perform B+ mass sideband subtraction to extract pure signal pT distributions.
 3. Load J/psi MC and apply the same pre-selection.
 4. Compute the normalised 1D Data/MC ratio weights for Bu_pT, separately per category.
@@ -10,16 +10,16 @@ Method:
    output/kinematic_weights_LL.json
    output/kinematic_weights_DD.json
 
-Phase 3 changes:
-- Updated from XGBoost to CatBoost model (Phase 2 BDT retrain).
+Current workflow notes:
+- Updated from XGBoost to CatBoost model.
 - Fixed the bug where all_data_eta was initialised but never populated (eta array removed
-  since we only compute 1D pT weights; extending to 2D is a Phase 3.2 enhancement).
+  since we only compute 1D pT weights; extending to 2D remains a future enhancement).
 - Added per-category (LL and DD) weight derivation.  Separate weights are needed because
   the B+ pT spectrum can differ between LL and DD due to different geometric acceptances.
 - The script now reads the pre-selection from the main pipeline's clean_data_loader.py
   (via direct import) to stay consistent.
 
-Note on 2D extension (Phase 3.2):
+Note on a possible 2D extension:
   nTracks is available in the ntuples as "nTracks" or "nSPDHits" depending on the year.
   To extend to 2D (pT × nTracks), replace the 1D histogramming below with:
     h_data_2d, xe, ye = np.histogram2d(data_pt, data_ntracks, bins=[pt_bins, ntracks_bins], weights=data_w)
@@ -36,7 +36,6 @@ from pathlib import Path
 import awkward as ak
 import matplotlib.pyplot as plt
 import numpy as np
-import tomli
 
 # Add analysis root to path
 analysis_root = Path(__file__).resolve().parent.parent.parent
@@ -44,6 +43,7 @@ if str(analysis_root) not in sys.path:
     sys.path.insert(0, str(analysis_root))
 
 from modules.clean_data_loader import load_and_preprocess
+from modules.config_loader import StudyConfig
 from modules.plot_utils import setup_style
 
 setup_style()
@@ -95,6 +95,7 @@ def derive_weights_for_category(
     mc_base: Path,
     years: list,
     polarities: list,
+    config: StudyConfig,
     mva_model_path: Path,
     mva_features: list,
     mva_threshold: float,
@@ -115,6 +116,7 @@ def derive_weights_for_category(
                     d_file,
                     is_mc=False,
                     track_type=category,
+                    config=config,
                     delta_z_cut=delta_z_cuts[category],
                 )
                 events = apply_catboost(events, mva_model_path, mva_features, mva_threshold)
@@ -136,6 +138,7 @@ def derive_weights_for_category(
                     m_file,
                     is_mc=True,
                     track_type=category,
+                    config=config,
                     delta_z_cut=delta_z_cuts[category],
                 )
                 events = apply_catboost(events, mva_model_path, mva_features, mva_threshold)
@@ -179,7 +182,7 @@ def derive_weights_varied(
     category: str, nominal_weights: dict, variation: str, rng: np.random.Generator
 ) -> dict:
     """
-    Phase 4.4 — Produce one kinematic weight variation for the systematic.
+    Produce one kinematic weight variation for the systematic study.
 
     Variations:
       "fine_bins"   : Double the number of pT bins (finer granularity)
@@ -245,26 +248,21 @@ def main():
     parser.add_argument(
         "--compute-variations",
         action="store_true",
-        help="Phase 4.4: also compute systematic variations and save to "
+        help="Also compute systematic variations and save to "
         "output/kinematic_weights_{cat}_var_{name}.json",
     )
     args = parser.parse_args()
 
-    with open(f"{args.config_dir}/data.toml", "rb") as f:
-        data_config = tomli.load(f)
-    with open(f"{args.config_dir}/selection.toml", "rb") as f:
-        sel_config = tomli.load(f)
+    config = StudyConfig.from_dir(args.config_dir)
 
-    mva_features = sel_config.get("xgboost", {}).get("features", [])
+    mva_features = config.xgboost.get("features", [])
     mva_threshold = 0.89  # default; overridden by optimized_cuts.json if available
 
-    data_base = Path(data_config["input_data"]["base_path"])
-    mc_base = Path(data_config["input_mc"]["base_path"]) / "Jpsi"
-    years = ["16", "17", "18"]
-    polarities = ["MD", "MU"]
-
-    # Category-aware Delta_Z cuts (matching Phase 0 values)
-    delta_z_cuts = {"LL": 20.0, "DD": 5.0}
+    data_base = config.get_input_data_base_path()
+    mc_base = config.get_input_mc_base_path() / "Jpsi"
+    years = [year[-2:] for year in (config.get_input_years() or ["2016", "2017", "2018"])]
+    polarities = config.get_input_magnets() or ["MD", "MU"]
+    delta_z_cuts = {cat: config.get_category_delta_z_cut(cat) for cat in ["LL", "DD"]}
 
     output_dir = Path("output")
     output_dir.mkdir(exist_ok=True)
@@ -293,6 +291,7 @@ def main():
             mc_base=mc_base,
             years=years,
             polarities=polarities,
+            config=config,
             mva_model_path=model_path,
             mva_features=mva_features,
             mva_threshold=cat_threshold,
@@ -320,7 +319,7 @@ def main():
         fig.savefig(output_dir / f"weight_map_{category}.pdf")
         plt.close(fig)
 
-    # Phase 4.4: compute systematic variations if requested
+    # Compute systematic variations if requested.
     if args.compute_variations:
         rng = np.random.default_rng(seed=42)
         for cat, nom_w in all_weights.items():

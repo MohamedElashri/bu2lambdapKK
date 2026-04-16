@@ -4,9 +4,9 @@
 # All outputs go to figs/LambdaLL/ and figs/LambdaDD/.
 #
 # Background study figures and reweighting figures are produced by their
-# own study Snakefiles:
-#   studies/background_studies/Snakefile   → figs/*/backgrounds/, figs/*/misID_*
-#   studies/kinematic_reweighting/Snakefile → figs/*/reweight/
+# own workflow Snakefiles:
+#   presentation/background_studies/Snakefile → figs/*/backgrounds/, figs/*/misID_*
+#   studies/kinematic_reweighting/Snakefile   → figs/*/reweight/
 #
 # Scripts in this directory (pure visualization, no study logic):
 #   plot_preselection.py     §3 — preselection cut distributions
@@ -22,7 +22,7 @@
 #   Kinematic weights must exist (for plot_preselection.py weights option).
 #
 # Run from analysis/:
-#   uv run snakemake -s studies/ana_note_plots/Snakefile -j4
+#   uv run snakemake -s presentation/ana_note_plots/Snakefile -j4
 # Or via Make:
 #   make plots
 
@@ -31,7 +31,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
-FIGS    = "studies/ana_note_plots/figs"
+FIGS    = "presentation/ana_note_plots/figs"
 CATS    = ["LL", "DD"]
 STATES  = ["Jpsi", "Etac", "Chic0", "Chic1"]
 
@@ -61,7 +61,7 @@ rule preselection:
         expand(f"{FIGS}/Lambda{{cat}}/L0_M_after_preselection.pdf",               cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/logIPCHI2run2_Sig.pdf",                     cat=CATS),
     shell:
-        "uv run python studies/ana_note_plots/scripts/plot_preselection.py"
+        "uv run python presentation/ana_note_plots/scripts/plot_preselection.py"
 
 rule bdt_variables:
     output:
@@ -70,7 +70,7 @@ rule bdt_variables:
         expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_IPCHI2_Sig.pdf",  cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/bdt_variables/BDT_PT_Sig.pdf",      cat=CATS),
     shell:
-        "../.venv/bin/python studies/ana_note_plots/scripts/plot_bdt_variables.py"
+        "../.venv/bin/python presentation/ana_note_plots/scripts/plot_bdt_variables.py"
 
 rule pid:
     output:
@@ -79,30 +79,30 @@ rule pid:
         expand(f"{FIGS}/Lambda{{cat}}/pidcmp_k1.pdf",cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/pidcmp_k2.pdf",cat=CATS),
     shell:
-        "uv run python studies/ana_note_plots/scripts/plot_pid.py"
+        "uv run python presentation/ana_note_plots/scripts/plot_pid.py"
 
 rule normchannel:
     output:
         expand(f"{FIGS}/Lambda{{cat}}/fit/fit_to_sideband.pdf",               cat=CATS),
         expand(f"{FIGS}/Lambda{{cat}}/fit/fit_ToNormal_Run2MDU_MC_mB.pdf",    cat=CATS),
     shell:
-        "uv run python studies/ana_note_plots/scripts/plot_normchannel.py"
+        "uv run python presentation/ana_note_plots/scripts/plot_normchannel.py"
 
 rule mcfits:
     output:
         expand(f"{FIGS}/Lambda{{cat}}/fit/fit_To{{state}}_Run2MDU_MC.pdf",
                cat=CATS, state=STATES),
     shell:
-        "uv run python studies/ana_note_plots/scripts/plot_mcfits.py"
+        "uv run python presentation/ana_note_plots/scripts/plot_mcfits.py"
 
 rule charmonium_spectrum:
     output:
         expand(f"{FIGS}/Lambda{{cat}}/charmonium_spectrum.pdf", cat=CATS),
     shell:
-        "uv run python studies/ana_note_plots/scripts/plot_charmonium_spectrum.py"
+        "uv run python presentation/ana_note_plots/scripts/plot_charmonium_spectrum.py"
 
 rule datafit:
     output:
         expand(f"{FIGS}/Lambda{{cat}}/fit/fit_todata_signal.pdf", cat=CATS),
     shell:
-        "uv run python studies/ana_note_plots/scripts/plot_datafit.py"
+        "uv run python presentation/ana_note_plots/scripts/plot_datafit.py"

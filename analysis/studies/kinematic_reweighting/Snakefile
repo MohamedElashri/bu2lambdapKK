@@ -4,9 +4,9 @@
 #   from data/MC comparison using J/ψ-tagged events.
 #   Output: output/kinematic_weights_{LL,DD}.json
 #
-# Step 2 (plot_reweighting.py): produce §6 validation figures comparing
-#   data/MC distributions before and after applying the weights.
-#   Output: studies/ana_note_plots/figs/Lambda{LL,DD}/reweight/*.pdf
+# Step 2 (plot_reweighting.py): produce optional presentation validation figures
+#   comparing data/MC distributions before and after applying the weights.
+#   Output: presentation/ana_note_plots/figs/Lambda{LL,DD}/reweight/*.pdf
 #
 # Run from analysis/:
 #   uv run snakemake -s studies/kinematic_reweighting/Snakefile -j2
@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
-ANA_NOTE_FIGS = "studies/ana_note_plots/figs"
+ANA_NOTE_FIGS = "presentation/ana_note_plots/figs"
 WEIGHT_DIR    = "studies/kinematic_reweighting/output"
 CATEGORIES    = ["LL", "DD"]
 
@@ -40,4 +40,4 @@ rule plot_reweighting:
     output:
         expand(f"{ANA_NOTE_FIGS}/Lambda{{cat}}/reweight/reweight_Bu_PT_cmp.pdf", cat=CATEGORIES),
     shell:
-        "uv run python studies/kinematic_reweighting/plot_reweighting.py"
+        "uv run python presentation/validation/plot_reweighting.py"

@@ -1,5 +1,5 @@
 """
-Phase 4.5 — Selection Systematic Uncertainty
+Selection Systematic Uncertainty
 
 Method:
   For the MVA-based selection, the nominal BDT threshold is shifted by ±1 step of the
@@ -38,9 +38,10 @@ THRESHOLD_STEP = 0.01  # one grid step for BDT threshold variation
 
 def load_cut_data(branch: str, category: str, cache_dir: str, config_dir: str) -> dict | None:
     """Load the post-cut (but pre-MVA-threshold) cached data."""
+    config = StudyConfig.from_dir(config_dir)
     cache = CacheManager(cache_dir=cache_dir)
     cut_deps = cache.compute_dependencies(
-        config_files=list(Path(config_dir).glob("*.toml")),
+        config_files=config.config_paths(),
         code_files=[project_root / "scripts" / "apply_cuts.py"],
     )
     return cache.load(f"{branch}_{category}_final_data", dependencies=cut_deps)
@@ -89,8 +90,7 @@ def fit_and_extract(config, data_dict: dict) -> dict:
 def compute_selection_systematics(
     branch: str, category: str, config_dir: str, cache_dir: str, output_dir: str
 ):
-    config_path = Path(config_dir) / "selection.toml"
-    config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+    config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
     data_dict = load_cut_data(branch, category, cache_dir, config_dir)
     if data_dict is None:
@@ -100,12 +100,9 @@ def compute_selection_systematics(
     # Load nominal BDT threshold and features
     mva_dir = project_root / "analysis_output" / "mva"
     cuts_path = mva_dir / branch / category / "models" / "optimized_cuts.json"
-    mva_features = config.fitting.get("xgboost", {}).get(
+    mva_features = config.xgboost.get(
         "features", ["Bu_DTF_chi2", "Bu_FDCHI2_OWNPV", "Bu_IPCHI2_OWNPV", "Bu_PT"]
     )
-    # Fallback: use the selection.toml xgboost section
-    sel_toml = config.data.get("xgboost", {})
-    mva_features = sel_toml.get("features", mva_features)
 
     threshold_nom = 0.89  # conservative default
     if cuts_path.exists():
@@ -169,7 +166,7 @@ def compute_selection_systematics(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Phase 4.5 selection systematic")
+    parser = argparse.ArgumentParser(description="Selection systematic")
     parser.add_argument("--branch", default="high_yield")
     parser.add_argument("--category", default="LL")
     parser.add_argument("--config-dir", default="../../config")

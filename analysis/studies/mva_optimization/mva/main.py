@@ -1,7 +1,7 @@
 """
 Main entry point for MVA Optimization Study
 
-Phase 2 changes:
+Current workflow notes:
 - Accepts --category argument ("LL" or "DD") to train separate models per track category.
 - Per-category models are saved as catboost_bdt_LL.cbm / catboost_bdt_DD.cbm so that
   the main pipeline's optimize_selection.py can load the correct one.

@@ -1,7 +1,7 @@
 """
 Passthrough selection — skips optimisation, applies no additional cuts beyond
 those already applied in load_data (trigger + stripping + Lambda pre-selection
-+ fixed PID > 0.20 + B+ mass window).
++ fixed PID > 0.25 + B+ mass window).
 
 Writes a trivial optimized_cuts.json that apply_cuts.py recognises as
 opt_type == "passthrough", so it simply copies the pre-selected arrays without
@@ -38,7 +38,7 @@ cuts = {
     "note": (
         "No selection optimisation applied. "
         "Sample contains all events passing trigger + stripping + "
-        "Lambda pre-selection + PID > 0.20 + B+ mass window. "
+        "Lambda pre-selection + PID > 0.25 + B+ mass window. "
         "Results are a first-draft order-of-magnitude estimate."
     ),
 }

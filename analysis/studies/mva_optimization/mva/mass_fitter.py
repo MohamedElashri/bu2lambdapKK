@@ -316,7 +316,7 @@ class MassFitter:
         """
         Perform mass fits to all years (per-year AND combined).
 
-        Following Phase 5:
+        Current workflow behavior:
         - Fit each year individually (MagDown + MagUp already combined)
         - Share physical parameters (masses, widths, resolution) across years
         - Extract per-year yields for efficiency correction

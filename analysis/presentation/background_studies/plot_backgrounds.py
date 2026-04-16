@@ -12,7 +12,7 @@ Background MC available:
   KpKp — B+ → Λ̄pK⁺K⁺ (same-sign kaons, mis-ID background)
 
 Run from analysis/ directory:
-    uv run python studies/background_studies/plot_backgrounds.py
+    uv run python presentation/background_studies/plot_backgrounds.py
 """
 
 import logging
@@ -29,16 +29,21 @@ STUDY_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(STUDY_DIR.parents[1]))  # analysis/ for modules.*
 
 from modules.plot_utils import COLORS, figs_path, save_fig, setup_style
+from modules.presentation_config import (
+    HLT1_TOS_KEYS,
+    HLT2_TOS_KEYS,
+    MC15_PID_BRANCHES,
+    MC_L0_TIS_KEYS,
+    get_presentation_config,
+)
 
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-
-M_LAMBDA_PDG = 1115.683
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
-
-# PID product cut for "afterPID" variants
-PID_CUT = 0.20
+PRESENTATION = get_presentation_config()
+MC_BASE = PRESENTATION.mc_base
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
+PID_CUT = PRESENTATION.pid_product_min
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -53,13 +58,9 @@ setup_style()
 
 def _trigger_mask_mc(ev: dict, n: int) -> np.ndarray:
     """Return trigger mask for MC events."""
-    l0_keys = ["Bu_L0Global_TIS", "Bu_L0HadronDecision_TIS"]
-    hlt1_keys = ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"]
-    hlt2_keys = [
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
-    ]
+    l0_keys = MC_L0_TIS_KEYS
+    hlt1_keys = HLT1_TOS_KEYS
+    hlt2_keys = HLT2_TOS_KEYS
     ml0, mhlt1, mhlt2 = (np.zeros(n, dtype=bool) for _ in range(3))
     for k in l0_keys:
         if k in ev:
@@ -83,16 +84,12 @@ def _load_mc_misid(path: Path, cat: str, after_pid: bool = False) -> np.ndarray:
     """Load background MC Bu_DTFL0_M after trigger + Lambda cuts + optional PID."""
     want_scalar = [
         "L0_MM",
-        "p_MC12TuneV4_ProbNNp",
-        "h1_MC12TuneV4_ProbNNk",
-        "h2_MC12TuneV4_ProbNNk",
-        "Bu_L0Global_TIS",
-        "Bu_L0HadronDecision_TIS",
-        "Bu_Hlt1TrackMVADecision_TOS",
-        "Bu_Hlt1TwoTrackMVADecision_TOS",
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
+        MC15_PID_BRANCHES["p"],
+        MC15_PID_BRANCHES["h1"],
+        MC15_PID_BRANCHES["h2"],
+        *MC_L0_TIS_KEYS,
+        *HLT1_TOS_KEYS,
+        *HLT2_TOS_KEYS,
     ]
     tree = uproot.open(path)[f"B2L0barPKpKm_{cat}/DecayTree"]
     avail_sc = [b for b in want_scalar if b in tree.keys()]
@@ -103,11 +100,11 @@ def _load_mc_misid(path: Path, cat: str, after_pid: bool = False) -> np.ndarray:
     bu_dtf = ak.to_numpy(ak.firsts(bu_dtf_raw))
 
     mask = _trigger_mask_mc(ev, len(ev["L0_MM"]))
-    mask = mask & (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = mask & (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
 
     if after_pid:
         pid_prod = np.ones(len(ev["L0_MM"]))
-        for b in ["p_MC12TuneV4_ProbNNp", "h1_MC12TuneV4_ProbNNk", "h2_MC12TuneV4_ProbNNk"]:
+        for b in [MC15_PID_BRANCHES["p"], MC15_PID_BRANCHES["h1"], MC15_PID_BRANCHES["h2"]]:
             if b in avail_sc:
                 pid_prod = pid_prod * ev[b]
         mask = mask & (pid_prod > PID_CUT)

@@ -13,8 +13,8 @@ Re-running a fresh fit with the exact same MassFitter + data is also supported v
 the --refit flag.
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_datafit.py
-    uv run python studies/ana_note_plots/scripts/plot_datafit.py --refit   (re-run fits)
+    uv run python presentation/ana_note_plots/scripts/plot_datafit.py
+    uv run python presentation/ana_note_plots/scripts/plot_datafit.py --refit   (re-run fits)
 """
 
 import argparse
@@ -31,9 +31,10 @@ sys.path.insert(0, str(ANALYSIS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
 from modules.plot_utils import figs_path
+from modules.presentation_config import get_presentation_config
 
-# Pipeline output location (high_yield = Set1 optimized cuts, combined Run2 fit)
-PIPELINE_OUT = SCRIPTS_DIR.parents[2] / "analysis_output" / "mva" / "high_yield"
+PRESENTATION = get_presentation_config()
+PIPELINE_OUT = PRESENTATION.pipeline_output_dir / "high_yield"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -81,17 +82,16 @@ def refit_and_plot(cat: str):
         from modules.config_loader import StudyConfig
         from modules.mass_fitter import MassFitter
 
-    config_path = SCRIPTS_DIR.parents[3] / "config" / "selection.toml"
-    output_dir = str(SCRIPTS_DIR.parents[3] / "analysis_output" / "mva")
-    cache_dir = str(SCRIPTS_DIR.parents[3] / "analysis_output" / "mva" / "cache")
+    output_dir = str(PRESENTATION.pipeline_output_dir)
+    cache_dir = str(PRESENTATION.pipeline_output_dir / "cache")
 
-    config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+    config = StudyConfig.from_dir(PRESENTATION.analysis_dir / "config", output_dir=output_dir)
     cache = CacheManager(cache_dir=cache_dir)
 
     # Try to load cached data (high_yield branch)
     cut_deps = cache.compute_dependencies(
-        config_files=list((SCRIPTS_DIR.parents[3] / "config").glob("*.toml")),
-        code_files=[SCRIPTS_DIR.parents[3] / "scripts" / "apply_cuts.py"],
+        config_files=config.config_paths(),
+        code_files=[PRESENTATION.analysis_dir / "scripts" / "apply_cuts.py"],
     )
     data_dict = cache.load(f"high_yield_{cat}_final_data", dependencies=cut_deps)
 

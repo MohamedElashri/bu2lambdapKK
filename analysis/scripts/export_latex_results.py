@@ -89,7 +89,7 @@ def generate_latex_table(high_path, low_path, output_file, syst_high_path=None, 
         logger.error("Missing branching fraction ratio tables. Cannot generate LaTeX.")
         sys.exit(1)
 
-    # Load Phase 4 systematics (yield-scale) and convert to BF-scale
+    # Load yield-scale systematics and convert them to BF-scale uncertainties.
     syst_high = load_syst_json(Path(syst_high_path)) if syst_high_path else {}
     syst_low = load_syst_json(Path(syst_low_path)) if syst_low_path else {}
 

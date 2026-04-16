@@ -43,13 +43,12 @@ else:
     eff_file = Path(output_dir) / branch / category / "tables" / "efficiencies.csv"
     ratios_file = Path(output_dir) / branch / category / "tables" / "efficiency_ratios.csv"
 
-config_path = Path(config_dir) / "selection.toml"
-config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
 # Re-compute dependencies
 cut_deps = cache.compute_dependencies(
-    config_files=list(Path(config_dir).glob("*.toml")),
+    config_files=config.config_paths(),
     code_files=[project_root / "scripts" / "apply_cuts.py"],
 )
 
@@ -73,10 +72,9 @@ if eff_json_path.exists():
 else:
     logger.warning(f"Efficiency file not found at {eff_json_path}. Using 1.0 placeholders.")
 
-# Get states from config (Phase 5 refactor)
-plotting_cfg = config.fitting.get("plotting", {})
-all_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
-ref_state = plotting_cfg.get("ref_state", "jpsi")
+# Get the active plotting states from shared config.
+all_states = config.get_plotting_states()
+ref_state = config.get_ref_state()
 
 # Mapping between config state names and efficiency study state names
 state_map = {
@@ -107,7 +105,7 @@ for state in all_states:
         note = "From efficiency study"
 
     if not is_placeholder and study_state in eff_data:
-        # Phase 1: efficiency is now computed per-category.
+        # Efficiency is computed per category.
         # Average eff_total over years for this specific category only.
         # The efficiency JSON structure is {state: {category: {year: {efficiencies, errors}}}}.
         effs = []

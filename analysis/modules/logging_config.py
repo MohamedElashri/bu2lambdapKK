@@ -24,7 +24,10 @@ Usage:
 
 import os
 import warnings
+from pathlib import Path
 from typing import Literal
+
+from modules.config_loader import StudyConfig
 
 # ROOT-specific suppression
 try:
@@ -159,15 +162,8 @@ def show_data_loading_messages() -> bool:
 
     # Otherwise read from config file
     try:
-        from pathlib import Path
-
-        import tomli
-
-        config_path = Path(__file__).parent.parent / "config" / "data.toml"
-        if config_path.exists():
-            with open(config_path, "rb") as f:
-                config = tomli.load(f)
-                return config.get("verbosity", {}).get("show_data_loading_messages", True)
+        config = StudyConfig.from_dir(Path(__file__).parent.parent / "config")
+        return config.data_config.get("verbosity", {}).get("show_data_loading_messages", True)
     except Exception:
         pass
 

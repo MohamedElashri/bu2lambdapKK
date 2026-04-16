@@ -12,7 +12,7 @@ Produces:
   figs/LambdaDD/logIPCHI2run2_Sig.pdf
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_preselection.py
+    uv run python presentation/ana_note_plots/scripts/plot_preselection.py
 """
 
 import logging
@@ -32,13 +32,19 @@ sys.path.insert(0, str(ANALYSIS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
 from modules.plot_utils import BINNING, COLORS, figs_path, plot_data, save_fig, setup_style
+from modules.presentation_config import MC15_PID_BRANCHES, get_presentation_config
 
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-
-M_LAMBDA_PDG = 1115.683
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
+PRESENTATION = get_presentation_config()
+DATA_BASE = PRESENTATION.data_base
+MC_BASE = PRESENTATION.mc_base
+M_LAMBDA_PDG = PRESENTATION.lambda_mass_pdg
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
+PID_CUT = PRESENTATION.pid_product_min
+SB_LO, SB_HI = PRESENTATION.bu_sideband_windows()
+SIG_LO, SIG_HI = PRESENTATION.bu_signal_window()
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -88,8 +94,10 @@ def _trigger_mask(ev, is_mc: bool) -> ak.Array:
 
 
 def _pid_key(branch: str, is_mc: bool) -> str:
-    tune = "MC12TuneV4" if is_mc else "MC15TuneV1"
-    return f"{branch}_{tune}_ProbNNp"
+    del is_mc
+    if branch == "Lp":
+        return MC15_PID_BRANCHES["lp"]
+    return MC15_PID_BRANCHES["p"]
 
 
 def _load_events(
@@ -103,11 +111,7 @@ def _load_events(
 ) -> ak.Array:
     """Generic loader: trigger + optional Lambda mass window + optional B+ sideband/signal."""
     lp_pid_key = _pid_key("Lp", is_mc)
-    pid_branches = (
-        ["p_MC12TuneV4_ProbNNp", "h1_MC12TuneV4_ProbNNk", "h2_MC12TuneV4_ProbNNk"]
-        if is_mc
-        else ["p_MC15TuneV1_ProbNNp", "h1_MC15TuneV1_ProbNNk", "h2_MC15TuneV1_ProbNNk"]
-    )
+    pid_branches = [MC15_PID_BRANCHES["p"], MC15_PID_BRANCHES["h1"], MC15_PID_BRANCHES["h2"]]
     want = [
         "L0_MM",
         "Bu_MM",
@@ -178,13 +182,13 @@ def _load_events(
 
     # Lambda mass window (optional)
     if after_lambda_window:
-        ev = ev[(ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)]
+        ev = ev[(ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)]
 
     # PID product cut (optional)
     if pid_cut > 0:
-        p_b = "p_MC12TuneV4_ProbNNp" if is_mc else "p_MC15TuneV1_ProbNNp"
-        h1_b = "h1_MC12TuneV4_ProbNNk" if is_mc else "h1_MC15TuneV1_ProbNNk"
-        h2_b = "h2_MC12TuneV4_ProbNNk" if is_mc else "h2_MC15TuneV1_ProbNNk"
+        p_b = MC15_PID_BRANCHES["p"]
+        h1_b = MC15_PID_BRANCHES["h1"]
+        h2_b = MC15_PID_BRANCHES["h2"]
         pid = ak.ones_like(ev["Bu_PT"])
         for b in [p_b, h1_b, h2_b]:
             if b in ev.fields:
@@ -194,10 +198,12 @@ def _load_events(
     # Data: B+ mass sidebands or signal window; MC: full range
     if sideband_only and not is_mc:
         mass = ak.to_numpy(ev["Bu_MM_corrected"])
-        ev = ev[((mass >= 5150) & (mass <= 5230)) | ((mass >= 5330) & (mass <= 5410))]
+        ev = ev[
+            ((mass >= SB_LO[0]) & (mass <= SB_LO[1])) | ((mass >= SB_HI[0]) & (mass <= SB_HI[1]))
+        ]
     elif signal_window and not is_mc:
         mass = ak.to_numpy(ev["Bu_MM_corrected"])
-        ev = ev[(mass >= 5255) & (mass <= 5305)]
+        ev = ev[(mass >= SIG_LO) & (mass <= SIG_HI)]
     return ev
 
 
@@ -406,9 +412,9 @@ def plot_bu_mass_sideband(cat: str, data_ev):
     plot_data(ax, mass, "Sideband data", {"range": (bmin, bmax), "bins": nbins}, color="black")
 
     # Mark signal window
-    ax.axvspan(5255, 5305, alpha=0.15, color=COLORS[2], label="Signal window")
-    ax.axvline(5255, color=COLORS[2], linestyle="--", linewidth=1.5)
-    ax.axvline(5305, color=COLORS[2], linestyle="--", linewidth=1.5)
+    ax.axvspan(SIG_LO, SIG_HI, alpha=0.15, color=COLORS[2], label="Signal window")
+    ax.axvline(SIG_LO, color=COLORS[2], linestyle="--", linewidth=1.5)
+    ax.axvline(SIG_HI, color=COLORS[2], linestyle="--", linewidth=1.5)
 
     ax.set_xlabel(r"$m_{\rm corr}(B^+)$ [MeV/$c^2$]")
     ax.set_ylabel(rf"Candidates / ({int(width)} MeV/$c^2$)")
@@ -422,7 +428,7 @@ def plot_lambda_mass_after_presel_toplevel(cat: str, data_ev, mc_ev):
     """
     L0_M_after_preselection.pdf — top-level file.
     Lambda mass after trigger (before Lambda mass window), showing where the
-    [1108,1126] MeV selection window is applied.
+    current configured selection window is applied.
     """
     log.info(f"  L0_M_after_preselection (top-level) [{cat}]")
     bins = _bins("lambda_mass_full")  # 1 MeV/bin, full stripping range
@@ -457,8 +463,8 @@ def plot_lambda_mass_after_presel_toplevel(cat: str, data_ev, mc_ev):
             color=COLORS[0],
         )
     # Mark the preselection mass window
-    ax.axvline(1108, color=COLORS[3], linestyle="--", linewidth=1.5)
-    ax.axvline(1126, color=COLORS[3], linestyle="--", linewidth=1.5)
+    ax.axvline(LAMBDA_MIN, color=COLORS[3], linestyle="--", linewidth=1.5)
+    ax.axvline(LAMBDA_MAX, color=COLORS[3], linestyle="--", linewidth=1.5)
     ax.set_xlabel(r"$m(p\pi^-)$ [MeV/$c^2$]")
     ax.set_ylabel(rf"Candidates / ({width} MeV/$c^2$)")
     ax.legend(frameon=False)
@@ -548,7 +554,7 @@ def main():
         plot_bu_mass_sideband(cat, data_ev)
         del data_ev, mc_ev
 
-        # ── Load 3: full selection (signal window + PID > 0.20) — for logIPCHI2 ──
+        # ── Load 3: full selection (signal window + configured PID pre-cut) — for logIPCHI2 ──
         log.info("  Loading for logIPCHI2 (final selection)...")
         data_final = _collect(
             _load_events,
@@ -557,7 +563,7 @@ def main():
             after_lambda_window=True,
             sideband_only=False,
             signal_window=True,
-            pid_cut=0.20,
+            pid_cut=PID_CUT,
         )
         mc_final = _collect(
             _load_events,
@@ -566,7 +572,7 @@ def main():
             after_lambda_window=True,
             sideband_only=False,
             signal_window=False,
-            pid_cut=0.20,
+            pid_cut=PID_CUT,
         )
         plot_log_ipchi2(cat, data_final, mc_final)
         del data_final, mc_final

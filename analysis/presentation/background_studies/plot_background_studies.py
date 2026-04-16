@@ -10,7 +10,7 @@ Produces three sets of plots documenting the actual background studies:
 
 2. Non-resonant B+ → Λ̄pK⁻K⁺ shape (plot_nonresonant_shape):
    Show M(Λ̄pK⁻) and B+ corrected mass for phase-space KpKm MC after applying the
-   B+ corrected mass signal window [5255, 5305] MeV.  Demonstrates the smooth
+   configured B+ corrected mass signal window.  Demonstrates the smooth
    phase-space shape absorbed by the ARGUS background.
 
 3. Partial-reconstruction study (plot_partial_reco):
@@ -33,7 +33,7 @@ Outputs (per category LL/DD):
    figs/LambdaDD/backgrounds/partial_reco.pdf
 
 Run from analysis/ directory:
-    uv run python studies/background_studies/plot_background_studies.py
+    uv run python presentation/background_studies/plot_background_studies.py
 """
 
 from __future__ import annotations
@@ -55,6 +55,13 @@ STUDY_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(STUDY_DIR.parents[1]))  # analysis/ for modules.*
 
 from modules.plot_utils import COLORS, figs_path, save_fig, setup_style
+from modules.presentation_config import (
+    DATA_L0_TIS_KEYS,
+    HLT1_TOS_KEYS,
+    HLT2_TOS_KEYS,
+    MC_L0_TIS_KEYS,
+    get_presentation_config,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -62,25 +69,24 @@ log = logging.getLogger(__name__)
 setup_style()
 
 # ── Physics constants ─────────────────────────────────────────────────────────
-M_LAMBDA_PDG = 1115.683  # MeV/c²
 M_PI = 139.57018  # MeV/c²
 M_KS0_PDG = 497.611  # MeV/c²  (for labelling only)
 KS0_VETO_HALF_WIDTH = 20.0  # MeV/c²
-BU_CORR_MIN = 5255.0  # MeV/c²  B+ signal window
-BU_CORR_MAX = 5305.0
 BU_PDG = 5279.34
-LAMBDA_MIN = 1108.0  # MeV/c²  offline Λ mass window
-LAMBDA_MAX = 1126.0
 PARTIAL_RECO_FIT_MIN = 5100.0
 PARTIAL_RECO_FIT_MAX = 5450.0
-PARTIAL_RECO_WINDOW_SUMMARY = (BU_CORR_MIN, BU_CORR_MAX)
 
 # ── File paths ────────────────────────────────────────────────────────────────
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
+PRESENTATION = get_presentation_config()
+DATA_BASE = PRESENTATION.data_base
+MC_BASE = PRESENTATION.mc_base
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+M_LAMBDA_PDG = PRESENTATION.lambda_mass_pdg
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
+BU_CORR_MIN, BU_CORR_MAX = PRESENTATION.bu_signal_window()
+PARTIAL_RECO_WINDOW_SUMMARY = (BU_CORR_MIN, BU_CORR_MAX)
 
 TREE_NAMES = {"LL": "B2L0barPKpPim_LL/DecayTree", "DD": "B2L0barPKpPim_DD/DecayTree"}
 KPKM_TREE = {"LL": "B2L0barPKpKm_LL/DecayTree", "DD": "B2L0barPKpKm_DD/DecayTree"}
@@ -92,14 +98,10 @@ KPKM_TREE = {"LL": "B2L0barPKpKm_LL/DecayTree", "DD": "B2L0barPKpKm_DD/DecayTree
 
 
 def _trigger_mask(ev: dict, n: int) -> np.ndarray:
-    """Standard trigger selection: L0 TIS or TOS, HLT1 TOS, HLT2 TOS."""
-    l0_keys = ["Bu_L0Global_TIS", "Bu_L0HadronDecision_TOS"]
-    hlt1_keys = ["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"]
-    hlt2_keys = [
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
-    ]
+    """Standard trigger selection: L0 TIS, HLT1 TOS, HLT2 TOS."""
+    l0_keys = MC_L0_TIS_KEYS
+    hlt1_keys = HLT1_TOS_KEYS
+    hlt2_keys = HLT2_TOS_KEYS
     ml0 = np.zeros(n, dtype=bool)
     for k in l0_keys:
         if k in ev:
@@ -183,13 +185,9 @@ def _load_data_for_ks0(cat: str) -> tuple[np.ndarray, np.ndarray]:
         "Lpi_PX",
         "Lpi_PY",
         "Lpi_PZ",
-        "Bu_L0Global_TIS",
-        "Bu_L0HadronDecision_TOS",
-        "Bu_Hlt1TrackMVADecision_TOS",
-        "Bu_Hlt1TwoTrackMVADecision_TOS",
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
+        *DATA_L0_TIS_KEYS,
+        *HLT1_TOS_KEYS,
+        *HLT2_TOS_KEYS,
     ]
     tree_name = TREE_NAMES[cat]
     mpipi_arrs = []
@@ -386,13 +384,9 @@ def _load_kpkm_mc(cat: str) -> tuple[np.ndarray, np.ndarray]:
         "h2_PX",
         "h2_PY",
         "h2_PZ",
-        "Bu_L0Global_TIS",
-        "Bu_L0HadronDecision_TOS",
-        "Bu_Hlt1TrackMVADecision_TOS",
-        "Bu_Hlt1TwoTrackMVADecision_TOS",
-        "Bu_Hlt2Topo2BodyDecision_TOS",
-        "Bu_Hlt2Topo3BodyDecision_TOS",
-        "Bu_Hlt2Topo4BodyDecision_TOS",
+        *MC_L0_TIS_KEYS,
+        *HLT1_TOS_KEYS,
+        *HLT2_TOS_KEYS,
     ]
     tree_name = KPKM_TREE[cat]
     mlpk_all = []
@@ -538,7 +532,7 @@ def _flatten_numeric(arr: np.ndarray) -> np.ndarray:
 
 def _load_mva_working_point(cat: str) -> tuple[CatBoostClassifier, float, list[str]]:
     """Load the deployed high-yield CatBoost model and threshold for one category."""
-    model_dir = STUDY_DIR.parents[1] / "analysis_output" / "mva" / "high_yield" / cat / "models"
+    model_dir = PRESENTATION.pipeline_output_dir / "high_yield" / cat / "models"
     model = CatBoostClassifier()
     model.load_model(str(model_dir / "mva_model.cbm"))
     with open(model_dir / "optimized_cuts.json", "r") as f:
@@ -567,7 +561,9 @@ def _load_post_mva_bcorr(cat: str) -> np.ndarray:
     """
     model, threshold, features = _load_mva_working_point(cat)
     tree_name = KPKM_TREE[cat]
-    delta_z_cut = 20.0 if cat == "LL" else 5.0
+    baseline_cfg = PRESENTATION.config.get_baseline_reduction()
+    lambda_cfg = PRESENTATION.config.get_lambda_preselection(cat)
+    delta_z_cut = float(lambda_cfg["delta_z_min"])
 
     branches = [
         "Bu_MM",
@@ -665,20 +661,27 @@ def _load_post_mva_bcorr(cat: str) -> np.ndarray:
                     pid_product = np.asarray(chunk["p_MC15TuneV1_ProbNNp"]) * prod_prob_kk
 
                     mask = mask_l0 & mask_hlt1 & mask_hlt2
-                    mask &= np.asarray(chunk["Bu_FDCHI2_OWNPV"]) > 175.0
-                    mask &= np.asarray(chunk["Bu_IPCHI2_OWNPV"]) < 10.0
-                    mask &= delta_z > 2.5
-                    mask &= np.asarray(chunk["Lp_MC15TuneV1_ProbNNp"]) > 0.05
-                    mask &= np.asarray(chunk["p_MC15TuneV1_ProbNNp"]) > 0.05
-                    mask &= prod_prob_kk > 0.05
-                    mask &= np.asarray(chunk["Bu_PT"]) > 3000.0
+                    mask &= np.asarray(chunk["Bu_FDCHI2_OWNPV"]) > baseline_cfg["bu_fdchi2_min"]
+                    mask &= np.asarray(chunk["Bu_IPCHI2_OWNPV"]) < baseline_cfg["bu_ipchi2_max"]
+                    mask &= delta_z > baseline_cfg["delta_z_min"]
+                    mask &= (
+                        np.asarray(chunk["Lp_MC15TuneV1_ProbNNp"]) > baseline_cfg["lp_probnnp_min"]
+                    )
+                    mask &= (
+                        np.asarray(chunk["p_MC15TuneV1_ProbNNp"]) > baseline_cfg["p_probnnp_min"]
+                    )
+                    mask &= prod_prob_kk > baseline_cfg["hh_probnnk_prod_min"]
+                    mask &= np.asarray(chunk["Bu_PT"]) > baseline_cfg["bu_pt_min"]
 
-                    mask &= np.asarray(chunk["L0_MM"]) > 1111.0
-                    mask &= np.asarray(chunk["L0_MM"]) < 1121.0
-                    mask &= np.asarray(chunk["L0_FDCHI2_OWNPV"]) > 50.0
+                    mask &= np.asarray(chunk["L0_MM"]) > lambda_cfg["mass_min"]
+                    mask &= np.asarray(chunk["L0_MM"]) < lambda_cfg["mass_max"]
+                    mask &= np.asarray(chunk["L0_FDCHI2_OWNPV"]) > lambda_cfg["fd_chisq_min"]
                     mask &= delta_z > delta_z_cut
-                    mask &= np.asarray(chunk["Lp_MC15TuneV1_ProbNNp"]) > 0.30
-                    mask &= pid_product > 0.20
+                    mask &= (
+                        np.asarray(chunk["Lp_MC15TuneV1_ProbNNp"])
+                        > lambda_cfg["proton_probnnp_min"]
+                    )
+                    mask &= pid_product > lambda_cfg["pid_product_min"]
 
                     if not np.any(mask):
                         continue

@@ -96,9 +96,10 @@ no_charmonium_mass_min = 4000.0
 seq_step1_vars = ["bu_dtf_chi2", "bu_fdchi2", "bu_ipchi2"]
 seq_step2_vars = ["bu_pt"]
 # NOTE: pid_product removed — no [nd_optimizable_selection.pid_product] section exists,
-# and proxy-based PID optimization is fundamentally broken (see studies/pid_optimization_study).
-# PID is handled either as a fixed pre-cut (pid_product_min = 0.20 above) or via the
-# fit-based optimizer in studies/pid_optimization_study/scripts/fit_based_scan.py.
+# and proxy-based PID optimization is fundamentally broken (see
+# studies/standalone/pid_optimization_study/).
+# PID is handled either as a fixed pre-cut (pid_product_min = 0.25 above) or via the
+# standalone fit-based optimizer in studies/standalone/pid_optimization_study/scripts/fit_based_scan.py.
 signal_scale_factor = 10000.0
 state_dependent = false
 
@@ -127,10 +128,13 @@ center = 3096.916
 window = 15.0
 
 [xgboost]
+# Legacy section name retained for compatibility with the current scripts.
+# The active production artifact is a CatBoost model, but the feature list and
+# random-seed settings are still read from this `[xgboost]` block.
 # PID variables (p_ProbNNp, h1_ProbNNk, h2_ProbNNk) removed from BDT feature set.
 # Reason: sideband training background has higher PID quality than true combinatorial
 # background in signal window → BDT learns wrong direction in PID space.
-# PID > 0.20 is applied as a fixed pre-cut before BDT evaluation.
+# PID > 0.25 is applied as a fixed pre-cut before BDT evaluation.
 features = [
   "Bu_DTF_chi2",
   "Bu_FDCHI2_OWNPV",

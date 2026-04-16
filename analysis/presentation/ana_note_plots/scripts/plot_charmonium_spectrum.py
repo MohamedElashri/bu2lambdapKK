@@ -7,16 +7,15 @@ Produces:
   figs/LambdaLL/backgrounds/charmonium_sideband.pdf
   figs/LambdaDD/backgrounds/charmonium_sideband.pdf
 
-The main note plot shows m(Λ̄pK⁻) for events in the B+ signal window
-[5255, 5305] MeV after the shared current preselection, with the scaled B+ sideband
-estimate overlaid.
+The main note plot shows m(Λ̄pK⁻) for events in the configured B+ signal window
+after the shared current preselection, with the scaled B+ sideband estimate overlaid.
 
 The background diagnostic plot shows only the B+ sideband data in m(Λ̄pK⁻).
 It is used to verify that the combinatorial B+ sidebands do not contain
 peaking charmonium structure.
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_charmonium_spectrum.py
+    uv run python presentation/ana_note_plots/scripts/plot_charmonium_spectrum.py
 """
 
 import logging
@@ -35,19 +34,14 @@ sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modul
 
 from modules.clean_data_loader import load_all_data
 from modules.plot_utils import COLORS, figs_path, save_fig, setup_style
+from modules.presentation_config import get_presentation_config
 
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-
-M_LAMBDA_PDG = 1115.683
-YEARS = [2016, 2017, 2018]
-
-# B+ windows (MeV, using corrected mass)
-SIG_LO, SIG_HI = 5255, 5305  # signal window (50 MeV wide)
-SB1_LO, SB1_HI = 5150, 5230  # lower sideband (80 MeV)
-SB2_LO, SB2_HI = 5330, 5410  # upper sideband (80 MeV)
-SB_TOTAL_WIDTH = (SB1_HI - SB1_LO) + (SB2_HI - SB2_LO)  # 160 MeV
-SIG_WIDTH = SIG_HI - SIG_LO  # 50 MeV
-SB_SCALE = SIG_WIDTH / SB_TOTAL_WIDTH  # 50/160
+PRESENTATION = get_presentation_config()
+DATA_BASE = PRESENTATION.data_base
+YEARS = list(PRESENTATION.year_ints)
+SIG_LO, SIG_HI = PRESENTATION.bu_signal_window()
+(SB1_LO, SB1_HI), (SB2_LO, SB2_HI) = PRESENTATION.bu_sideband_windows()
+SB_SCALE = PRESENTATION.sideband_scale()
 
 # Charmonium spectrum range and binning
 CC_LO, CC_HI = 2700, 4100

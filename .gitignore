@@ -198,6 +198,7 @@ efficiencies.md
 
 ## analysis output directory
 analysis_output/
+analysis_output_validation/
 
 ## all md files except README.md
 *.md

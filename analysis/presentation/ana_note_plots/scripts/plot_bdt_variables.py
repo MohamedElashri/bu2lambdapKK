@@ -17,7 +17,7 @@ Strategy:
   - Compare to post-selection J/psi MC, normalized to unit area.
 
 Run from analysis/ directory:
-    ../.venv/bin/python studies/ana_note_plots/scripts/plot_bdt_variables.py
+    ../.venv/bin/python presentation/ana_note_plots/scripts/plot_bdt_variables.py
 """
 
 from __future__ import annotations
@@ -37,14 +37,15 @@ ANALYSIS_DIR = SCRIPTS_DIR.resolve().parents[2]
 sys.path.insert(0, str(ANALYSIS_DIR))
 
 from modules.plot_utils import COLORS, figs_path, save_fig, setup_style
+from modules.presentation_config import get_presentation_config
 
-M_B_LOW = 5255.0
-M_B_HIGH = 5305.0
+PRESENTATION = get_presentation_config()
+M_B_LOW, M_B_HIGH = PRESENTATION.bu_signal_window()
 M_JPSI = 3096.9
 JPSI_WINDOW = 30.0
 
-CACHE_META_DIR = ANALYSIS_DIR / "analysis_output" / "mva" / "cache" / "metadata"
-CACHE_DATA_DIR = ANALYSIS_DIR / "analysis_output" / "mva" / "cache" / "data"
+CACHE_META_DIR = PRESENTATION.pipeline_output_dir / "cache" / "metadata"
+CACHE_DATA_DIR = PRESENTATION.pipeline_output_dir / "cache" / "data"
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)

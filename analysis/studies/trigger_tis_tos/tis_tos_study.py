@@ -27,12 +27,12 @@ if str(_ANALYSIS_DIR) not in sys.path:
 
 
 def apply_lambda_selection(tree, category):
-    """Apply standard lambda pre-selection (Phase 0 values).
+    """Apply the current standard lambda pre-selection.
 
-    Changes from original:
+    Current definitions:
     - Lambda FD chi2 lowered: 250 → 50 (allows optimizer to scan the range freely).
     - Delta_Z is now category-aware: LL uses 20 mm, DD uses 5 mm.
-    - PID_product > 0.20 added as fixed pre-cut (validated by fit_based_optimizer study).
+    - PID_product > 0.25 added as fixed pre-cut (validated by the fit-based PID study).
     """
     l0_mass = tree["L0_M"].array()
     l0_fdchi2 = tree["L0_FDCHI2_OWNPV"].array()
@@ -49,7 +49,7 @@ def apply_lambda_selection(tree, category):
 
     expected_lambda_track_type = 3 if category == "LL" else 5
 
-    # Category-aware Delta_Z cut (Phase 0)
+    # Category-aware Delta_Z cut
     delta_z_cut = 20.0 if category == "LL" else 5.0
 
     # PID variables for fixed pre-cut
@@ -60,10 +60,10 @@ def apply_lambda_selection(tree, category):
     mask = (
         (l0_mass > 1111.0)
         & (l0_mass < 1121.0)
-        & (l0_fdchi2 > 50.0)  # Phase 0: was 250
-        & ((l0_end_z - bu_end_z) > delta_z_cut)  # Phase 0: category-aware
+        & (l0_fdchi2 > 50.0)  # updated from the older 250 threshold
+        & ((l0_end_z - bu_end_z) > delta_z_cut)  # category-aware
         & (lp_probnnp > 0.3)
-        & ((p_probnnp * h1_probnnk * h2_probnnk) > 0.20)  # Phase 0: fixed PID pre-cut
+        & ((p_probnnp * h1_probnnk * h2_probnnk) > 0.25)  # fixed PID pre-cut
         & (p_track == 3)
         & (h1_track == 3)
         & (h2_track == 3)

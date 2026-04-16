@@ -4,7 +4,7 @@ Data Preparation for CatBoost BDT Training
 Signal:     MC (all charmonium states combined)
 Background: Data upper mass sideband (Bu_MM_corrected > 5330 MeV)
 
-Phase 2 changes:
+Current workflow notes:
 - Accepts a `category` parameter ("LL" or "DD") so that separate models can be
   trained per track category, following the LL/DD-separated pipeline.
 - Uses the main pipeline's cache (preprocessed_data / preprocessed_mc) rather than
@@ -67,11 +67,10 @@ def load_and_prepare_data(config, category: str = "LL"):
         )
 
     # Load the main pipeline config to get the cache dependency hash
-    main_config_path = analysis_dir / "config" / "selection.toml"
-    main_config = StudyConfig(config_file=str(main_config_path), output_dir=str(cache_dir.parent))
+    main_config = StudyConfig.from_dir(analysis_dir / "config", output_dir=str(cache_dir.parent))
     cache = CacheManager(cache_dir=str(cache_dir))
     deps = cache.compute_dependencies(
-        config_files=list((analysis_dir / "config").glob("*.toml")),
+        config_files=main_config.config_paths(),
         code_files=[
             analysis_dir / "modules" / "clean_data_loader.py",
             analysis_dir / "scripts" / "load_data.py",

@@ -7,13 +7,16 @@
 #   snakemake --config years="[2016]"      # Override config
 #   snakemake --dag | dot -Tpdf > dag.pdf  # Visualize DAG
 #
-# Standalone studies live in analysis/studies/<study_name>/ with their own Snakefiles.
+# The top-level Snakefile is the authoritative DAG for active studies, the main
+# analysis pipeline, systematics aggregation, and optional presentation plots.
 #
-# Phase 1 change: LL and DD Lambda categories are now processed separately through
-# rules 3–6 (optimize → apply_cuts → mass_fitting → efficiency_calculation).
-# They are combined only at rule 7 (branching_ratios), following the reference analysis.
+# LL and DD Lambda categories are processed separately through rules 3-6
+# (optimize -> apply_cuts -> mass_fitting -> efficiency_calculation). They are
+# combined only at rule 7 (branching_ratios), following the reference analysis.
 
 configfile: "snakemake_config.yaml"
+
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Global configuration
@@ -33,21 +36,17 @@ NO_CACHE = config.get("no_cache", False)
 CATEGORIES = TRACK_TYPES  # ["LL", "DD"]
 BRANCHES = ["high_yield", "low_yield"]
 
-import re
-from pathlib import Path
+from modules.config_loader import StudyConfig
 
 # Determine optimization type (prioritize --config opt_method=... over selection.toml)
-selection_path = Path(CONFIG_DIR) / "selection.toml"
 OPT_METHOD = config.get("opt_method")
+study_config = StudyConfig.from_dir(CONFIG_DIR)
 
 if not OPT_METHOD:
     try:
-        with open(selection_path, "r") as f:
-            content = f.read()
-            match = re.search(r'optimization_type\s*=\s*"([^"]+)"', content)
-            if match:
-                OPT_METHOD = match.group(1)
+        OPT_METHOD = study_config.get_optimization_type()
     except Exception as e:
+        selection_path = Path(CONFIG_DIR) / "selection.toml"
         print(f"Warning: Could not read {selection_path}: {e}. Defaulting to 'box'")
 
 if not OPT_METHOD:
@@ -69,6 +68,7 @@ CONFIG_FILES = [
         "detector.toml",
         "fitting.toml",
         "selection.toml",
+        "generator_effs.toml",
         "triggers.toml",
         "data.toml",
         "efficiencies.toml",
@@ -79,21 +79,43 @@ CONFIG_FILES = [
 ]
 
 # ---------------------------------------------------------------------------
+# Workflow path conventions
+# ---------------------------------------------------------------------------
+MVA_MODEL_PATTERN = "studies/mva_optimization/output/models/catboost_bdt_{category}.cbm"
+MVA_REPORT_PATTERN = "studies/mva_optimization/output/mva_optimization_report_{category}.txt"
+MVA_COMPLETED = "studies/mva_optimization/mva_optimization_completed.txt"
+
+TRIGGER_JSON = "studies/trigger_tis_tos/output/tis_tos_results.json"
+TRIGGER_TXT = "studies/trigger_tis_tos/output/tis_tos_results.txt"
+
+KIN_WEIGHT_LL = "studies/kinematic_reweighting/output/kinematic_weights_LL.json"
+KIN_WEIGHT_DD = "studies/kinematic_reweighting/output/kinematic_weights_DD.json"
+KIN_WEIGHT_COMBINED = "studies/kinematic_reweighting/output/kinematic_weights.json"
+KIN_WEIGHT_MAP_LL = "studies/kinematic_reweighting/output/weight_map_LL.pdf"
+KIN_WEIGHT_MAP_DD = "studies/kinematic_reweighting/output/weight_map_DD.pdf"
+
+EFFICIENCY_JSON = "studies/efficiency_steps/output/efficiencies.json"
+EFFICIENCY_TABLES = "studies/efficiency_steps/output/efficiencies_tables.md"
+
+PID_BOOTSTRAP_JSON = "studies/pid_cancellation/output/pid_bootstrap_systematics.json"
+PID_BOOTSTRAP_MD = "studies/pid_cancellation/output/real_pidcalib_results.md"
+PID_BOOTSTRAP_PDF = "studies/pid_cancellation/output/real_ratio_condensed_panel.pdf"
+PID_BOOTSTRAP_PNG = "studies/pid_cancellation/output/real_ratio_condensed_panel.png"
+
+NOTE_FIGS = "presentation/ana_note_plots/figs"
+NOTE_CATEGORIES = ["LL", "DD"]
+NOTE_STATES = ["Jpsi", "Etac", "Chic0", "Chic1"]
+
+COLLECTED_RESULTS_DIR = "results"
+HEP_REPORT_TEX = "results/final/hep_results.tex"
+HEP_REPORT_TXT = "results/final/hep_results.txt"
+
+# ---------------------------------------------------------------------------
 # rule all — final targets
 # ---------------------------------------------------------------------------
 rule all:
     input:
-        expand(
-            f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
-            branch=BRANCHES,
-        ),
-        expand(
-            f"{OUTPUT_DIR}/{{branch}}/LL_DD/tables/fitted_yields_combined.csv",
-            branch=BRANCHES,
-        ),
-        f"{OUTPUT_DIR}/comparison/branch_comparison.md",
-        f"{OUTPUT_DIR}/results/bf_products.tex",
-        f"{OUTPUT_DIR}/results/systematics_summary.md",
+        f"{OUTPUT_DIR}/.workflow_complete",
 
 # ---------------------------------------------------------------------------
 # Step 1: Config validation
@@ -131,6 +153,185 @@ rule load_data:
         "scripts/load_data.py"
 
 # ---------------------------------------------------------------------------
+# Active prerequisite studies
+# These are wired into the top-level DAG so the Makefile can stay a thin
+# wrapper over one Snakemake workflow instead of launching nested sub-workflows.
+# ---------------------------------------------------------------------------
+rule study_mva:
+    input:
+        f"{OUTPUT_DIR}/.data_loaded",
+    output:
+        ll_model="studies/mva_optimization/output/models/catboost_bdt_LL.cbm",
+        dd_model="studies/mva_optimization/output/models/catboost_bdt_DD.cbm",
+        ll_report="studies/mva_optimization/output/mva_optimization_report_LL.txt",
+        dd_report="studies/mva_optimization/output/mva_optimization_report_DD.txt",
+        completed=MVA_COMPLETED,
+    shell:
+        """
+        cd studies/mva_optimization/mva
+        uv run python main.py --category both
+        """
+
+
+rule study_trigger:
+    output:
+        json=TRIGGER_JSON,
+        txt=TRIGGER_TXT,
+    params:
+        config_dir=CONFIG_DIR,
+    shell:
+        """
+        uv run python studies/trigger_tis_tos/tis_tos_study.py \
+            --config-dir {params.config_dir} \
+            --output-dir studies/trigger_tis_tos/output \
+            > {output.txt}
+        """
+
+
+rule study_reweighting:
+    output:
+        ll=KIN_WEIGHT_LL,
+        dd=KIN_WEIGHT_DD,
+        combined=KIN_WEIGHT_COMBINED,
+        map_ll=KIN_WEIGHT_MAP_LL,
+        map_dd=KIN_WEIGHT_MAP_DD,
+    params:
+        config_dir=CONFIG_DIR,
+        branch="high_yield",
+    shell:
+        """
+        uv run python studies/kinematic_reweighting/derive_weights.py \
+            --config-dir {params.config_dir} \
+            --branch {params.branch}
+        """
+
+
+rule study_efficiency:
+    input:
+        tis_tos=TRIGGER_JSON,
+        kin_ll=KIN_WEIGHT_LL,
+        kin_dd=KIN_WEIGHT_DD,
+    output:
+        json=EFFICIENCY_JSON,
+        tables=EFFICIENCY_TABLES,
+    params:
+        config_dir=CONFIG_DIR,
+        mva_output_dir=f"{ROOT_OUTPUT_DIR}/mva",
+        branch="high_yield",
+    shell:
+        """
+        uv run python studies/efficiency_steps/calculate_efficiencies.py \
+            --config-dir {params.config_dir} \
+            --output {output.json} \
+            --tis-tos {input.tis_tos} \
+            --kin-weights-dir studies/kinematic_reweighting/output \
+            --mva-output-dir {params.mva_output_dir} \
+            --branch {params.branch}
+        """
+
+
+rule study_pid_bootstrap:
+    output:
+        json=PID_BOOTSTRAP_JSON,
+        md=PID_BOOTSTRAP_MD,
+        pdf=PID_BOOTSTRAP_PDF,
+        png=PID_BOOTSTRAP_PNG,
+    shell:
+        """
+        cd studies/pid_cancellation
+        uv run python apply_pidcalib.py --bootstrap-n 100 --bootstrap-seed 42
+        """
+
+
+rule prerequisite_studies:
+    input:
+        MVA_COMPLETED,
+        expand(MVA_MODEL_PATTERN, category=NOTE_CATEGORIES),
+        TRIGGER_JSON,
+        KIN_WEIGHT_LL,
+        KIN_WEIGHT_DD,
+        EFFICIENCY_JSON,
+    output:
+        f"{OUTPUT_DIR}/.studies_complete",
+    shell:
+        "touch {output}"
+
+
+# ---------------------------------------------------------------------------
+# Presentation workflows
+# ---------------------------------------------------------------------------
+rule plot_backgrounds:
+    output:
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/backgrounds/ks0_veto.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/backgrounds/nonresonant_mLpK.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/backgrounds/nonresonant_Bcorr.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/backgrounds/partial_reco.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/misID_{{cat}}_beforePID.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/misID_{{cat}}_afterPID.pdf", cat=NOTE_CATEGORIES),
+    shell:
+        """
+        uv run python presentation/background_studies/plot_background_studies.py
+        uv run python presentation/background_studies/plot_backgrounds.py
+        """
+
+
+rule plot_reweighting:
+    input:
+        KIN_WEIGHT_LL,
+        KIN_WEIGHT_DD,
+    output:
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/reweight/reweight_Bu_PT_cmp.pdf", cat=NOTE_CATEGORIES),
+    shell:
+        """
+        uv run python presentation/validation/plot_reweighting.py
+        """
+
+
+rule plot_note:
+    output:
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/Preselections/Delta_Z.pdf", cat=NOTE_CATEGORIES),
+        expand(
+            f"{NOTE_FIGS}/Lambda{{cat}}/Preselections/Bu_M_after_preselection.pdf",
+            cat=NOTE_CATEGORIES,
+        ),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/L0_M_after_preselection.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/logIPCHI2run2_Sig.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/bdt_variables/BDT_DTFchi2_Sig.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/bdt_variables/BDT_FDCHI2_Sig.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/bdt_variables/BDT_IPCHI2_Sig.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/bdt_variables/BDT_PT_Sig.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/pidcmp.pdf", cat=NOTE_CATEGORIES),
+        expand(
+            f"{NOTE_FIGS}/Lambda{{cat}}/fit/fit_To{{state}}_Run2MDU_MC.pdf",
+            cat=NOTE_CATEGORIES,
+            state=NOTE_STATES,
+        ),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/fit/fit_todata_signal.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/fit/fit_to_sideband.pdf", cat=NOTE_CATEGORIES),
+        expand(f"{NOTE_FIGS}/Lambda{{cat}}/charmonium_spectrum.pdf", cat=NOTE_CATEGORIES),
+    shell:
+        """
+        uv run python presentation/ana_note_plots/scripts/plot_preselection.py
+        uv run python presentation/ana_note_plots/scripts/plot_bdt_variables.py
+        uv run python presentation/ana_note_plots/scripts/plot_pid.py
+        uv run python presentation/ana_note_plots/scripts/plot_normchannel.py
+        uv run python presentation/ana_note_plots/scripts/plot_mcfits.py
+        uv run python presentation/ana_note_plots/scripts/plot_charmonium_spectrum.py
+        uv run python presentation/ana_note_plots/scripts/plot_datafit.py
+        """
+
+
+rule presentation_plots:
+    input:
+        rules.plot_backgrounds.output,
+        rules.plot_reweighting.output,
+        rules.plot_note.output,
+    output:
+        f"{OUTPUT_DIR}/.presentation_plots_complete",
+    shell:
+        "touch {output}"
+
+# ---------------------------------------------------------------------------
 # Step 3: Selection optimisation — one per (branch, category)
 #
 # In "passthrough" mode the optimisation is skipped entirely.  A trivial
@@ -153,6 +354,7 @@ else:
     rule optimize_selection:
         input:
             f"{OUTPUT_DIR}/.data_loaded",
+            model=MVA_MODEL_PATTERN if OPT_METHOD == "mva" else [],
         output:
             f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
         params:
@@ -236,6 +438,7 @@ rule efficiency_calculation:
     input:
         summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
         cuts=f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
+        study_eff=EFFICIENCY_JSON,
     output:
         efficiencies=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/efficiencies.csv",
         ratios=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/efficiency_ratios.csv",
@@ -367,6 +570,7 @@ rule compute_systematics:
             branch=BRANCHES,
             category=CATEGORIES,
         ),
+        pid_syst=PID_BOOTSTRAP_JSON,
     output:
         expand(f"{OUTPUT_DIR}/{{branch}}/tables/systematics.json", branch=BRANCHES),
         f"{OUTPUT_DIR}/results/systematics_summary.md",
@@ -406,11 +610,20 @@ rule collect_results:
         f"{OUTPUT_DIR}/results/systematics_summary.md",
         f"{OUTPUT_DIR}/comparison/branch_comparison.md",
     output:
-        directory(f"{ROOT_OUTPUT_DIR}/results"),
+        final_bf="results/final/bf_products.tex",
+        final_syst_summary="results/final/systematics_summary.md",
+        final_branch_comparison="results/final/branch_comparison.md",
+        final_high_results="results/final/final_results_high_yield.md",
+        final_low_results="results/final/final_results_low_yield.md",
+        table_high="results/tables/branching_fraction_ratios_high_yield.csv",
+        table_low="results/tables/branching_fraction_ratios_low_yield.csv",
+        syst_high="results/tables/systematics_high_yield.json",
+        syst_low="results/tables/systematics_low_yield.json",
+        table_syst_summary="results/tables/systematics_summary.md",
     params:
         pipeline_dir=OUTPUT_DIR,
         studies_dir="studies",
-        output_dir=f"{ROOT_OUTPUT_DIR}/results",
+        output_dir=COLLECTED_RESULTS_DIR,
     shell:
         """
         uv run python scripts/collect_results.py \
@@ -418,6 +631,79 @@ rule collect_results:
             --studies-dir  {params.studies_dir} \
             --output-dir   {params.output_dir}
         """
+
+# ---------------------------------------------------------------------------
+# Reporting and aggregate workflow targets
+# ---------------------------------------------------------------------------
+rule report_hep:
+    input:
+        "results/tables/branching_fraction_ratios_high_yield.csv",
+        "results/tables/branching_fraction_ratios_low_yield.csv",
+        "results/tables/systematics_high_yield.json",
+        "results/tables/systematics_low_yield.json",
+    output:
+        HEP_REPORT_TEX,
+        HEP_REPORT_TXT,
+    params:
+        results_dir=COLLECTED_RESULTS_DIR,
+        output_dir="results/final",
+    shell:
+        """
+        uv run python scripts/generate_hep_report.py \
+            --results-dir {params.results_dir} \
+            --output-dir  {params.output_dir}
+        """
+
+
+rule main_pipeline:
+    input:
+        expand(
+            f"{OUTPUT_DIR}/{{branch}}/tables/branching_fraction_ratios.csv",
+            branch=BRANCHES,
+        ),
+        expand(
+            f"{OUTPUT_DIR}/{{branch}}/LL_DD/tables/fitted_yields_combined.csv",
+            branch=BRANCHES,
+        ),
+        f"{OUTPUT_DIR}/comparison/branch_comparison.md",
+    output:
+        f"{OUTPUT_DIR}/.main_pipeline_complete",
+    shell:
+        "touch {output}"
+
+
+rule systematics_workflow:
+    input:
+        PID_BOOTSTRAP_JSON,
+        f"{OUTPUT_DIR}/results/systematics_summary.md",
+        f"{OUTPUT_DIR}/results/bf_products.tex",
+    output:
+        f"{OUTPUT_DIR}/.systematics_complete",
+    shell:
+        "touch {output}"
+
+
+rule reports:
+    input:
+        rules.collect_results.output,
+        HEP_REPORT_TEX,
+        HEP_REPORT_TXT,
+    output:
+        f"{OUTPUT_DIR}/.reports_complete",
+    shell:
+        "touch {output}"
+
+
+rule full_analysis:
+    input:
+        f"{OUTPUT_DIR}/.studies_complete",
+        f"{OUTPUT_DIR}/.main_pipeline_complete",
+        f"{OUTPUT_DIR}/.systematics_complete",
+        f"{OUTPUT_DIR}/.reports_complete",
+    output:
+        f"{OUTPUT_DIR}/.workflow_complete",
+    shell:
+        "touch {output}"
 
 # ===========================================================================
 # Convenience targets

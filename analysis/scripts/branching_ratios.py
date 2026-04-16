@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import tomli
 
 # Ensure the project root is on sys.path
 project_root = Path(__file__).resolve().parent.parent
@@ -26,7 +25,7 @@ if "snakemake" in globals():
     cache_dir = snakemake.params.cache_dir
     output_dir = snakemake.params.output_dir
     branch = snakemake.params.branch
-    # Phase 1: separate LL and DD inputs
+    # The workflow passes separate LL and DD inputs.
     yields_ll_file = snakemake.input.yields_ll
     yields_dd_file = snakemake.input.yields_dd
     efficiencies_ll_file = snakemake.input.efficiencies_ll
@@ -50,21 +49,14 @@ else:
     br_ratios_file = Path(output_dir) / branch / "tables" / "branching_fraction_ratios.csv"
     final_results_file = Path(output_dir) / branch / "results" / "final_results.md"
 
-config_path = Path(config_dir) / "selection.toml"
-physics_path = Path(config_dir) / "physics.toml"
-
 # Systematic uncertainties are NOT loaded here — they are applied at the export stage
 # by export_latex_results.py (which runs after compute_systematics).
 # This avoids a circular Snakemake dependency:
 #   branching_ratios → branching_fraction_ratios.csv → compute_systematics → systematics.json
 #                                                                           → export_latex_results
 
-config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
-
-# Load physics constants
-with open(physics_path, "rb") as f:
-    physics_data = tomli.load(f)
-pdg_bf = physics_data.get("pdg_branching_fractions", {})
+config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
+pdg_bf = config.get_norm_branching_fractions()
 
 br_bu_jpsi_k = pdg_bf.get("bu_to_jpsi_k", {}).get("value", 1.0)
 br_bu_jpsi_k_err = pdg_bf.get("bu_to_jpsi_k", {}).get("error", 0.0)
@@ -78,7 +70,7 @@ norm_factor_rel_err = (
     else 0
 )
 
-# ---- Phase 1: combine LL and DD yields ----
+# ---- Combine LL and DD yields ----
 # Yields from LL and DD fits are summed per state.
 # Errors are added in quadrature (fits are statistically independent).
 df_ll = pd.read_csv(yields_ll_file)
@@ -98,7 +90,7 @@ for state, row in combined_yields.iterrows():
     logger.info(f"  {state}: N={row['N']:.1f} ± {row['N_err']:.1f}")
 
 # ---- Efficiency ratios ----
-# Phase 1: average eff ratios from LL and DD (weighted by yield if available;
+# Average efficiency ratios from LL and DD (weighted by yield if available;
 # simple average otherwise). A more principled approach is to compute the
 # luminosity-weighted average efficiency per category, which requires knowing
 # ε_LL × N_gen_LL and ε_DD × N_gen_DD. For now, use the yield-weighted average.
@@ -127,9 +119,8 @@ for state in df_ratios_ll["state"].unique():
     eff_ratios_combined[state] = (r_avg, e_avg)
 
 # Get config labels
-plotting_cfg = config.fitting.get("plotting", {})
-state_labels = plotting_cfg.get("labels", {})
-ref_state = plotting_cfg.get("ref_state", "jpsi")
+state_labels = config.get_state_labels()
+ref_state = config.get_ref_state()
 ref_label = state_labels.get(ref_state, "J/psi")
 
 logger.info(f"Calculating Branching Ratios Relative to {ref_label} (Branch: {branch})")

@@ -397,7 +397,7 @@ def run_pid_bootstrap(
     data: dict, states: list, p_maps: dict, k_maps: dict, n_bootstrap: int = 100, seed: int = 42
 ) -> dict:
     """
-    Phase 4.2 — PID systematic via bootstrap.
+    PID systematic via bootstrap.
 
     For each bootstrap iteration, smear all efficiency map bins by their
     statistical uncertainty and recompute the per-state PID efficiency ratio
@@ -487,7 +487,7 @@ if __name__ == "__main__":
     if args.bootstrap_n > 0:
         import json
 
-        print(f"\n=== Phase 4.2: PID Bootstrap ({args.bootstrap_n} iterations) ===")
+        print(f"\n=== PID Bootstrap ({args.bootstrap_n} iterations) ===")
         # Re-load the same data and maps as in main() above
         out_dir = Path("output")
         calib_dir = Path("pidcalib_output")

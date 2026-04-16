@@ -1,6 +1,6 @@
 # TIS/TOS Trigger Efficiency Snakefile
 #
-# Phase 3 changes:
+# Workflow notes:
 # - Now saves results as JSON (tis_tos_results.json) in addition to the text log.
 # - The JSON is consumed by efficiency_steps/Snakefile as a dependency.
 

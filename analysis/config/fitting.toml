@@ -2,6 +2,12 @@
 # MASS FITTING CONFIGURATION
 # ═══════════════════════════════════════════════════════════════
 # All parameters related to RooFit mass fitting
+# NOTE:
+# - This file is currently reference documentation/config, not the sole
+# operational source for the active pipeline.
+# - When this file conflicts with the running workflow, the fitter
+# implementation in `analysis/modules/mass_fitter.py` and the settings read
+# from `selection.toml` are authoritative for the current pipeline.
 # ═══════════════════════════════════════════════════════════════
 
 [background_model]
@@ -99,20 +105,17 @@ Parameter Sharing Philosophy:
 
 [signal_model]
 # Signal PDF for each charmonium state
-model_type = "double_crystal_ball"
+model_type = "voigtian"
 resolution_scale_factor = 1.0  # Multiplicative factor on detector resolution
 
 [signal_model.notes]
 comment = """
-Double Crystal Ball (DCB) PDF:
-- Gaussian core with power-law tails on both sides
-- Excellent description of detector resolution + radiative effects
-- Parameters: mean, sigma, alpha_L, n_L, alpha_R, n_R
-- Shared parameters across years for increased statistics
-- Mean and sigma vary per state (different masses and widths)
+Voigtian signal PDF in the active fitter:
+- Relativistic Breit-Wigner convolved with a Gaussian resolution term
+- PDG masses and widths are fixed per state in the current implementation
+- One shared detector-resolution parameter is used across states/years
+- Systematic variations can fix the resolution or swap the background model
 
-The DCB is standard for LHCb mass fitting and properly accounts for:
-1. Detector resolution (Gaussian core)
-2. Radiative tails (power-law tails)
-3. Bremsstrahlung effects in calorimeter
+This note reflects the current fitter implementation in
+`analysis/modules/mass_fitter.py`.
 """

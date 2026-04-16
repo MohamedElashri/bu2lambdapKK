@@ -1,5 +1,5 @@
 """
-Phase 4.1 — Fit Model Systematic Uncertainties
+Fit Model Systematic Uncertainties
 
 Runs the nominal mass fit plus three systematic variations per (branch, category):
   1. bkg_poly2        : Replace ARGUS background with 2nd-order Chebyshev polynomial
@@ -48,12 +48,11 @@ def run_single_fit(config, data_dict, systematic_params: dict, label: str) -> di
 def compute_fit_systematics(
     branch: str, category: str, config_dir: str, cache_dir: str, output_dir: str
 ):
-    config_path = Path(config_dir) / "selection.toml"
-    config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+    config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
     cache = CacheManager(cache_dir=cache_dir)
     cut_deps = cache.compute_dependencies(
-        config_files=list(Path(config_dir).glob("*.toml")),
+        config_files=config.config_paths(),
         code_files=[project_root / "scripts" / "apply_cuts.py"],
     )
     data_dict = cache.load(f"{branch}_{category}_final_data", dependencies=cut_deps)
@@ -125,7 +124,7 @@ def compute_fit_systematics(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Phase 4.1 fit model systematics")
+    parser = argparse.ArgumentParser(description="Fit model systematics")
     parser.add_argument("--branch", default="high_yield")
     parser.add_argument("--category", default="LL")
     parser.add_argument("--config-dir", default="../../config")

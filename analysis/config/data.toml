@@ -12,10 +12,10 @@ enable_caching = true
 [cache.notes]
 comment = """
 Caching Strategy:
-- Phase 2: Cached data after Lambda cuts (largest data structure)
-- Phase 3: Optimized cuts (small DataFrame)
-- Phase 5: Fit results (fit parameters and plots)
-- Phase 6: Efficiency calculations
+- Data-loading cache after Lambda cuts (largest data structure)
+- Optimized cuts (small DataFrame)
+- Fit results (fit parameters and plots)
+- Efficiency calculations
 - Speeds up re-running pipeline with different parameters
 - Cache automatically invalidated if config changes
 """

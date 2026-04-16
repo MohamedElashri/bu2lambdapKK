@@ -7,6 +7,8 @@ import numpy as np
 import uproot
 import vector
 
+from modules.config_loader import StudyConfig
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -17,8 +19,9 @@ def load_and_preprocess(
     filepath: Path,
     is_mc: bool,
     track_type: str = "LL",
-    delta_z_cut: float = 5.0,
-    lambda_fdchi2_cut: float = 50.0,
+    config: StudyConfig | None = None,
+    delta_z_cut: float | None = None,
+    lambda_fdchi2_cut: float | None = None,
 ) -> ak.Array:
     """Load and preprocess a single ROOT file for one track type.
 
@@ -26,9 +29,20 @@ def load_and_preprocess(
         filepath: Path to the ROOT file.
         is_mc: True for MC, False for real data (affects PID and trigger branch names).
         track_type: "LL" or "DD", selects the correct tree path in the ROOT file.
-        delta_z_cut: Minimum |ΔZ| cut in mm (category-dependent: LL uses 20, DD uses 5).
-        lambda_fdchi2_cut: Minimum Lambda FD chi2 (default 50; ND scan finds optimal above this).
+        config: Shared analysis config used to source fixed selection values.
+        delta_z_cut: Optional override for minimum |ΔZ| cut in mm.
+        lambda_fdchi2_cut: Optional override for minimum Lambda FD chi2.
     """
+    if config is None:
+        config = StudyConfig.from_dir(Path(__file__).resolve().parent.parent / "config")
+
+    baseline_cfg = config.get_baseline_reduction()
+    lambda_cfg = config.get_lambda_preselection(track_type)
+    delta_z_cut = lambda_cfg["delta_z_min"] if delta_z_cut is None else delta_z_cut
+    lambda_fdchi2_cut = (
+        lambda_cfg["fd_chisq_min"] if lambda_fdchi2_cut is None else lambda_fdchi2_cut
+    )
+
     logger.info(f"Loading {filepath.name} [{track_type}]...")
     tree_path = f"B2L0barPKpKm_{track_type}/DecayTree"
     with uproot.open(filepath) as f:
@@ -199,18 +213,18 @@ def load_and_preprocess(
     n_before = len(events)
 
     if "Bu_IPCHI2_OWNPV" in events.fields:
-        ipchi2_mask = events["Bu_IPCHI2_OWNPV"] < 10.0
+        ipchi2_mask = events["Bu_IPCHI2_OWNPV"] < baseline_cfg["bu_ipchi2_max"]
     else:
         ipchi2_mask = ak.ones_like(events["Bu_MM"], dtype=bool)
 
     mask_red = (
-        (events["Bu_FDCHI2_OWNPV"] > 175)
+        (events["Bu_FDCHI2_OWNPV"] > baseline_cfg["bu_fdchi2_min"])
         & ipchi2_mask
-        & (events["Delta_Z_mm"] > 2.5)
-        & (events["Lp_ProbNNp"] > 0.05)
-        & (events["p_ProbNNp"] > 0.05)
-        & (events["prodProbKK"] > 0.05)
-        & (events["Bu_PT"] > 3000)
+        & (events["Delta_Z_mm"] > baseline_cfg["delta_z_min"])
+        & (events["Lp_ProbNNp"] > baseline_cfg["lp_probnnp_min"])
+        & (events["p_ProbNNp"] > baseline_cfg["p_probnnp_min"])
+        & (events["prodProbKK"] > baseline_cfg["hh_probnnk_prod_min"])
+        & (events["Bu_PT"] > baseline_cfg["bu_pt_min"])
     )
     events = events[mask_red]
     logger.info(
@@ -223,17 +237,17 @@ def load_and_preprocess(
     # - Lambda FD chi2: soft cut (50); ND scanner will find the optimal value
     # - Delta_Z: category-dependent (LL uses tight 20 mm cut per reference analysis;
     #   DD relies on FD chi2 and the 5 mm cut is sufficient)
-    # - PID fixed pre-cut at 0.20 (validated by fit_based_optimizer study;
-    #   proxy-based optimization is unreliable for PID, see studies/pid_proxy_comparison)
+    # - PID fixed pre-cut at 0.25 (validated by the fit-based PID study;
+    #   proxy-based optimization is unreliable for PID)
     n_before = len(events)
 
     mask_lambda = (
-        (events["L0_MM"] > 1111)
-        & (events["L0_MM"] < 1121)
+        (events["L0_MM"] > lambda_cfg["mass_min"])
+        & (events["L0_MM"] < lambda_cfg["mass_max"])
         & (events["L0_FDCHI2_OWNPV"] > lambda_fdchi2_cut)
         & (events["Delta_Z_mm"] > delta_z_cut)
-        & (events["Lp_ProbNNp"] > 0.3)
-        & (events["PID_product"] > 0.20)  # fixed pre-cut (see [fixed_selection] in selection.toml)
+        & (events["Lp_ProbNNp"] > lambda_cfg["proton_probnnp_min"])
+        & (events["PID_product"] > lambda_cfg["pid_product_min"])
     )
 
     events = events[mask_lambda]
@@ -248,7 +262,9 @@ def load_and_preprocess(
 def load_all_data(
     base_data_path: Path,
     years: list,
+    magnets: list | None = None,
     track_types: list = ["LL", "DD"],
+    config: StudyConfig | None = None,
 ) -> Dict[str, Dict[str, ak.Array]]:
     """Load real data, returning a nested dict: {year: {category: array}}.
 
@@ -256,15 +272,17 @@ def load_all_data(
     optimization and efficiency calculations can be performed independently.
     They are combined only at the mass fit / branching ratio stage.
     """
-    # Category-dependent Delta_Z cuts (config/selection.toml [lambda_selection])
-    delta_z_cuts = {"LL": 20.0, "DD": 5.0}
+    if config is None:
+        config = StudyConfig.from_dir(Path(__file__).resolve().parent.parent / "config")
+    if magnets is None:
+        magnets = ["MD", "MU"]
 
     data_dict: Dict[str, Dict[str, ak.Array]] = {}
     for year in years:
         data_dict[str(year)] = {}
         for track_type in track_types:
             arrs = []
-            for magnet in ["MD", "MU"]:
+            for magnet in magnets:
                 fname = f"dataBu2L0barPHH_{int(year)-2000}{magnet}.root"
                 fpath = base_data_path / fname
                 if fpath.exists():
@@ -272,7 +290,7 @@ def load_all_data(
                         fpath,
                         is_mc=False,
                         track_type=track_type,
-                        delta_z_cut=delta_z_cuts[track_type],
+                        config=config,
                     )
                     arrs.append(arr)
             if arrs:
@@ -281,13 +299,16 @@ def load_all_data(
                 data_dict[str(year)][track_type] = ak.Array([])
 
     # Apply B+ mass window (including sidebands for sideband subtraction) per category
+    b_mass_min, b_mass_max = config.get_b_mass_window_with_sidebands()
     for year in data_dict:
         for cat in data_dict[year]:
             arr = data_dict[year][cat]
             if len(arr) == 0:
                 continue
             n_before = len(arr)
-            mask_bmass = (arr["Bu_MM_corrected"] > 5150) & (arr["Bu_MM_corrected"] < 5410)
+            mask_bmass = (arr["Bu_MM_corrected"] > b_mass_min) & (
+                arr["Bu_MM_corrected"] < b_mass_max
+            )
             data_dict[year][cat] = arr[mask_bmass]
             logger.info(
                 f"Data {year} [{cat}] B+ mass window: {n_before} -> {len(data_dict[year][cat])} "
@@ -301,7 +322,9 @@ def load_all_mc(
     base_mc_path: Path,
     states: list,
     years: list,
+    magnets: list | None = None,
     track_types: list = ["LL", "DD"],
+    config: StudyConfig | None = None,
 ) -> Dict[str, Dict[str, ak.Array]]:
     """Load signal MC, returning a nested dict: {state: {category: array}}.
 
@@ -309,7 +332,10 @@ def load_all_mc(
     LL and DD are kept separate so that per-category efficiency calculations and
     optimization can be performed independently.
     """
-    delta_z_cuts = {"LL": 20.0, "DD": 5.0}
+    if config is None:
+        config = StudyConfig.from_dir(Path(__file__).resolve().parent.parent / "config")
+    if magnets is None:
+        magnets = ["MD", "MU"]
 
     mc_dict: Dict[str, Dict[str, ak.Array]] = {}
     for state in states:
@@ -317,7 +343,7 @@ def load_all_mc(
         for track_type in track_types:
             arrs = []
             for year in years:
-                for magnet in ["MD", "MU"]:
+                for magnet in magnets:
                     fname = f"{state}_{int(year)-2000}_{magnet}.root"
                     fpath = base_mc_path / state / fname
                     if not fpath.exists():
@@ -329,15 +355,16 @@ def load_all_mc(
                             fpath,
                             is_mc=True,
                             track_type=track_type,
-                            delta_z_cut=delta_z_cuts[track_type],
+                            config=config,
                         )
                         arrs.append(arr)
             if arrs:
                 state_cat = ak.concatenate(arrs)
                 # Apply B+ mass window (including sidebands)
                 n_before = len(state_cat)
-                mask_bmass = (state_cat["Bu_MM_corrected"] > 5150) & (
-                    state_cat["Bu_MM_corrected"] < 5410
+                b_mass_min, b_mass_max = config.get_b_mass_window_with_sidebands()
+                mask_bmass = (state_cat["Bu_MM_corrected"] > b_mass_min) & (
+                    state_cat["Bu_MM_corrected"] < b_mass_max
                 )
                 state_cat = state_cat[mask_bmass]
                 logger.info(

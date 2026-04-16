@@ -36,13 +36,12 @@ else:
     summary_file = Path(output_dir) / branch / category / "tables" / "cut_summary.json"
     yields_file = Path(output_dir) / branch / category / "tables" / "fitted_yields.csv"
 
-config_path = Path(config_dir) / "selection.toml"
-config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
 # Re-compute dependencies matching apply cuts
 cut_deps = cache.compute_dependencies(
-    config_files=list(Path(config_dir).glob("*.toml")),
+    config_files=config.config_paths(),
     code_files=[project_root / "scripts" / "apply_cuts.py"],
 )
 
@@ -76,9 +75,8 @@ import pandas as pd
 rows = []
 if fit_result and "combined" in fit_result.get("yields", {}):
     combined_yields = fit_result["yields"]["combined"]
-    # Get states from config (Phase 5 refactor)
-    plotting_cfg = config.fitting.get("plotting", {})
-    all_states = plotting_cfg.get("states", ["jpsi", "etac", "chic0", "chic1", "etac_2s"])
+    # Get the active plotting states from shared config.
+    all_states = config.get_plotting_states()
 
     for state in all_states:
         if state in combined_yields:

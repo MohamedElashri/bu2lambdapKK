@@ -16,7 +16,7 @@ against J/ψ MC (same Lambda mass window). Both normalised to unit area.
 No sideband subtraction — the J/ψ window is signal-dominated.
 
 Run from analysis/ directory:
-    uv run python studies/ana_note_plots/scripts/plot_pid.py
+    uv run python presentation/ana_note_plots/scripts/plot_pid.py
 """
 
 import logging
@@ -34,15 +34,26 @@ sys.path.insert(0, str(ANALYSIS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR.resolve().parents[2]))  # analysis/ for modules.*
 
 from modules.plot_utils import BINNING, COLORS, figs_path, save_fig, setup_style
+from modules.presentation_config import (
+    DATA_L0_TIS_KEYS,
+    HLT1_TOS_KEYS,
+    HLT2_TOS_KEYS,
+    MC15_PID_BRANCHES,
+    MC_L0_TIS_KEYS,
+    get_presentation_config,
+)
 
-DATA_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/data")
-MC_BASE = Path("/share/lazy/Mohamed/Bu2LambdaPPP/files/mc")
-
-M_LAMBDA_PDG = 1115.683
+PRESENTATION = get_presentation_config()
+DATA_BASE = PRESENTATION.data_base
+MC_BASE = PRESENTATION.mc_base
+M_LAMBDA_PDG = PRESENTATION.lambda_mass_pdg
 M_BPLUS = 5279.6
 M_JPSI = 3096.9
-YEARS = ["16", "17", "18"]
-MAGNETS = ["MD", "MU"]
+YEARS = PRESENTATION.year_suffixes
+MAGNETS = PRESENTATION.magnets
+LAMBDA_MIN = PRESENTATION.lambda_mass_min
+LAMBDA_MAX = PRESENTATION.lambda_mass_max
+SIG_LO, SIG_HI = PRESENTATION.bu_signal_window()
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -59,8 +70,8 @@ def _load_data_pid(path: Path, cat: str) -> dict:
     """
     Load data PID variables selected by:
       - Trigger (L0 TIS, HLT1 TOS, HLT2 TOS)
-      - Lambda mass window [1108, 1126] MeV
-      - B+ corrected mass signal window [5255, 5305] MeV
+      - configured Lambda mass window
+      - configured B+ corrected mass signal window
       - J/ψ mass window |m(Λ̄pK⁻) − 3096.9| < 30 MeV
 
     The charmonium mass is m(L0 + p + h2), consistent with M_LpKm_h2 in the
@@ -114,25 +125,14 @@ def _load_data_pid(path: Path, cat: str) -> dict:
                 found = True
         return m if found else np.ones(n, dtype=bool)
 
-    mask = (
-        _or(["Bu_L0GlobalDecision_TIS", "Bu_L0PhysDecision_TIS", "Bu_L0HadronDecision_TIS"], True)
-        & _or(["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"], True)
-        & _or(
-            [
-                "Bu_Hlt2Topo2BodyDecision_TOS",
-                "Bu_Hlt2Topo3BodyDecision_TOS",
-                "Bu_Hlt2Topo4BodyDecision_TOS",
-            ],
-            True,
-        )
-    )
+    mask = _or(DATA_L0_TIS_KEYS, True) & _or(HLT1_TOS_KEYS, True) & _or(HLT2_TOS_KEYS, True)
 
     # Lambda mass window
-    mask &= (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
 
     # B+ corrected mass signal window
     bu_corr = ev["Bu_MM"] - ev["L0_MM"] + M_LAMBDA_PDG
-    mask &= (bu_corr >= 5255) & (bu_corr <= 5305)
+    mask &= (bu_corr >= SIG_LO) & (bu_corr <= SIG_HI)
 
     ev = {k: v[mask] for k, v in ev.items()}
     n = len(ev["L0_MM"])
@@ -228,23 +228,13 @@ def _load_mc_pid(path: Path, cat: str) -> dict:
                 found = True
         return m if found else np.ones(n, dtype=bool)
 
-    mask = (
-        _or(["Bu_L0Global_TIS", "Bu_L0HadronDecision_TIS"])
-        & _or(["Bu_Hlt1TrackMVADecision_TOS", "Bu_Hlt1TwoTrackMVADecision_TOS"])
-        & _or(
-            [
-                "Bu_Hlt2Topo2BodyDecision_TOS",
-                "Bu_Hlt2Topo3BodyDecision_TOS",
-                "Bu_Hlt2Topo4BodyDecision_TOS",
-            ]
-        )
-    )
-    mask &= (ev["L0_MM"] > 1108) & (ev["L0_MM"] < 1126)
+    mask = _or(MC_L0_TIS_KEYS) & _or(HLT1_TOS_KEYS) & _or(HLT2_TOS_KEYS)
+    mask &= (ev["L0_MM"] > LAMBDA_MIN) & (ev["L0_MM"] < LAMBDA_MAX)
 
     # B+ corrected mass signal window — same as data
     if "Bu_MM" in ev:
         bu_corr = ev["Bu_MM"] - ev["L0_MM"] + M_LAMBDA_PDG
-        mask &= (bu_corr >= 5255) & (bu_corr <= 5305)
+        mask &= (bu_corr >= SIG_LO) & (bu_corr <= SIG_HI)
 
     # J/ψ window on m(L0 + p + h2) — consistent with data and pipeline M_LpKm_h2
     mom_ok = all(k in avail for k in mom_branches)
@@ -390,12 +380,12 @@ def main():
         log.info(f"  MC: {len(next(iter(mc.values())))} events")
 
         # Compute PID product arrays
-        d_p = "p_MC15TuneV1_ProbNNp"
-        d_h1 = "h1_MC15TuneV1_ProbNNk"
-        d_h2 = "h2_MC15TuneV1_ProbNNk"
-        m_p = "p_MC15TuneV1_ProbNNp"
-        m_h1 = "h1_MC15TuneV1_ProbNNk"
-        m_h2 = "h2_MC15TuneV1_ProbNNk"
+        d_p = MC15_PID_BRANCHES["p"]
+        d_h1 = MC15_PID_BRANCHES["h1"]
+        d_h2 = MC15_PID_BRANCHES["h2"]
+        m_p = MC15_PID_BRANCHES["p"]
+        m_h1 = MC15_PID_BRANCHES["h1"]
+        m_h2 = MC15_PID_BRANCHES["h2"]
 
         if all(b in data for b in [d_p, d_h1, d_h2]) and all(b in mc for b in [m_p, m_h1, m_h2]):
             data_prod = data[d_p] * data[d_h1] * data[d_h2]

@@ -8,13 +8,13 @@ Steps:
 4. eff_pre:      Pre-selection cuts (mass windows, PID, Lambda FD chi2, Delta_Z)
 5. eff_mva:      MVA/BDT selection efficiency
 
-Phase 3 fixes:
+Current workflow notes:
 - Fixed trigger definition bug: L0 was ORing global TIS with hadron TOS (incorrect).
   Now ORs only L0 TIS branches to match clean_data_loader.py selection.
 - Fixed HLT1: was ORing TOS with TIS; now TOS only (TrackMVA OR TwoTrackMVA).
-- Updated Lambda FD chi2 pre-cut: 250 → 50 (Phase 0 change).
+- Updated Lambda FD chi2 pre-cut: 250 → 50.
 - Made Lambda Delta_Z cut category-aware: LL=20 mm, DD=5 mm.
-- Added PID_product > 0.20 as a fixed pre-cut.
+- Added PID_product > 0.25 as a fixed pre-cut.
 - Added TIS/TOS data/MC correction factor via `tis_tos_corr` parameter.
 - Wired kinematic reweighting (2D pT × nTracks or 1D pT) via `kin_weights` parameter.
 - Fixed MVA model path to load per-branch/category model correctly.
@@ -30,7 +30,6 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-import tomli
 import uproot
 from catboost import CatBoostClassifier
 
@@ -38,6 +37,8 @@ from catboost import CatBoostClassifier
 _ANALYSIS_DIR = Path(__file__).resolve().parents[2]  # studies/efficiency_steps/ → analysis/
 if str(_ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(_ANALYSIS_DIR))
+
+from modules.config_loader import StudyConfig
 
 
 def get_gen_eff_from_config(
@@ -165,6 +166,7 @@ def calculate_efficiencies_for_file(
     category: str = "LL",
     gen_eff: float = 0.22,
     gen_err: float = 0.0005,
+    selection_config: StudyConfig | None = None,
     mva_model=None,
     mva_features: list = None,
     mva_threshold: float = 0.0,
@@ -189,6 +191,8 @@ def calculate_efficiencies_for_file(
                        For a ratio measurement this cancels, but it is applied for completeness.
     """
     result = EfficiencyResult(gen_eff=gen_eff, gen_err=gen_err)
+    if selection_config is None:
+        selection_config = StudyConfig.from_dir(_ANALYSIS_DIR / "config")
 
     try:
         f = uproot.open(file_path)
@@ -332,9 +336,9 @@ def calculate_efficiencies_for_file(
         return result
 
     # ---- STEP 4: Pre-selection ----
-    # Cuts aligned with Phase 0 values in config/selection.toml.
-    # Category-aware Delta_Z: LL requires 20 mm, DD requires 5 mm.
-    delta_z_cut = 20.0 if category == "LL" else 5.0
+    baseline_cfg = selection_config.get_baseline_reduction()
+    lambda_cfg = selection_config.get_lambda_preselection(category)
+    delta_z_cut = lambda_cfg["delta_z_min"]
 
     bu_fdchi2 = tree["Bu_FDCHI2_OWNPV"].array(library="np")
     bu_ipchi2 = tree["Bu_IPCHI2_OWNPV"].array(library="np")
@@ -351,24 +355,20 @@ def calculate_efficiencies_for_file(
 
     # Data-reduction baseline (mirrors clean_data_loader.py)
     baseline_mask = (
-        (bu_fdchi2 > 175.0)
-        & (bu_ipchi2 < 10.0)
-        & (bu_pt > 3000.0)
-        & (p_probnnp > 0.05)
-        & ((h1_probnnk * h2_probnnk) > 0.05)
+        (bu_fdchi2 > baseline_cfg["bu_fdchi2_min"])
+        & (bu_ipchi2 < baseline_cfg["bu_ipchi2_max"])
+        & (bu_pt > baseline_cfg["bu_pt_min"])
+        & (p_probnnp > baseline_cfg["p_probnnp_min"])
+        & ((h1_probnnk * h2_probnnk) > baseline_cfg["hh_probnnk_prod_min"])
     )
 
-    # Lambda pre-selection (Phase 0 values):
-    # - FD chi2 > 50 (was 250; lowered to allow optimizer to scan the range)
-    # - Delta_Z > 20 mm (LL) or > 5 mm (DD) — category-aware
-    # - Fixed PID_product > 0.20 (validated by fit_based_optimizer study)
     lambda_mask = (
-        (l0_mass > 1111.0)
-        & (l0_mass < 1121.0)
-        & (l0_fdchi2_arr > 50.0)
+        (l0_mass > lambda_cfg["mass_min"])
+        & (l0_mass < lambda_cfg["mass_max"])
+        & (l0_fdchi2_arr > lambda_cfg["fd_chisq_min"])
         & ((l0_end_z - bu_end_z) > delta_z_cut)
-        & (lp_probnnp > 0.3)
-        & ((p_probnnp * h1_probnnk * h2_probnnk) > 0.20)
+        & (lp_probnnp > lambda_cfg["proton_probnnp_min"])
+        & ((p_probnnp * h1_probnnk * h2_probnnk) > lambda_cfg["pid_product_min"])
     )
 
     pre_mask = baseline_mask & lambda_mask
@@ -591,15 +591,10 @@ def main():
 
     # ---- Load configs ----
     try:
-        with open(f"{args.config_dir}/data.toml", "rb") as f:
-            data_config = tomli.load(f)
-        with open(f"{args.config_dir}/selection.toml", "rb") as f:
-            sel_config = tomli.load(f)
-        try:
-            with open(f"{args.config_dir}/generator_effs.toml", "rb") as f:
-                gen_config = tomli.load(f)
-        except Exception:
-            gen_config = {}
+        config = StudyConfig.from_dir(args.config_dir)
+        data_config = config.data_config
+        sel_config = config.data
+        gen_config = config.generator_effs
     except Exception as e:
         print(f"Error loading configs: {e}")
         return
@@ -698,6 +693,7 @@ def main():
                         category=category,
                         gen_eff=g_eff,
                         gen_err=g_err,
+                        selection_config=config,
                         mva_model=mva_models[category],
                         mva_features=mva_features,
                         mva_threshold=mva_thresholds[category],

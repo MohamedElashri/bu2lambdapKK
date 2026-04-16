@@ -84,7 +84,7 @@ BINNING = {
 }
 
 # ── Figure directory for ana_note_plots outputs ───────────────────────────────
-ANA_NOTE_FIGS_DIR = Path(__file__).resolve().parents[1] / "studies" / "ana_note_plots" / "figs"
+ANA_NOTE_FIGS_DIR = Path(__file__).resolve().parents[1] / "presentation" / "ana_note_plots" / "figs"
 FIGS_DIR = ANA_NOTE_FIGS_DIR  # alias
 
 
@@ -451,7 +451,7 @@ def figs_path(cat: str, *parts: str) -> Path:
 
     Example:
         figs_path("LL", "backgrounds", "ks0_veto.pdf")
-        → .../studies/ana_note_plots/figs/LambdaLL/backgrounds/ks0_veto.pdf
+        → .../presentation/ana_note_plots/figs/LambdaLL/backgrounds/ks0_veto.pdf
     """
     return ANA_NOTE_FIGS_DIR / f"Lambda{cat}" / Path(*parts)
 

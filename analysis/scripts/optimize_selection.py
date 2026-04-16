@@ -36,12 +36,11 @@ else:
     category = "LL"
     branch = "high_yield"
 
-config_path = Path(config_dir) / "selection.toml"
-config = StudyConfig(config_file=str(config_path), output_dir=output_dir)
+config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
 cache = CacheManager(cache_dir=cache_dir)
 preprocessed_deps = cache.compute_dependencies(
-    config_files=list(Path(config_dir).glob("*.toml")),
+    config_files=config.config_paths(),
     code_files=[
         project_root / "modules" / "clean_data_loader.py",
         project_root / "scripts" / "load_data.py",
