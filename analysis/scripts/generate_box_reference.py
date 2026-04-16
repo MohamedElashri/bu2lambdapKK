@@ -33,6 +33,7 @@ if str(project_root) not in sys.path:
 from modules.box_optimizer import SelectionOptimizer
 from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_cache_dir, pipeline_output_dir
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -40,8 +41,8 @@ logger = logging.getLogger(__name__)
 
 def build_box_reference(category: str) -> None:
     config_dir = project_root / "config"
-    output_root = project_root / "analysis_output" / "box"
-    cache_dir = output_root / "cache"
+    output_root = pipeline_output_dir("box", project_root / "generated" / "output")
+    cache_dir = pipeline_cache_dir("box", project_root / "generated" / "cache")
 
     config = StudyConfig.from_dir(config_dir, output_dir=output_root)
     # Force the maintained grouped scan rather than the stale sequential path.
@@ -62,7 +63,7 @@ def build_box_reference(category: str) -> None:
     if data_full is None or mc_full is None:
         raise RuntimeError(
             "Missing box preprocessed cache. Run the box branch load step first "
-            "(e.g. snakemake --config opt_method=box analysis_output/box/.data_loaded)."
+            "(e.g. snakemake --config opt_method=box generated/output/pipeline/box/.data_loaded)."
         )
 
     data = {yr: data_full[yr][category] for yr in data_full if category in data_full[yr]}

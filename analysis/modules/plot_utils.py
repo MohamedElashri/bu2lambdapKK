@@ -33,6 +33,8 @@ import matplotlib.ticker as ticker
 plt.switch_backend("Agg")
 import numpy as np
 
+from modules.generated_paths import presentation_output_dir
+
 # ── Reference colour palette (matches reference analysis) ────────────────────
 LHCB_COLORS = ["darkgreen", "#6F4F59", "#003366", "#D35400", "black"]
 # Alias used by ana_note_plots scripts
@@ -84,7 +86,11 @@ BINNING = {
 }
 
 # ── Figure directory for ana_note_plots outputs ───────────────────────────────
-ANA_NOTE_FIGS_DIR = Path(__file__).resolve().parents[1] / "presentation" / "ana_note_plots" / "figs"
+ANA_NOTE_FIGS_DIR = (
+    presentation_output_dir(Path(__file__).resolve().parents[1] / "generated" / "output")
+    / "ana_note_plots"
+    / "figs"
+)
 FIGS_DIR = ANA_NOTE_FIGS_DIR  # alias
 
 
@@ -451,7 +457,7 @@ def figs_path(cat: str, *parts: str) -> Path:
 
     Example:
         figs_path("LL", "backgrounds", "ks0_veto.pdf")
-        → .../presentation/ana_note_plots/figs/LambdaLL/backgrounds/ks0_veto.pdf
+        → .../generated/output/presentation/ana_note_plots/figs/LambdaLL/backgrounds/ks0_veto.pdf
     """
     return ANA_NOTE_FIGS_DIR / f"Lambda{cat}" / Path(*parts)
 

@@ -88,7 +88,12 @@ def fit_and_extract(config, data_dict: dict) -> dict:
 
 
 def compute_selection_systematics(
-    branch: str, category: str, config_dir: str, cache_dir: str, output_dir: str
+    branch: str,
+    category: str,
+    config_dir: str,
+    cache_dir: str,
+    output_dir: str,
+    mva_output_dir: str,
 ):
     config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
@@ -98,7 +103,7 @@ def compute_selection_systematics(
         sys.exit(1)
 
     # Load nominal BDT threshold and features
-    mva_dir = project_root / "analysis_output" / "mva"
+    mva_dir = Path(mva_output_dir)
     cuts_path = mva_dir / branch / category / "models" / "optimized_cuts.json"
     mva_features = config.xgboost.get(
         "features", ["Bu_DTF_chi2", "Bu_FDCHI2_OWNPV", "Bu_IPCHI2_OWNPV", "Bu_PT"]
@@ -170,8 +175,9 @@ if __name__ == "__main__":
     parser.add_argument("--branch", default="high_yield")
     parser.add_argument("--category", default="LL")
     parser.add_argument("--config-dir", default="../../config")
-    parser.add_argument("--cache-dir", default="../../analysis_output/mva/cache")
-    parser.add_argument("--output-dir", default="output")
+    parser.add_argument("--cache-dir", default="../../generated/cache/pipeline/mva")
+    parser.add_argument("--output-dir", default="generated/output/studies/selection_systematic")
+    parser.add_argument("--mva-output-dir", default="../../generated/output/pipeline/mva")
     args = parser.parse_args()
 
     compute_selection_systematics(
@@ -180,4 +186,5 @@ if __name__ == "__main__":
         config_dir=args.config_dir,
         cache_dir=args.cache_dir,
         output_dir=args.output_dir,
+        mva_output_dir=args.mva_output_dir,
     )

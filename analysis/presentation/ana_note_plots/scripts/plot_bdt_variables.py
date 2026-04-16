@@ -12,7 +12,7 @@ Produces:
   figs/LambdaDD/bdt_variables/BDT_PT_Sig.pdf
 
 Strategy:
-  - Read the cached post-BDT-selected samples from analysis_output/mva/cache.
+  - Read the cached post-BDT-selected samples from generated/cache/pipeline/mva.
   - For data, require the B+ signal window and the J/psi charmonium window.
   - Compare to post-selection J/psi MC, normalized to unit area.
 

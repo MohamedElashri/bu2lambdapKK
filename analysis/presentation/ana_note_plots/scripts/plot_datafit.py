@@ -5,7 +5,7 @@ Produces:
   figs/LambdaLL/fit/fit_todata_signal.pdf
   figs/LambdaDD/fit/fit_todata_signal.pdf
 
-Strategy: use existing pipeline mass fit output (analysis_output/mva/high_yield/)
+Strategy: use existing pipeline mass fit output (generated/output/pipeline/mva/high_yield/)
 and copy to the analysis note figure directory with the reference-matching filename.
 
 The pipeline already runs full RooFit mass fits; we just route the output correctly.

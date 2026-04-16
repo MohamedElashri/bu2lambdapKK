@@ -4,6 +4,7 @@ MVA Trainer with XGBoost, LightGBM, CatBoost
 
 import json
 import logging
+import os
 from pathlib import Path
 
 import lightgbm as lgb
@@ -19,6 +20,12 @@ from sklearn.tree import DecisionTreeClassifier
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def study_output_dir() -> Path:
+    return Path(
+        os.environ.get("ANALYSIS_MVA_OUTPUT_DIR", "../../generated/output/studies/mva_optimization")
+    )
 
 
 def plot_feature_importance(model, features, output_dir, model_name="xgboost"):
@@ -172,7 +179,7 @@ def train_and_evaluate_model(
 
     elif model_type == "catboost":
         # Load best params if available
-        best_params_path = Path("../output/models/optuna_catboost_best_params.json")
+        best_params_path = study_output_dir() / "models" / "optuna_catboost_best_params.json"
         catboost_params = {
             "scale_pos_weight": scale_pos_weight,
             "random_seed": config.xgboost.get("random_state", 42),
@@ -218,7 +225,7 @@ def train_and_evaluate_model(
 
     logger.info(f"{model_type.upper()} Test AUC: {roc_auc:.4f}")
 
-    plot_dir = Path("../output/plots/mva")
+    plot_dir = study_output_dir() / "plots" / "mva"
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generating evaluation plots...")
@@ -233,7 +240,7 @@ def train_and_evaluate_model(
         model_name=model_type,
     )
 
-    model_dir = Path("../output/models")
+    model_dir = study_output_dir() / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
 
     # Save with category suffix when provided

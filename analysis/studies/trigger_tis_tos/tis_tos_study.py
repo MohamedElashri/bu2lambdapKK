@@ -201,7 +201,7 @@ def analyze_file(file_path: str, is_data: bool, category: str = "LL"):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-dir", default="../../config")
-    parser.add_argument("--output-dir", default="output")
+    parser.add_argument("--output-dir", default="generated/output/studies/trigger_tis_tos")
     args = parser.parse_args()
 
     years = ["16", "17", "18"]

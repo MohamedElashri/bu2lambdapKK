@@ -22,8 +22,8 @@ from pathlib import Path
 # Global configuration
 # ---------------------------------------------------------------------------
 CONFIG_DIR = config.get("config_dir", "config")
-CACHE_DIR = config.get("cache_dir", "cache")
-ROOT_OUTPUT_DIR = config.get("output_dir", "analysis_output")
+OUTPUT_ROOT = config.get("output_root", "generated/output")
+CACHE_ROOT = config.get("cache_root", "generated/cache")
 
 YEARS = config.get("years", ["2016", "2017", "2018"])
 TRACK_TYPES = config.get("track_types", ["LL", "DD"])
@@ -54,9 +54,12 @@ if not OPT_METHOD:
 
 print(f"INFO: Using optimization method: {OPT_METHOD}")
 
-# Redefine output and cache directories to be method-specific
-OUTPUT_DIR = f"{ROOT_OUTPUT_DIR}/{OPT_METHOD}"
-CACHE_DIR = f"{OUTPUT_DIR}/cache"
+# Generated material lives under one output root and one cache root.
+OUTPUT_DIR = f"{OUTPUT_ROOT}/pipeline/{OPT_METHOD}"
+CACHE_DIR = f"{CACHE_ROOT}/pipeline/{OPT_METHOD}"
+STUDIES_OUTPUT_DIR = f"{OUTPUT_ROOT}/studies"
+PRESENTATION_OUTPUT_DIR = f"{OUTPUT_ROOT}/presentation"
+REPORTS_OUTPUT_DIR = f"{OUTPUT_ROOT}/reports"
 
 # ---------------------------------------------------------------------------
 # Config file list (all TOML files in config/)
@@ -81,34 +84,45 @@ CONFIG_FILES = [
 # ---------------------------------------------------------------------------
 # Workflow path conventions
 # ---------------------------------------------------------------------------
-MVA_MODEL_PATTERN = "studies/mva_optimization/output/models/catboost_bdt_{category}.cbm"
-MVA_REPORT_PATTERN = "studies/mva_optimization/output/mva_optimization_report_{category}.txt"
-MVA_COMPLETED = "studies/mva_optimization/mva_optimization_completed.txt"
+MVA_MODEL_PATTERN = f"{STUDIES_OUTPUT_DIR}/mva_optimization/models/catboost_bdt_{{category}}.cbm"
+MVA_REPORT_PATTERN = (
+    f"{STUDIES_OUTPUT_DIR}/mva_optimization/mva_optimization_report_{{category}}.txt"
+)
+MVA_COMPLETED = f"{STUDIES_OUTPUT_DIR}/mva_optimization/mva_optimization_completed.txt"
 
-TRIGGER_JSON = "studies/trigger_tis_tos/output/tis_tos_results.json"
-TRIGGER_TXT = "studies/trigger_tis_tos/output/tis_tos_results.txt"
+TRIGGER_JSON = f"{STUDIES_OUTPUT_DIR}/trigger_tis_tos/tis_tos_results.json"
+TRIGGER_TXT = f"{STUDIES_OUTPUT_DIR}/trigger_tis_tos/tis_tos_results.txt"
 
-KIN_WEIGHT_LL = "studies/kinematic_reweighting/output/kinematic_weights_LL.json"
-KIN_WEIGHT_DD = "studies/kinematic_reweighting/output/kinematic_weights_DD.json"
-KIN_WEIGHT_COMBINED = "studies/kinematic_reweighting/output/kinematic_weights.json"
-KIN_WEIGHT_MAP_LL = "studies/kinematic_reweighting/output/weight_map_LL.pdf"
-KIN_WEIGHT_MAP_DD = "studies/kinematic_reweighting/output/weight_map_DD.pdf"
+KIN_WEIGHT_DIR = f"{STUDIES_OUTPUT_DIR}/kinematic_reweighting"
+KIN_WEIGHT_LL = f"{KIN_WEIGHT_DIR}/kinematic_weights_LL.json"
+KIN_WEIGHT_DD = f"{KIN_WEIGHT_DIR}/kinematic_weights_DD.json"
+KIN_WEIGHT_COMBINED = f"{KIN_WEIGHT_DIR}/kinematic_weights.json"
+KIN_WEIGHT_MAP_LL = f"{KIN_WEIGHT_DIR}/weight_map_LL.pdf"
+KIN_WEIGHT_MAP_DD = f"{KIN_WEIGHT_DIR}/weight_map_DD.pdf"
 
-EFFICIENCY_JSON = "studies/efficiency_steps/output/efficiencies.json"
-EFFICIENCY_TABLES = "studies/efficiency_steps/output/efficiencies_tables.md"
+EFFICIENCY_DIR = f"{STUDIES_OUTPUT_DIR}/efficiency_steps"
+EFFICIENCY_JSON = f"{EFFICIENCY_DIR}/efficiencies.json"
+EFFICIENCY_TABLES = f"{EFFICIENCY_DIR}/efficiencies_tables.md"
 
-PID_BOOTSTRAP_JSON = "studies/pid_cancellation/output/pid_bootstrap_systematics.json"
-PID_BOOTSTRAP_MD = "studies/pid_cancellation/output/real_pidcalib_results.md"
-PID_BOOTSTRAP_PDF = "studies/pid_cancellation/output/real_ratio_condensed_panel.pdf"
-PID_BOOTSTRAP_PNG = "studies/pid_cancellation/output/real_ratio_condensed_panel.png"
+PID_OUTPUT_DIR = f"{STUDIES_OUTPUT_DIR}/pid_cancellation"
+PID_BOOTSTRAP_JSON = f"{PID_OUTPUT_DIR}/pid_bootstrap_systematics.json"
+PID_BOOTSTRAP_MD = f"{PID_OUTPUT_DIR}/real_pidcalib_results.md"
+PID_BOOTSTRAP_PDF = f"{PID_OUTPUT_DIR}/real_ratio_condensed_panel.pdf"
+PID_BOOTSTRAP_PNG = f"{PID_OUTPUT_DIR}/real_ratio_condensed_panel.png"
 
-NOTE_FIGS = "presentation/ana_note_plots/figs"
+FIT_SYST_PATTERN = f"{STUDIES_OUTPUT_DIR}/fit_systematics/fit_systematics_{{branch}}_{{category}}.json"
+SEL_SYST_PATTERN = (
+    f"{STUDIES_OUTPUT_DIR}/selection_systematic/selection_systematics_{{branch}}_{{category}}.json"
+)
+
+NOTE_FIGS = f"{PRESENTATION_OUTPUT_DIR}/ana_note_plots/figs"
 NOTE_CATEGORIES = ["LL", "DD"]
 NOTE_STATES = ["Jpsi", "Etac", "Chic0", "Chic1"]
 
-COLLECTED_RESULTS_DIR = "results"
-HEP_REPORT_TEX = "results/final/hep_results.tex"
-HEP_REPORT_TXT = "results/final/hep_results.txt"
+COLLECTED_RESULTS_DIR = f"{REPORTS_OUTPUT_DIR}/collected"
+HEP_REPORT_DIR = f"{REPORTS_OUTPUT_DIR}/final"
+HEP_REPORT_TEX = f"{HEP_REPORT_DIR}/hep_results.tex"
+HEP_REPORT_TXT = f"{HEP_REPORT_DIR}/hep_results.txt"
 
 # ---------------------------------------------------------------------------
 # rule all — final targets
@@ -161,15 +175,21 @@ rule study_mva:
     input:
         f"{OUTPUT_DIR}/.data_loaded",
     output:
-        ll_model="studies/mva_optimization/output/models/catboost_bdt_LL.cbm",
-        dd_model="studies/mva_optimization/output/models/catboost_bdt_DD.cbm",
-        ll_report="studies/mva_optimization/output/mva_optimization_report_LL.txt",
-        dd_report="studies/mva_optimization/output/mva_optimization_report_DD.txt",
+        ll_model=MVA_MODEL_PATTERN.format(category="LL"),
+        dd_model=MVA_MODEL_PATTERN.format(category="DD"),
+        ll_report=MVA_REPORT_PATTERN.format(category="LL"),
+        dd_report=MVA_REPORT_PATTERN.format(category="DD"),
         completed=MVA_COMPLETED,
+    params:
+        output_dir=f"{STUDIES_OUTPUT_DIR}/mva_optimization",
+        cache_dir=CACHE_DIR,
     shell:
         """
-        cd studies/mva_optimization/mva
-        uv run python main.py --category both
+        uv run python studies/mva_optimization/mva/main.py \
+            --category both \
+            --output-dir {params.output_dir} \
+            --cache-dir {params.cache_dir} \
+            --completion-file {output.completed}
         """
 
 
@@ -179,11 +199,12 @@ rule study_trigger:
         txt=TRIGGER_TXT,
     params:
         config_dir=CONFIG_DIR,
+        output_dir=f"{STUDIES_OUTPUT_DIR}/trigger_tis_tos",
     shell:
         """
         uv run python studies/trigger_tis_tos/tis_tos_study.py \
             --config-dir {params.config_dir} \
-            --output-dir studies/trigger_tis_tos/output \
+            --output-dir {params.output_dir} \
             > {output.txt}
         """
 
@@ -198,11 +219,15 @@ rule study_reweighting:
     params:
         config_dir=CONFIG_DIR,
         branch="high_yield",
+        output_dir=KIN_WEIGHT_DIR,
+        mva_output_dir=OUTPUT_DIR,
     shell:
         """
         uv run python studies/kinematic_reweighting/derive_weights.py \
             --config-dir {params.config_dir} \
-            --branch {params.branch}
+            --branch {params.branch} \
+            --output-dir {params.output_dir} \
+            --mva-output-dir {params.mva_output_dir}
         """
 
 
@@ -216,7 +241,7 @@ rule study_efficiency:
         tables=EFFICIENCY_TABLES,
     params:
         config_dir=CONFIG_DIR,
-        mva_output_dir=f"{ROOT_OUTPUT_DIR}/mva",
+        mva_output_dir=OUTPUT_DIR,
         branch="high_yield",
     shell:
         """
@@ -224,7 +249,7 @@ rule study_efficiency:
             --config-dir {params.config_dir} \
             --output {output.json} \
             --tis-tos {input.tis_tos} \
-            --kin-weights-dir studies/kinematic_reweighting/output \
+            --kin-weights-dir {KIN_WEIGHT_DIR} \
             --mva-output-dir {params.mva_output_dir} \
             --branch {params.branch}
         """
@@ -236,10 +261,15 @@ rule study_pid_bootstrap:
         md=PID_BOOTSTRAP_MD,
         pdf=PID_BOOTSTRAP_PDF,
         png=PID_BOOTSTRAP_PNG,
+    params:
+        output_dir=PID_OUTPUT_DIR,
     shell:
         """
         cd studies/pid_cancellation
-        uv run python apply_pidcalib.py --bootstrap-n 100 --bootstrap-seed 42
+        uv run python apply_pidcalib.py \
+            --output-dir ../../{params.output_dir} \
+            --bootstrap-n 100 \
+            --bootstrap-seed 42
         """
 
 
@@ -252,7 +282,7 @@ rule prerequisite_studies:
         KIN_WEIGHT_DD,
         EFFICIENCY_JSON,
     output:
-        f"{OUTPUT_DIR}/.studies_complete",
+        f"{STUDIES_OUTPUT_DIR}/.studies_complete",
     shell:
         "touch {output}"
 
@@ -327,7 +357,7 @@ rule presentation_plots:
         rules.plot_reweighting.output,
         rules.plot_note.output,
     output:
-        f"{OUTPUT_DIR}/.presentation_plots_complete",
+        f"{PRESENTATION_OUTPUT_DIR}/.presentation_plots_complete",
     shell:
         "touch {output}"
 
@@ -499,10 +529,11 @@ rule fit_systematics:
     input:
         cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
     output:
-        "studies/fit_systematics/output/fit_systematics_{branch}_{category}.json",
+        FIT_SYST_PATTERN,
     params:
         config_dir=CONFIG_DIR,
         cache_dir=CACHE_DIR,
+        output_dir=f"{STUDIES_OUTPUT_DIR}/fit_systematics",
     shell:
         """
         uv run python studies/fit_systematics/run_fit_systematics.py \
@@ -510,7 +541,7 @@ rule fit_systematics:
             --category   {wildcards.category} \
             --config-dir {params.config_dir} \
             --cache-dir  {params.cache_dir} \
-            --output-dir studies/fit_systematics/output
+            --output-dir {params.output_dir}
         """
 
 # ---------------------------------------------------------------------------
@@ -526,7 +557,7 @@ if OPT_METHOD == "passthrough":
         input:
             cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
         output:
-            "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+            SEL_SYST_PATTERN,
         script:
             "scripts/passthrough_selection_systematic.py"
 else:
@@ -534,10 +565,12 @@ else:
         input:
             cut_summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
         output:
-            "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+            SEL_SYST_PATTERN,
         params:
             config_dir=CONFIG_DIR,
             cache_dir=CACHE_DIR,
+            output_dir=f"{STUDIES_OUTPUT_DIR}/selection_systematic",
+            mva_output_dir=OUTPUT_DIR,
         shell:
             """
             uv run python studies/selection_systematic/run_selection_systematic.py \
@@ -545,7 +578,8 @@ else:
                 --category   {wildcards.category} \
                 --config-dir {params.config_dir} \
                 --cache-dir  {params.cache_dir} \
-                --output-dir studies/selection_systematic/output
+                --output-dir {params.output_dir} \
+                --mva-output-dir {params.mva_output_dir}
             """
 
 # ---------------------------------------------------------------------------
@@ -561,12 +595,12 @@ rule compute_systematics:
             branch=BRANCHES,
         ),
         fit_systs=expand(
-            "studies/fit_systematics/output/fit_systematics_{branch}_{category}.json",
+            FIT_SYST_PATTERN,
             branch=BRANCHES,
             category=CATEGORIES,
         ),
         sel_systs=expand(
-            "studies/selection_systematic/output/selection_systematics_{branch}_{category}.json",
+            SEL_SYST_PATTERN,
             branch=BRANCHES,
             category=CATEGORIES,
         ),
@@ -576,7 +610,7 @@ rule compute_systematics:
         f"{OUTPUT_DIR}/results/systematics_summary.md",
     params:
         output_dir=OUTPUT_DIR,
-        studies_dir="studies",
+        studies_dir=STUDIES_OUTPUT_DIR,
     shell:
         """
         uv run python scripts/compute_systematics.py \
@@ -604,25 +638,25 @@ rule export_latex_results:
 # Run:  snakemake collect_results
 # ---------------------------------------------------------------------------
 rule collect_results:
-    """Gather every important output into results/ for easy review."""
+    """Gather every important output into the unified reports tree for easy review."""
     input:
         f"{OUTPUT_DIR}/results/bf_products.tex",
         f"{OUTPUT_DIR}/results/systematics_summary.md",
         f"{OUTPUT_DIR}/comparison/branch_comparison.md",
     output:
-        final_bf="results/final/bf_products.tex",
-        final_syst_summary="results/final/systematics_summary.md",
-        final_branch_comparison="results/final/branch_comparison.md",
-        final_high_results="results/final/final_results_high_yield.md",
-        final_low_results="results/final/final_results_low_yield.md",
-        table_high="results/tables/branching_fraction_ratios_high_yield.csv",
-        table_low="results/tables/branching_fraction_ratios_low_yield.csv",
-        syst_high="results/tables/systematics_high_yield.json",
-        syst_low="results/tables/systematics_low_yield.json",
-        table_syst_summary="results/tables/systematics_summary.md",
+        final_bf=f"{COLLECTED_RESULTS_DIR}/final/bf_products.tex",
+        final_syst_summary=f"{COLLECTED_RESULTS_DIR}/final/systematics_summary.md",
+        final_branch_comparison=f"{COLLECTED_RESULTS_DIR}/final/branch_comparison.md",
+        final_high_results=f"{COLLECTED_RESULTS_DIR}/final/final_results_high_yield.md",
+        final_low_results=f"{COLLECTED_RESULTS_DIR}/final/final_results_low_yield.md",
+        table_high=f"{COLLECTED_RESULTS_DIR}/tables/branching_fraction_ratios_high_yield.csv",
+        table_low=f"{COLLECTED_RESULTS_DIR}/tables/branching_fraction_ratios_low_yield.csv",
+        syst_high=f"{COLLECTED_RESULTS_DIR}/tables/systematics_high_yield.json",
+        syst_low=f"{COLLECTED_RESULTS_DIR}/tables/systematics_low_yield.json",
+        table_syst_summary=f"{COLLECTED_RESULTS_DIR}/tables/systematics_summary.md",
     params:
         pipeline_dir=OUTPUT_DIR,
-        studies_dir="studies",
+        studies_dir=STUDIES_OUTPUT_DIR,
         output_dir=COLLECTED_RESULTS_DIR,
     shell:
         """
@@ -637,16 +671,16 @@ rule collect_results:
 # ---------------------------------------------------------------------------
 rule report_hep:
     input:
-        "results/tables/branching_fraction_ratios_high_yield.csv",
-        "results/tables/branching_fraction_ratios_low_yield.csv",
-        "results/tables/systematics_high_yield.json",
-        "results/tables/systematics_low_yield.json",
+        f"{COLLECTED_RESULTS_DIR}/tables/branching_fraction_ratios_high_yield.csv",
+        f"{COLLECTED_RESULTS_DIR}/tables/branching_fraction_ratios_low_yield.csv",
+        f"{COLLECTED_RESULTS_DIR}/tables/systematics_high_yield.json",
+        f"{COLLECTED_RESULTS_DIR}/tables/systematics_low_yield.json",
     output:
         HEP_REPORT_TEX,
         HEP_REPORT_TXT,
     params:
         results_dir=COLLECTED_RESULTS_DIR,
-        output_dir="results/final",
+        output_dir=HEP_REPORT_DIR,
     shell:
         """
         uv run python scripts/generate_hep_report.py \
@@ -689,17 +723,17 @@ rule reports:
         HEP_REPORT_TEX,
         HEP_REPORT_TXT,
     output:
-        f"{OUTPUT_DIR}/.reports_complete",
+        f"{REPORTS_OUTPUT_DIR}/.reports_complete",
     shell:
         "touch {output}"
 
 
 rule full_analysis:
     input:
-        f"{OUTPUT_DIR}/.studies_complete",
+        f"{STUDIES_OUTPUT_DIR}/.studies_complete",
         f"{OUTPUT_DIR}/.main_pipeline_complete",
         f"{OUTPUT_DIR}/.systematics_complete",
-        f"{OUTPUT_DIR}/.reports_complete",
+        f"{REPORTS_OUTPUT_DIR}/.reports_complete",
     output:
         f"{OUTPUT_DIR}/.workflow_complete",
     shell:
@@ -716,9 +750,9 @@ rule clean_cache:
 rule clean_outputs:
     """Remove output files (tables, plots, results)."""
     shell:
-        "rm -rf {OUTPUT_DIR}"
+        "rm -rf {OUTPUT_ROOT}"
 
 rule clean_all:
     """Remove everything (cache + outputs)."""
     shell:
-        "rm -rf {CACHE_DIR}/data/*.pkl {CACHE_DIR}/metadata/*.json {OUTPUT_DIR}"
+        "rm -rf {CACHE_ROOT} {OUTPUT_ROOT}"

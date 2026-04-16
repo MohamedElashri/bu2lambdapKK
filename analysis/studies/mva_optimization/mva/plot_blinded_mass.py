@@ -19,7 +19,7 @@ def generate_blinded_mass_plots():
         data_combined = ml_data["data_combined"]
         bu_mm = data_combined["Bu_MM_corrected"]
 
-        cache_dir = Path("../../analysis_output/mva/cache")
+        cache_dir = Path("../../generated/cache/pipeline/mva")
         try:
             from mva.utils.cache import load_cache
 
@@ -93,7 +93,7 @@ def generate_blinded_mass_plots():
         ax.set_ylabel("Candidates / 5 MeV/$c^2$")
         ax.legend(loc="upper right")
 
-        out_dir = Path("../output/plots/mva")
+        out_dir = Path("../../generated/output/studies/mva_optimization/plots/mva")
         out_dir.mkdir(parents=True, exist_ok=True)
         out_plot = out_dir / f"Bu_M_blinded_presel_{category}.pdf"
         plt.tight_layout()

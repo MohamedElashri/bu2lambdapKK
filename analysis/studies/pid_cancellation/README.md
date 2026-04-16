@@ -5,5 +5,5 @@ top-level analysis.
 
 ## Active Role
 
-- produces `output/pid_bootstrap_systematics.json`
+- produces `generated/output/studies/pid_cancellation/pid_bootstrap_systematics.json`
 - feeds the main systematic aggregation stage

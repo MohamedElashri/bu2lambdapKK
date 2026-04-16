@@ -2,11 +2,11 @@
 #
 # Step 1 (derive_weights.py): compute per-category pT × nTracks weights
 #   from data/MC comparison using J/ψ-tagged events.
-#   Output: output/kinematic_weights_{LL,DD}.json
+#   Output: generated/output/studies/kinematic_reweighting/kinematic_weights_{LL,DD}.json
 #
 # Step 2 (plot_reweighting.py): produce optional presentation validation figures
 #   comparing data/MC distributions before and after applying the weights.
-#   Output: presentation/ana_note_plots/figs/Lambda{LL,DD}/reweight/*.pdf
+#   Output: generated/output/presentation/ana_note_plots/figs/Lambda{LL,DD}/reweight/*.pdf
 #
 # Run from analysis/:
 #   uv run snakemake -s studies/kinematic_reweighting/Snakefile -j2
@@ -19,8 +19,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
-ANA_NOTE_FIGS = "presentation/ana_note_plots/figs"
-WEIGHT_DIR    = "studies/kinematic_reweighting/output"
+ANA_NOTE_FIGS = "generated/output/presentation/ana_note_plots/figs"
+WEIGHT_DIR    = "generated/output/studies/kinematic_reweighting"
 CATEGORIES    = ["LL", "DD"]
 
 rule all:

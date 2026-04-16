@@ -14,7 +14,9 @@ def _load_pipeline_threshold(category: str, branch: str) -> float:
     """Read the deployed threshold from the main pipeline output."""
     cuts_path = (
         Path(__file__).resolve().parents[3]
-        / "analysis_output"
+        / "generated"
+        / "output"
+        / "pipeline"
         / "mva"
         / branch
         / category
@@ -59,7 +61,10 @@ def generate_mass_sculpting_plot(category="LL", branch="high_yield", cut_thresho
     mass_before = bkg_events["Bu_MM_corrected"]
 
     # 3. Load model
-    model_path = Path(f"../output/models/catboost_bdt_{category}.cbm")
+    model_path = (
+        Path("../../generated/output/studies/mva_optimization/models")
+        / f"catboost_bdt_{category}.cbm"
+    )
     model = CatBoostClassifier()
     if not model_path.exists():
         print(f"Error: Model not found at {model_path}")
@@ -123,7 +128,7 @@ def generate_mass_sculpting_plot(category="LL", branch="high_yield", cut_thresho
     plt.legend(loc="best", fontsize=12)
     plt.grid(True, alpha=0.3)
 
-    out_dir = Path("../output/plots/mva")
+    out_dir = Path("../../generated/output/studies/mva_optimization/plots/mva")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"mass_sculpting_{category}.pdf"
     plt.savefig(out_path, dpi=300, bbox_inches="tight")

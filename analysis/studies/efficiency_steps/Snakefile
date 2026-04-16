@@ -20,22 +20,22 @@ sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
 rule all:
     input:
-        "output/efficiencies.json"
+        "generated/output/studies/efficiency_steps/efficiencies.json"
 
 rule calculate_efficiencies:
     input:
-        tis_tos   = "../trigger_tis_tos/output/tis_tos_results.json",
-        kin_ll    = "../kinematic_reweighting/output/kinematic_weights_LL.json",
-        kin_dd    = "../kinematic_reweighting/output/kinematic_weights_DD.json",
+        tis_tos   = "generated/output/studies/trigger_tis_tos/tis_tos_results.json",
+        kin_ll    = "generated/output/studies/kinematic_reweighting/kinematic_weights_LL.json",
+        kin_dd    = "generated/output/studies/kinematic_reweighting/kinematic_weights_DD.json",
     output:
-        "output/efficiencies.json"
+        "generated/output/studies/efficiency_steps/efficiencies.json"
     shell:
         """
-        uv run python calculate_efficiencies.py \
+        uv run python studies/efficiency_steps/calculate_efficiencies.py \
             --config-dir   ../../config \
             --output       {output} \
             --tis-tos      {input.tis_tos} \
-            --kin-weights-dir ../kinematic_reweighting/output \
-            --mva-output-dir  ../../analysis_output/mva \
+            --kin-weights-dir generated/output/studies/kinematic_reweighting \
+            --mva-output-dir  generated/output/pipeline/mva \
             --branch          high_yield
         """

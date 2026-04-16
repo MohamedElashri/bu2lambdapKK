@@ -1,11 +1,11 @@
 """
-Collect all analysis outputs into a single self-contained results/ directory.
+Collect all analysis outputs into a single organised reports directory.
 
 Run via:   snakemake collect_results
-Or:        uv run python scripts/collect_results.py --output-dir results/
+Or:        uv run python scripts/collect_results.py --output-dir generated/output/reports/collected
 
 Layout created:
-  results/
+  generated/output/reports/collected/
     final/
       bf_products.tex               ← LaTeX BF table
       final_results_high_yield.md   ← per-branch summary
@@ -193,10 +193,18 @@ def _print_tree(root: Path, prefix: str = "", max_depth: int = 3, depth: int = 0
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Collect all analysis results into one folder")
     parser.add_argument(
-        "--pipeline-dir", default="analysis_output/mva", help="Main pipeline output dir"
+        "--pipeline-dir",
+        default="generated/output/pipeline/mva",
+        help="Main pipeline output dir",
     )
-    parser.add_argument("--studies-dir", default="studies", help="Studies directory")
-    parser.add_argument("--output-dir", default="results", help="Destination folder")
+    parser.add_argument(
+        "--studies-dir", default="generated/output/studies", help="Generated studies directory"
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="generated/output/reports/collected",
+        help="Destination folder",
+    )
     args = parser.parse_args()
 
     collect(

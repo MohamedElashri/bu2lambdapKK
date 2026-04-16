@@ -41,6 +41,31 @@ if str(_ANALYSIS_DIR) not in sys.path:
 from modules.config_loader import StudyConfig
 
 
+def _binomial_err(eff: float, n: float) -> float:
+    """Return a stable binomial uncertainty for approximate weighted efficiencies."""
+    if n <= 0:
+        return 0.0
+    eff_clamped = float(np.clip(eff, 0.0, 1.0))
+    return float(np.sqrt(eff_clamped * (1.0 - eff_clamped) / n))
+
+
+def _build_event_level_mva_frame(events, features: list[str]):
+    """Convert awkward event records into the event-level feature frame used by CatBoost."""
+    import awkward as ak
+
+    data_dict = {}
+    for feat in features:
+        arr = events[feat]
+        if "var" in str(ak.type(arr)):
+            arr = ak.firsts(arr)
+        arr_np = np.asarray(ak.to_numpy(ak.fill_none(arr, np.nan)), dtype=float)
+        data_dict[feat] = arr_np
+
+    df = pd.DataFrame(data_dict)
+    valid_mask = np.isfinite(df.to_numpy()).all(axis=1)
+    return df.loc[valid_mask].reset_index(drop=True), valid_mask
+
+
 def get_gen_eff_from_config(
     state: str, year: str, polarity: str, gen_config: dict
 ) -> tuple[float, float]:
@@ -122,28 +147,16 @@ class EfficiencyResult:
         return self.eff_gen * self.eff_reco_str * self.eff_trig * self.eff_pre * self.eff_mva
 
     def get_err_reco_str(self) -> float:
-        if self.n_total == 0:
-            return 0.0
-        eff = self.eff_reco_str
-        return np.sqrt(eff * (1 - eff) / self.n_total)
+        return _binomial_err(self.eff_reco_str, self.n_total)
 
     def get_err_trig(self) -> float:
-        if self.n_reco_str == 0:
-            return 0.0
-        eff = self.eff_trig
-        return np.sqrt(eff * (1 - eff) / self.n_reco_str)
+        return _binomial_err(self.eff_trig, self.n_reco_str)
 
     def get_err_pre(self) -> float:
-        if self.n_trig == 0:
-            return 0.0
-        eff = self.eff_pre
-        return np.sqrt(eff * (1 - eff) / self.n_trig)
+        return _binomial_err(self.eff_pre, self.n_trig)
 
     def get_err_mva(self) -> float:
-        if self.n_pre == 0:
-            return 0.0
-        eff = self.eff_mva
-        return np.sqrt(eff * (1 - eff) / self.n_pre)
+        return _binomial_err(self.eff_mva, self.n_pre)
 
     def get_err_total(self) -> float:
         eff_tot_no_gen = self.eff_reco_str * self.eff_trig * self.eff_pre * self.eff_mva
@@ -184,7 +197,7 @@ def calculate_efficiencies_for_file(
         mva_features:  Feature list matching the trained model.
         mva_threshold: BDT score threshold.
         kin_weights:   Dict with "pt_bins" and "weights" for kinematic reweighting
-                       (from kinematic_reweighting/output/kinematic_weights_{category}.json).
+                       (from generated/output/studies/kinematic_reweighting/kinematic_weights_{category}.json).
                        Optional; if None, no reweighting is applied.
         tis_tos_corr:  Data/MC HLT TOS efficiency correction factor for this (category, year).
                        Applied by scaling n_trig: eff_trig_corrected = eff_trig_MC * corr.
@@ -380,38 +393,16 @@ def calculate_efficiencies_for_file(
         return result
 
     # ---- STEP 5: MVA Selection ----
-    import awkward as ak
-
     events_pre = tree.arrays(mva_features, library="ak")[pre_total_mask]
-
-    # Handle jagged arrays: find a jagged template (Bu_DTF_chi2 can be jagged in MC)
-    template = None
-    for feat in mva_features:
-        arr = events_pre[feat]
-        if arr.ndim > 1:
-            template = arr
-            break
-
-    data_dict = {}
-    for feat in mva_features:
-        arr = events_pre[feat]
-        if arr.ndim == 1 and template is not None:
-            arr = arr * ak.ones_like(template)
-        if arr.ndim > 1:
-            arr = ak.flatten(arr)
-        data_dict[feat] = ak.to_numpy(arr)
-
-    df = pd.DataFrame(data_dict)
-
-    # Build per-row weights matching the (possibly broadcast) feature array
     w_pre_events = w_array[pre_total_mask]
-    if template is not None:
-        w_pre_jagged = w_pre_events * ak.ones_like(template)
-        w_pre = ak.to_numpy(ak.flatten(w_pre_jagged))
-    else:
-        w_pre = w_pre_events
+    df, valid_mask = _build_event_level_mva_frame(events_pre, mva_features)
+    w_pre = np.asarray(w_pre_events, dtype=float)[valid_mask]
 
     if len(df) > 0:
+        if len(df) != len(w_pre):
+            raise ValueError(
+                f"MVA feature rows ({len(df)}) and weights ({len(w_pre)}) are misaligned for {file_path}"
+            )
         if hasattr(mva_model, "predict_proba"):
             preds = mva_model.predict_proba(df)[:, 1]
         else:
@@ -420,6 +411,12 @@ def calculate_efficiencies_for_file(
             preds = xgb.Booster().predict(xgb.DMatrix(df))
 
         result.n_mva = float(np.sum(w_pre[preds > mva_threshold]))
+        overflow_tol = max(1e-9, 1e-6 * result.n_pre)
+        if result.n_mva > result.n_pre + overflow_tol:
+            raise ValueError(
+                f"MVA weighted yield ({result.n_mva:.6f}) exceeds preselection yield "
+                f"({result.n_pre:.6f}) for {file_path}"
+            )
     else:
         result.n_mva = 0.0
 
@@ -561,24 +558,26 @@ def print_markdown_table(
 def main():
     parser = argparse.ArgumentParser(description="Calculate stepwise efficiencies")
     parser.add_argument("--config-dir", type=str, default="../../config")
-    parser.add_argument("--output", type=str, default="output/efficiencies.json")
+    parser.add_argument(
+        "--output", type=str, default="generated/output/studies/efficiency_steps/efficiencies.json"
+    )
     parser.add_argument(
         "--tis-tos",
         type=str,
-        default="../trigger_tis_tos/output/tis_tos_results.json",
+        default="generated/output/studies/trigger_tis_tos/tis_tos_results.json",
         help="Path to TIS/TOS correction JSON (output of tis_tos_study.py). "
         "Pass 'none' to disable.",
     )
     parser.add_argument(
         "--kin-weights-dir",
         type=str,
-        default="../kinematic_reweighting/output",
+        default="generated/output/studies/kinematic_reweighting",
         help="Directory containing kinematic_weights_{LL,DD}.json files.",
     )
     parser.add_argument(
         "--mva-output-dir",
         type=str,
-        default="../../analysis_output/mva",
+        default="generated/output/pipeline/mva",
         help="Root of the main pipeline output directory for loading MVA models.",
     )
     parser.add_argument(

@@ -10,6 +10,7 @@ if str(project_root) not in sys.path:
 from modules.cache_manager import CacheManager
 from modules.clean_data_loader import load_all_data, load_all_mc
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_cache_dir
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ else:
     states = None
     no_cache = False
     config_dir = "config"
-    cache_dir = "cache"
+    cache_dir = str(pipeline_cache_dir("mva", project_root / "generated" / "cache"))
 
 config = StudyConfig.from_dir(config_dir)
 

@@ -3,6 +3,7 @@ Final Fit Execution for MVA  [FROZEN — MVA optimisation complete]
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -20,6 +21,13 @@ from mass_fitter import MassFitter  # local frozen snapshot (different API from 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def study_output_dir() -> Path:
+    return Path(
+        os.environ.get("ANALYSIS_MVA_OUTPUT_DIR", "../../generated/output/studies/mva_optimization")
+    )
+
 
 OPTIMIZED_STATES = ["jpsi", "etac", "chic0", "chic1"]
 
@@ -122,7 +130,7 @@ def perform_final_fit(config: StudyConfig, model, cut_results: dict, ml_data: di
         pivot_df.columns = [f"{col[1]} ({col[0]})" for col in pivot_df.columns]
         pivot_df = pivot_df.reset_index()
 
-        output_dir = Path("../output/tables")
+        output_dir = study_output_dir() / "tables"
         output_dir.mkdir(exist_ok=True, parents=True)
 
         md_file = output_dir / "mva_final_fit_results.md"

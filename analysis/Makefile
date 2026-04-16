@@ -9,16 +9,19 @@
 
 OPT_METHOD ?= mva
 CORES      ?= 4
+OUTPUT_ROOT ?= generated/output
+CACHE_ROOT  ?= generated/cache
 
 SNAKEMAKE = uv run snakemake
 SNAKEJOBS = -j$(CORES)
-SNAKECFG  = --config opt_method=$(OPT_METHOD)
-VALIDATION_OUTPUT_DIR ?= analysis_output_validation
+SNAKECFG  = --config opt_method=$(OPT_METHOD) output_root=$(OUTPUT_ROOT) cache_root=$(CACHE_ROOT)
+VALIDATION_OUTPUT_ROOT ?= $(OUTPUT_ROOT)/validation
+VALIDATION_CACHE_ROOT  ?= $(CACHE_ROOT)/validation
 SMOKE_YEAR           ?= 2016
 SMOKE_TRACK          ?= LL
 SMOKE_MAGNET         ?= MD
 SMOKE_STATE          ?= Jpsi
-VALIDATION_CFG       = --config opt_method=$(OPT_METHOD) output_dir=$(VALIDATION_OUTPUT_DIR)
+VALIDATION_CFG       = --config opt_method=$(OPT_METHOD) output_root=$(VALIDATION_OUTPUT_ROOT) cache_root=$(VALIDATION_CACHE_ROOT)
 SMOKE_CFG            = $(VALIDATION_CFG) years='["$(SMOKE_YEAR)"]' track_types='["$(SMOKE_TRACK)"]' magnets='["$(SMOKE_MAGNET)"]' states='["$(SMOKE_STATE)"]' no_cache=true
 
 # =============================================================================
@@ -54,7 +57,7 @@ reports:
 	$(SNAKEMAKE) $(SNAKEJOBS) reports $(SNAKECFG)
 
 collect-results:
-	@echo ">>> [Collect] Gathering outputs into results/"
+	@echo ">>> [Collect] Gathering outputs into $(OUTPUT_ROOT)/reports/collected/"
 	$(SNAKEMAKE) $(SNAKEJOBS) collect_results $(SNAKECFG)
 
 report-hep:
@@ -164,36 +167,20 @@ study-pid-bootstrap:
 .PHONY: clean clean-generated clean-main clean-intermediate clean-studies clean-snakemake clean-results
 
 clean-main:
-	@echo "Removing analysis_output/, analysis_output_validation/, and results/ ..."
-	rm -rf analysis_output/ analysis_output_validation/ results/
+	@echo "Removing $(OUTPUT_ROOT) and $(CACHE_ROOT) ..."
+	rm -rf $(OUTPUT_ROOT) $(CACHE_ROOT)
 
 clean-intermediate:
-	@echo "Removing intermediate dirs (analysis_output/ + analysis_output_validation/ + cache + generated study artifacts) ..."
-	rm -rf analysis_output/
-	rm -rf analysis_output_validation/
-	rm -rf cache/
-	rm -rf studies/mva_optimization/output/
-	rm -rf studies/mva_optimization/comparison/
-	rm -rf studies/mva_optimization/catboost_info/
-	rm -rf studies/trigger_tis_tos/output/
-	rm -rf studies/kinematic_reweighting/output/
-	rm -rf studies/efficiency_steps/output/
-	rm -rf studies/fit_systematics/output/
-	rm -rf studies/selection_systematic/output/
-	rm -rf studies/pid_cancellation/output/
-	@echo "results/ preserved."
+	@echo "Removing generated pipeline, study, presentation outputs and cache ..."
+	rm -rf $(OUTPUT_ROOT)/pipeline/
+	rm -rf $(OUTPUT_ROOT)/studies/
+	rm -rf $(OUTPUT_ROOT)/presentation/
+	rm -rf $(CACHE_ROOT)
+	@echo "$(OUTPUT_ROOT)/reports preserved."
 
 clean-studies:
-	@echo "Removing study outputs (pid_cancellation/pidcalib_output/ preserved) ..."
-	rm -rf studies/mva_optimization/output/
-	rm -rf studies/mva_optimization/comparison/
-	rm -rf studies/mva_optimization/catboost_info/
-	rm -rf studies/trigger_tis_tos/output/
-	rm -rf studies/kinematic_reweighting/output/
-	rm -rf studies/efficiency_steps/output/
-	rm -rf studies/fit_systematics/output/
-	rm -rf studies/selection_systematic/output/
-	rm -rf studies/pid_cancellation/output/
+	@echo "Removing generated study outputs (pid_cancellation/pidcalib_output/ preserved) ..."
+	rm -rf $(OUTPUT_ROOT)/studies/
 
 clean-snakemake:
 	@echo "Removing .snakemake metadata ..."
@@ -218,9 +205,9 @@ dry-run:
 	$(SNAKEMAKE) $(SNAKEJOBS) full_analysis $(SNAKECFG) -n
 
 validate-config:
-	@echo ">>> [Validation] Config validation into $(VALIDATION_OUTPUT_DIR)/$(OPT_METHOD)"
+	@echo ">>> [Validation] Config validation into $(VALIDATION_OUTPUT_ROOT)/pipeline/$(OPT_METHOD)"
 	$(SNAKEMAKE) -j1 validate_config $(VALIDATION_CFG)
-	test -f $(VALIDATION_OUTPUT_DIR)/$(OPT_METHOD)/.config_validated
+	test -f $(VALIDATION_OUTPUT_ROOT)/pipeline/$(OPT_METHOD)/.config_validated
 
 smoke-imports:
 	@echo ">>> [Validation] Shared-module import smoke check"
@@ -229,15 +216,15 @@ smoke-imports:
 smoke-subset:
 	@echo ">>> [Validation] One-year/category subset load-data smoke ($(SMOKE_YEAR), $(SMOKE_TRACK), $(SMOKE_MAGNET), $(SMOKE_STATE))"
 	$(SNAKEMAKE) -j1 load_data $(SMOKE_CFG) --forcerun load_data
-	test -f $(VALIDATION_OUTPUT_DIR)/$(OPT_METHOD)/.config_validated
-	test -f $(VALIDATION_OUTPUT_DIR)/$(OPT_METHOD)/.data_loaded
+	test -f $(VALIDATION_OUTPUT_ROOT)/pipeline/$(OPT_METHOD)/.config_validated
+	test -f $(VALIDATION_OUTPUT_ROOT)/pipeline/$(OPT_METHOD)/.data_loaded
 
 smoke:
 	@echo ">>> [Validation] Structural smoke suite"
 	$(MAKE) dry-run OPT_METHOD=$(OPT_METHOD)
 	$(MAKE) smoke-imports
-	$(MAKE) validate-config OPT_METHOD=$(OPT_METHOD) VALIDATION_OUTPUT_DIR=$(VALIDATION_OUTPUT_DIR)
-	$(MAKE) smoke-subset OPT_METHOD=$(OPT_METHOD) VALIDATION_OUTPUT_DIR=$(VALIDATION_OUTPUT_DIR) SMOKE_YEAR=$(SMOKE_YEAR) SMOKE_TRACK=$(SMOKE_TRACK) SMOKE_MAGNET=$(SMOKE_MAGNET) SMOKE_STATE=$(SMOKE_STATE)
+	$(MAKE) validate-config OPT_METHOD=$(OPT_METHOD) VALIDATION_OUTPUT_ROOT=$(VALIDATION_OUTPUT_ROOT) VALIDATION_CACHE_ROOT=$(VALIDATION_CACHE_ROOT)
+	$(MAKE) smoke-subset OPT_METHOD=$(OPT_METHOD) VALIDATION_OUTPUT_ROOT=$(VALIDATION_OUTPUT_ROOT) VALIDATION_CACHE_ROOT=$(VALIDATION_CACHE_ROOT) SMOKE_YEAR=$(SMOKE_YEAR) SMOKE_TRACK=$(SMOKE_TRACK) SMOKE_MAGNET=$(SMOKE_MAGNET) SMOKE_STATE=$(SMOKE_STATE)
 	@echo ">>> [Validation] Presentation dry-run ($(SMOKE_YEAR), $(SMOKE_TRACK), $(SMOKE_MAGNET), $(SMOKE_STATE))"
 	$(SNAKEMAKE) -j1 -n presentation_plots $(SMOKE_CFG)
 	@echo "Structural smoke suite complete."
@@ -292,14 +279,14 @@ help:
 	@echo "  make study-pid-bootstrap PID bootstrap study"
 	@echo ""
 	@echo "Reporting:"
-	@echo "  make collect-results   Copy key outputs into results/"
+	@echo "  make collect-results   Copy key outputs into $(OUTPUT_ROOT)/reports/collected/"
 	@echo "  make report-hep        Generate HEP-style LaTeX + text report"
 	@echo "  make reports           Run collect-results and report-hep together"
 	@echo ""
 	@echo "Validation:"
-	@echo "  make validate-config   Run validate_config into analysis_output_validation/"
+	@echo "  make validate-config   Run validate_config into $(VALIDATION_OUTPUT_ROOT)/pipeline/"
 	@echo "  make smoke-imports     Import shared modules and shared config helpers"
-	@echo "  make smoke-subset      Run load_data on one year/category/state into analysis_output_validation/"
+	@echo "  make smoke-subset      Run load_data on one year/category/state into $(VALIDATION_OUTPUT_ROOT)/pipeline/"
 	@echo "  make smoke             dry-run + imports + config + subset run + presentation dry-run"
 	@echo ""
 	@echo "Utilities:"
@@ -310,14 +297,17 @@ help:
 	@echo "Cleaning:"
 	@echo "  make clean                Remove all generated outputs (pidcalib_output/ preserved)"
 	@echo "  make clean-generated      Alias for clean"
-	@echo "  make clean-intermediate   Remove intermediate dirs only (keeps results/)"
-	@echo "  make clean-main           Remove analysis_output/, analysis_output_validation/, and results/ only"
+	@echo "  make clean-intermediate   Remove generated pipeline/study/presentation outputs only"
+	@echo "  make clean-main           Remove $(OUTPUT_ROOT) and $(CACHE_ROOT)"
 	@echo "  make clean-studies        Remove generated study outputs"
 	@echo "  make clean-snakemake      Remove .snakemake directories"
 	@echo ""
 	@echo "Variables:"
 	@echo "  OPT_METHOD   Optimization method: mva (default), box, or passthrough"
 	@echo "  CORES        Parallel Snakemake jobs: 4 (default)"
-	@echo "  VALIDATION_OUTPUT_DIR  Smoke/validation output root: analysis_output_validation"
+	@echo "  OUTPUT_ROOT           Unified generated output root: $(OUTPUT_ROOT)"
+	@echo "  CACHE_ROOT            Unified generated cache root: $(CACHE_ROOT)"
+	@echo "  VALIDATION_OUTPUT_ROOT Smoke/validation output root: $(VALIDATION_OUTPUT_ROOT)"
+	@echo "  VALIDATION_CACHE_ROOT  Smoke/validation cache root: $(VALIDATION_CACHE_ROOT)"
 	@echo "  SMOKE_YEAR/SMOKE_TRACK/SMOKE_MAGNET/SMOKE_STATE  Subset run selectors"
 	@echo ""

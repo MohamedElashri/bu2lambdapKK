@@ -159,7 +159,7 @@ def calculate_binned_efficiencies(data, states, p_maps, k_maps, p_branch, pt_bra
     return binned_effs
 
 
-def generate_condensed_plot(data, states, p_maps, k_maps):
+def generate_condensed_plot(data, states, p_maps, k_maps, output_dir: Path):
     """Generate a 2x2 professional plot grid for the efficiency ratios."""
 
     # 20 bins from 0 to 100 GeV
@@ -279,16 +279,16 @@ def generate_condensed_plot(data, states, p_maps, k_maps):
     )
     plt.subplots_adjust(top=0.86, wspace=0.1, hspace=0.25)
 
-    plt.savefig("output/real_ratio_condensed_panel.pdf", bbox_inches="tight")
-    plt.savefig("output/real_ratio_condensed_panel.png", dpi=300, bbox_inches="tight")
+    plt.savefig(output_dir / "real_ratio_condensed_panel.pdf", bbox_inches="tight")
+    plt.savefig(output_dir / "real_ratio_condensed_panel.png", dpi=300, bbox_inches="tight")
     plt.close()
 
-    print("Saved condensed multi-panel plots to output/")
+    print(f"Saved condensed multi-panel plots to {output_dir}/")
 
 
-def main():
-    out_dir = Path("output")
-    out_dir.mkdir(exist_ok=True)
+def main(output_dir: str = "generated/output/studies/pid_cancellation"):
+    out_dir = Path(output_dir)
+    out_dir.mkdir(exist_ok=True, parents=True)
     calib_dir = Path("pidcalib_output")
 
     if not calib_dir.exists():
@@ -388,9 +388,9 @@ def main():
 
     # Generate condensed panel plots
     print("\nGenerating clean condensed panel plots using mplhep...")
-    generate_condensed_plot(data, states, p_maps, k_maps)
+    generate_condensed_plot(data, states, p_maps, k_maps, out_dir)
 
-    print("\nAll done! Results saved in output/")
+    print(f"\nAll done! Results saved in {out_dir}/")
 
 
 def run_pid_bootstrap(
@@ -480,16 +480,21 @@ if __name__ == "__main__":
         help="Number of bootstrap iterations for PID systematic (0 = skip)",
     )
     parser.add_argument("--bootstrap-seed", type=int, default=42)
+    parser.add_argument(
+        "--output-dir",
+        default="generated/output/studies/pid_cancellation",
+        help="Directory where generated PID study outputs are written.",
+    )
     args = parser.parse_args()
 
-    main()
+    main(output_dir=args.output_dir)
 
     if args.bootstrap_n > 0:
         import json
 
         print(f"\n=== PID Bootstrap ({args.bootstrap_n} iterations) ===")
         # Re-load the same data and maps as in main() above
-        out_dir = Path("output")
+        out_dir = Path(args.output_dir)
         calib_dir = Path("pidcalib_output")
         if not calib_dir.exists():
             print("pidcalib_output not found — skipping bootstrap.")

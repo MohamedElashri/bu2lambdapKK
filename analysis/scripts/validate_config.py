@@ -7,13 +7,14 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_output_dir
 
 if "snakemake" in globals():
     config_dir = snakemake.params.config_dir
     output_dir = snakemake.params.output_dir
 else:
     config_dir = "config"
-    output_dir = "analysis_output"
+    output_dir = str(pipeline_output_dir("mva", project_root / "generated" / "output"))
 
 config_path = Path(config_dir).resolve()
 

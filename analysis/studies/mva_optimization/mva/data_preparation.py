@@ -15,6 +15,7 @@ Current workflow notes:
 """
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
 
 
-def load_and_prepare_data(config, category: str = "LL"):
+def load_and_prepare_data(config, category: str = "LL", cache_dir: str | Path | None = None):
     """Load data and MC from the main pipeline cache and prepare training arrays.
 
     Args:
@@ -49,22 +50,29 @@ def load_and_prepare_data(config, category: str = "LL"):
     """
     # ---- Locate the main pipeline cache ----
     # project_root resolves to the analysis/ directory (4 parents up from this file).
-    # The main pipeline uses analysis_output/<opt_method>/cache/ relative to analysis/.
+    # The main pipeline uses generated/cache/pipeline/<opt_method>/ relative to analysis/.
     # We read from whichever cache exists. Prefer "mva" cache, fall back to "box".
     analysis_dir = project_root  # analysis/ dir
-    cache_dir = None
-    for method in ["mva", "box"]:
-        candidate = analysis_dir / "analysis_output" / method / "cache"
-        if candidate.exists():
-            cache_dir = candidate
-            logger.info(f"Using pipeline cache at {cache_dir}")
-            break
+    if cache_dir is None:
+        env_cache_dir = os.environ.get("ANALYSIS_PIPELINE_CACHE_DIR")
+        if env_cache_dir:
+            cache_dir = Path(env_cache_dir)
+
+    if cache_dir is None:
+        for method in ["mva", "box"]:
+            candidate = analysis_dir / "generated" / "cache" / "pipeline" / method
+            if candidate.exists():
+                cache_dir = candidate
+                logger.info(f"Using pipeline cache at {cache_dir}")
+                break
 
     if cache_dir is None:
         raise RuntimeError(
-            "No pipeline cache found at analysis/analysis_output/[mva|box]/cache/. "
+            "No pipeline cache found at analysis/generated/cache/pipeline/[mva|box]/. "
             "Run 'snakemake load_data -j1' from the analysis/ directory first."
         )
+
+    cache_dir = Path(cache_dir)
 
     # Load the main pipeline config to get the cache dependency hash
     main_config = StudyConfig.from_dir(analysis_dir / "config", output_dir=str(cache_dir.parent))

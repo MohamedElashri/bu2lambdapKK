@@ -1,12 +1,13 @@
 # Analysis Note Plots Snakefile
 #
 # Produces publication-quality figures for the B+ → Λ̄pK⁻K⁺ analysis note.
-# All outputs go to figs/LambdaLL/ and figs/LambdaDD/.
+# All outputs go to generated/output/presentation/ana_note_plots/figs/LambdaLL/
+# and generated/output/presentation/ana_note_plots/figs/LambdaDD/.
 #
 # Background study figures and reweighting figures are produced by their
 # own workflow Snakefiles:
-#   presentation/background_studies/Snakefile → figs/*/backgrounds/, figs/*/misID_*
-#   studies/kinematic_reweighting/Snakefile   → figs/*/reweight/
+#   presentation/background_studies/Snakefile → generated/output/presentation/.../backgrounds/
+#   studies/kinematic_reweighting/Snakefile   → generated/output/presentation/.../reweight/
 #
 # Scripts in this directory (pure visualization, no study logic):
 #   plot_preselection.py     §3 — preselection cut distributions
@@ -31,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
-FIGS    = "presentation/ana_note_plots/figs"
+FIGS    = "generated/output/presentation/ana_note_plots/figs"
 CATS    = ["LL", "DD"]
 STATES  = ["Jpsi", "Etac", "Chic0", "Chic1"]
 

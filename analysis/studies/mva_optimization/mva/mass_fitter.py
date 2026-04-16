@@ -11,6 +11,7 @@ If you need the current fitter, import from modules.mass_fitter instead.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,12 @@ ROOT.RooMsgService.instance().setGlobalKillBelow(ROOT.RooFit.WARNING)  # type: i
 
 # Set ROOT to batch mode to prevent display/GUI issues during testing
 ROOT.gROOT.SetBatch(True)  # type: ignore
+
+
+def study_output_dir() -> Path:
+    return Path(
+        os.environ.get("ANALYSIS_MVA_OUTPUT_DIR", "../../generated/output/studies/mva_optimization")
+    )
 
 
 class MassFitter:
@@ -891,9 +898,9 @@ class MassFitter:
         # Save plot — each state's cuts go in their own subdirectory
         canvas.cd()
         if plot_tag:
-            plot_dir = Path("../output/plots/fits") / plot_tag
+            plot_dir = study_output_dir() / "plots" / "fits" / plot_tag
         else:
-            plot_dir = Path("../output/plots/fits")
+            plot_dir = study_output_dir() / "plots" / "fits"
         plot_dir.mkdir(exist_ok=True, parents=True)
         output_file = plot_dir / f"mass_fit_{year}.pdf"
         canvas.SaveAs(str(output_file))

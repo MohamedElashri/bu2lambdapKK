@@ -2,8 +2,8 @@
 Generate HEP-style final results report for B+ → Λ̄pK⁻K⁺ charmonium analysis.
 
 Produces:
-  results/final/hep_results.tex  — LaTeX table in LHCb/PDG style
-  results/final/hep_results.txt  — Plain-text summary for terminal reading
+  generated/output/reports/final/hep_results.tex  — LaTeX table in LHCb/PDG style
+  generated/output/reports/final/hep_results.txt  — Plain-text summary for terminal reading
 
 Measured quantities:
   B(B+ → X K+) × B(X → Λ̄pK⁻)
@@ -12,8 +12,8 @@ Measured quantities:
 
 Usage (standalone):
   uv run python scripts/generate_hep_report.py \\
-      --results-dir results \\
-      --output-dir  results/final
+      --results-dir generated/output/reports/collected \\
+      --output-dir  generated/output/reports/final
 """
 
 import argparse
@@ -460,9 +460,15 @@ def _write_text(summary: dict, path: Path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate HEP-style results report")
-    parser.add_argument("--results-dir", default="results", help="Collected results directory")
     parser.add_argument(
-        "--output-dir", default="results/final", help="Where to write hep_results.*"
+        "--results-dir",
+        default="generated/output/reports/collected",
+        help="Collected results directory",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="generated/output/reports/final",
+        help="Where to write hep_results.*",
     )
     args = parser.parse_args()
 

@@ -7,8 +7,8 @@
 #   4. Misidentified B+→ΛpK+K+ MC       (plot_backgrounds.py)
 #
 # All figures are written to:
-#   presentation/ana_note_plots/figs/LambdaLL|DD/backgrounds/
-#   presentation/ana_note_plots/figs/LambdaLL|DD/misID_*
+#   generated/output/presentation/ana_note_plots/figs/LambdaLL|DD/backgrounds/
+#   generated/output/presentation/ana_note_plots/figs/LambdaLL|DD/misID_*
 #
 # Run from analysis/:
 #   uv run snakemake -s presentation/background_studies/Snakefile -j2
@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
-ANA_NOTE_FIGS = "presentation/ana_note_plots/figs"
+ANA_NOTE_FIGS = "generated/output/presentation/ana_note_plots/figs"
 
 CATEGORIES = ["LL", "DD"]
 

@@ -4,6 +4,7 @@ Optuna Tuning script for CatBoost MVA  [FROZEN — MVA optimisation complete]
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -23,6 +24,12 @@ from sklearn.model_selection import StratifiedKFold
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def study_output_dir() -> Path:
+    return Path(
+        os.environ.get("ANALYSIS_MVA_OUTPUT_DIR", "../../generated/output/studies/mva_optimization")
+    )
 
 
 def optimize_catboost_hyperparameters(config: StudyConfig, ml_data: dict, n_trials: int = 50):
@@ -90,7 +97,7 @@ def optimize_catboost_hyperparameters(config: StudyConfig, ml_data: dict, n_tria
         logger.info(f"    {key}: {value}")
 
     # Output directory relative to where the script is run
-    output_dir = Path("../output/models")
+    output_dir = study_output_dir() / "models"
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "optuna_catboost_best_params.json", "w") as f:
         json.dump(trial.params, f, indent=4)

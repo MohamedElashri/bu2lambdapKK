@@ -11,16 +11,16 @@ sys.path.insert(0, str(Path(workflow.basedir).parent.parent))
 
 rule all:
     input:
-        "output/tis_tos_results.json"
+        "generated/output/studies/trigger_tis_tos/tis_tos_results.json"
 
 rule run_tis_tos:
     output:
-        json = "output/tis_tos_results.json",
-        txt  = "output/tis_tos_results.txt",
+        json = "generated/output/studies/trigger_tis_tos/tis_tos_results.json",
+        txt  = "generated/output/studies/trigger_tis_tos/tis_tos_results.txt",
     shell:
         """
-        uv run python tis_tos_study.py \
+        uv run python studies/trigger_tis_tos/tis_tos_study.py \
             --config-dir ../../config \
-            --output-dir output \
+            --output-dir generated/output/studies/trigger_tis_tos \
             > {output.txt}
         """

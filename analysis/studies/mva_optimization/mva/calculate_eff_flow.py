@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,12 @@ from mva.config_loader import StudyConfig
 from mva.data_preparation import load_and_prepare_data
 
 from modules.data_handler import DataManager
+
+
+def study_output_dir() -> Path:
+    return Path(
+        os.environ.get("ANALYSIS_MVA_OUTPUT_DIR", "../../generated/output/studies/mva_optimization")
+    )
 
 
 def get_mc_efficiency_flow(category="LL"):
@@ -29,7 +36,7 @@ def get_mc_efficiency_flow(category="LL"):
     # Load the CatBoost model to apply the final cut
     from catboost import CatBoostClassifier
 
-    model_path = Path(f"../output/models/catboost_bdt_{category}.cbm")
+    model_path = study_output_dir() / "models" / f"catboost_bdt_{category}.cbm"
     model = CatBoostClassifier()
     model.load_model(str(model_path))
 
@@ -152,7 +159,7 @@ if __name__ == "__main__":
     print(r"\midrule")
     print(rf"Reconstruction \& Stripping & {eff_ll[0]:.1f}\\% & {eff_dd[0]:.1f}\\% \\\\")
     print(f"Trigger (L0+HLT1+HLT2)      & {eff_ll[1]:.1f}\\% & {eff_dd[1]:.1f}\\% \\\\")
-    print(f"Pre-selection + PID ($>0.2$)& {eff_ll[2]:.1f}\\% & {eff_dd[2]:.1f}\\% \\\\")
+    print(f"Pre-selection + PID ($>0.25$)& {eff_ll[2]:.1f}\\% & {eff_dd[2]:.1f}\\% \\\\")
     print(f"MVA Classifier              & {eff_ll[3]:.1f}\\% & {eff_dd[3]:.1f}\\% \\\\")
     print(r"\midrule")
     print(

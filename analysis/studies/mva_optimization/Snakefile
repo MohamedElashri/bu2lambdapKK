@@ -2,8 +2,8 @@
 #
 # Separate BDTs are trained per Lambda category (LL and DD).
 # Per-category models are saved as:
-#   output/models/catboost_bdt_LL.cbm
-#   output/models/catboost_bdt_DD.cbm
+#   generated/output/studies/mva_optimization/models/catboost_bdt_LL.cbm
+#   generated/output/studies/mva_optimization/models/catboost_bdt_DD.cbm
 #
 # The main pipeline's optimize_selection.py looks for catboost_bdt_{category}.cbm
 # before falling back to the combined catboost_bdt.cbm.
@@ -15,17 +15,18 @@
 #   snakemake compare_studies   # comparison PDF (requires pdflatex)
 
 CATEGORIES = ["LL", "DD"]
+OUTPUT_DIR = "generated/output/studies/mva_optimization"
 
 ruleorder: run_mva_study > run_mva_ll > run_mva_dd
 
 rule all:
     input:
-        expand("output/models/catboost_bdt_{category}.cbm", category=CATEGORIES),
-        "mva_optimization_completed.txt"
+        expand(f"{OUTPUT_DIR}/models/catboost_bdt_{{category}}.cbm", category=CATEGORIES),
+        f"{OUTPUT_DIR}/mva_optimization_completed.txt"
 
 rule tune_catboost:
     output:
-        "output/models/optuna_catboost_best_params.json"
+        f"{OUTPUT_DIR}/models/optuna_catboost_best_params.json"
     shell:
         """
         cd mva
@@ -36,38 +37,38 @@ rule run_mva_study:
     input:
         # Optionally depend on tuned params if they exist; not mandatory
     output:
-        expand("output/models/catboost_bdt_{category}.cbm", category=CATEGORIES),
-        "mva_optimization_completed.txt"
+        expand(f"{OUTPUT_DIR}/models/catboost_bdt_{{category}}.cbm", category=CATEGORIES),
+        f"{OUTPUT_DIR}/mva_optimization_completed.txt"
     shell:
         """
         cd mva
-        uv run python main.py --category both
+        uv run python main.py --category both --output-dir ../../{OUTPUT_DIR} --completion-file ../../{OUTPUT_DIR}/mva_optimization_completed.txt
         """
 
 rule run_mva_ll:
     output:
-        "output/models/catboost_bdt_LL.cbm",
-        "output/tables/mva_optimization_results_LL.md"
+        f"{OUTPUT_DIR}/models/catboost_bdt_LL.cbm",
+        f"{OUTPUT_DIR}/tables/mva_optimization_results_LL.md"
     shell:
         """
         cd mva
-        uv run python main.py --category LL
+        uv run python main.py --category LL --output-dir ../../{OUTPUT_DIR}
         """
 
 rule run_mva_dd:
     output:
-        "output/models/catboost_bdt_DD.cbm",
-        "output/tables/mva_optimization_results_DD.md"
+        f"{OUTPUT_DIR}/models/catboost_bdt_DD.cbm",
+        f"{OUTPUT_DIR}/tables/mva_optimization_results_DD.md"
     shell:
         """
         cd mva
-        uv run python main.py --category DD
+        uv run python main.py --category DD --output-dir ../../{OUTPUT_DIR}
         """
 
 rule run_tmva_study:
     output:
         "tmva_optimization_completed.txt",
-        "output/tmva/tmva_summary.md"
+        f"{OUTPUT_DIR}/tmva/tmva_summary.md"
     shell:
         """
         cd tmva
@@ -77,8 +78,8 @@ rule run_tmva_study:
             touch ../tmva_optimization_completed.txt
         else
             echo "WARNING: ROOT/TMVA not available. Creating placeholder files."
-            mkdir -p ../output/tmva
-            touch ../output/tmva/tmva_summary.md
+            mkdir -p ../../{OUTPUT_DIR}/tmva
+            touch ../../{OUTPUT_DIR}/tmva/tmva_summary.md
             touch ../tmva_optimization_completed.txt
         fi
         """

@@ -27,7 +27,9 @@ if "snakemake" in globals():
     branch = snakemake.wildcards.branch
     category = snakemake.wildcards.category
 else:
-    output_file = "studies/selection_systematic/output/" "selection_systematics_high_yield_LL.json"
+    output_file = (
+        "generated/output/studies/selection_systematic/" "selection_systematics_high_yield_LL.json"
+    )
     branch = "high_yield"
     category = "LL"
 

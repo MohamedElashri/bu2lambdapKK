@@ -10,6 +10,7 @@ if str(project_root) not in sys.path:
 
 from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_cache_dir, pipeline_output_dir
 from modules.mass_fitter import MassFitter
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -29,8 +30,8 @@ else:
     no_cache = False
     config_dir = "config"
     opt_method = "box"
-    cache_dir = f"analysis_output/{opt_method}/cache"
-    output_dir = f"analysis_output/{opt_method}"
+    cache_dir = str(pipeline_cache_dir(opt_method, project_root / "generated" / "cache"))
+    output_dir = str(pipeline_output_dir(opt_method, project_root / "generated" / "output"))
     branch = "high_yield"
     category = "LL"
     summary_file = Path(output_dir) / branch / category / "tables" / "cut_summary.json"

@@ -20,4 +20,6 @@ cd analysis/studies/efficiency_steps
 uv run snakemake -j1
 ```
 
-The output will be saved to `output/efficiencies.json` and printed to the standard output as Markdown tables.
+The generated JSON will be written under
+`generated/output/studies/efficiency_steps/efficiencies.json`
+and printed to the standard output as Markdown tables.

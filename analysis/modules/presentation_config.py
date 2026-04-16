@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_output_dir, studies_output_dir
 
 MC15_PID_BRANCHES = {
     "lp": "Lp_MC15TuneV1_ProbNNp",
@@ -55,11 +56,13 @@ class PresentationConfig:
 
     @property
     def kinematic_weight_dir(self) -> Path:
-        return self.analysis_dir / "studies" / "kinematic_reweighting" / "output"
+        return (
+            studies_output_dir(self.analysis_dir / "generated" / "output") / "kinematic_reweighting"
+        )
 
     @property
     def pipeline_output_dir(self) -> Path:
-        return self.analysis_dir / "analysis_output" / "mva"
+        return pipeline_output_dir("mva", self.analysis_dir / "generated" / "output")
 
     def sideband_scale(self) -> float:
         signal_width = self.bu_signal_max - self.bu_signal_min

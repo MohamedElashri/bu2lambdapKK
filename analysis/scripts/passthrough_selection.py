@@ -24,7 +24,7 @@ if "snakemake" in globals():
     branch = snakemake.params.branch
     category = snakemake.params.category
 else:
-    output_file = "analysis_output/passthrough/high_yield/LL/models/optimized_cuts.json"
+    output_file = "generated/output/pipeline/passthrough/high_yield/LL/models/optimized_cuts.json"
     branch = "high_yield"
     category = "LL"
 

@@ -12,6 +12,7 @@ Current workflow notes:
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -32,7 +33,7 @@ from utils.presentation_utils import (
     plot_top_features_separation,
 )
 
-output_dir = Path("../output")
+output_dir = Path("../../generated/output/studies/mva_optimization")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -47,7 +48,7 @@ def load_tuned_params(category: str):
     return {}
 
 
-def run_for_category(category: str):
+def run_for_category(category: str, cache_dir: str | Path | None = None):
     """Run the full BDT training and threshold optimization for one Lambda category."""
     report_file = output_dir / f"mva_optimization_report_{category}.txt"
 
@@ -87,7 +88,7 @@ def run_for_category(category: str):
     config = StudyConfig()
 
     logger.info(f"[{category}] Step 1: Loading and preparing data from pipeline cache...")
-    ml_data = load_and_prepare_data(config, category=category)
+    ml_data = load_and_prepare_data(config, category=category, cache_dir=cache_dir)
 
     logger.info(f"[{category}] Step 2: Training CatBoost BDT...")
     # Pass tuned params so that train_and_evaluate_bdt can pick them up if available
@@ -126,13 +127,37 @@ def main():
         default="both",
         help="Lambda track category to train. 'both' trains LL and DD sequentially.",
     )
+    parser.add_argument(
+        "--output-dir",
+        default="../../generated/output/studies/mva_optimization",
+        help="Directory where generated MVA study outputs are written.",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        default="",
+        help="Pipeline cache directory to read preprocessed data from.",
+    )
+    parser.add_argument(
+        "--completion-file",
+        default="../../generated/output/studies/mva_optimization/mva_optimization_completed.txt",
+        help="Completion marker written after the study finishes.",
+    )
     args = parser.parse_args()
+
+    global output_dir
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["ANALYSIS_MVA_OUTPUT_DIR"] = str(output_dir)
+    if args.cache_dir:
+        os.environ["ANALYSIS_PIPELINE_CACHE_DIR"] = args.cache_dir
 
     categories = ["LL", "DD"] if args.category == "both" else [args.category]
     for cat in categories:
-        run_for_category(cat)
+        run_for_category(cat, cache_dir=args.cache_dir or None)
 
-    with open("../mva_optimization_completed.txt", "w") as f:
+    completion_file = Path(args.completion_file)
+    completion_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(completion_file, "w") as f:
         f.write(f"Completed for categories: {categories}\n")
 
 

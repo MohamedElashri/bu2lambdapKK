@@ -50,7 +50,7 @@ studies  →  main-pipeline  →  systematics  →  reports
 | Studies | `make studies` | Train MVA, compute trigger ratios, derive kinematic weights, compute efficiency table |
 | Main pipeline | `make main-pipeline` | Load data, optimize selection, fit mass spectra, compute efficiencies, calculate BF ratios, and compare branches |
 | Systematics | `make systematics` | Run PID bootstrap and aggregate the fit, selection, and PID systematics into final uncertainty products |
-| Reports | `make reports` | Collect key outputs into `results/` and generate the HEP-style final report |
+| Reports | `make reports` | Collect key outputs into `generated/output/reports/` and generate the HEP-style final report |
 
 Presentation plots are intentionally separate from the default physics run:
 
@@ -111,9 +111,9 @@ Each target runs all preceding steps automatically.
 | `make apply-cuts` | 1–4 | `tables/cut_summary.json` |
 | `make mass-fitting` | 1–5 | `tables/fitted_yields.csv`, fit plots |
 | `make efficiency` | 6 | `tables/efficiencies.csv`, `efficiency_ratios.csv` |
-| `make branching-ratios` | 7 | `tables/branching_fraction_ratios.csv`, `results/final_results.md` |
+| `make branching-ratios` | 7 | `generated/output/pipeline/<opt_method>/<branch>/tables/branching_fraction_ratios.csv`, `generated/output/pipeline/<opt_method>/<branch>/results/final_results.md` |
 | `make compare` | 8 | `comparison/branch_comparison.md` |
-| `make export-latex` | 9–10 | `results/bf_products.tex` after the required systematics summary is built |
+| `make export-latex` | 9–10 | `generated/output/pipeline/<opt_method>/results/bf_products.tex` after the required systematics summary is built |
 | `make main-pipeline` | 1–8 | All main-physics outputs through branch comparison |
 
 ### Systematic studies
@@ -150,7 +150,7 @@ Presentation scripts now follow one shared runtime contract:
 
 | Target | Description |
 |--------|-------------|
-| `make collect-results` | Copy all key outputs into `results/` |
+| `make collect-results` | Copy all key outputs into `generated/output/reports/collected/` |
 | `make report-hep` | Generate the HEP-style LaTeX and text summary |
 | `make reports` | Run `collect-results` and `report-hep` together |
 
@@ -159,15 +159,16 @@ Presentation scripts now follow one shared runtime contract:
 | Target | Description |
 |--------|-------------|
 | `make dry-run` | Full-analysis dry-run against the active DAG |
-| `make validate-config` | Run `validate_config` into `analysis_output_validation/` |
+| `make validate-config` | Run `validate_config` into `generated/output/validation/pipeline/<opt_method>/` |
 | `make smoke-imports` | Import shared modules and instantiate shared config helpers |
-| `make smoke-subset` | Execute a real one-year/one-category `load_data` smoke run into `analysis_output_validation/` |
+| `make smoke-subset` | Execute a real one-year/one-category `load_data` smoke run into `generated/output/validation/pipeline/<opt_method>/` |
 | `make smoke` | Run the structural smoke suite: dry-run, imports, config validation, subset run, and presentation dry-run |
 
 The smoke subset is intentionally isolated from the real outputs. By default it
 uses:
 
-- `VALIDATION_OUTPUT_DIR=analysis_output_validation`
+- `VALIDATION_OUTPUT_ROOT=generated/output/validation`
+- `VALIDATION_CACHE_ROOT=generated/cache/validation`
 - `SMOKE_YEAR=2016`
 - `SMOKE_TRACK=LL`
 - `SMOKE_MAGNET=MD`
@@ -183,10 +184,10 @@ make smoke SMOKE_YEAR=2017 SMOKE_TRACK=DD SMOKE_MAGNET=MU
 
 | Target | What is removed |
 |--------|-----------------|
-| `make clean` | Everything generated under `analysis/` — `analysis_output/`, `analysis_output_validation/`, `results/`, `cache/`, study outputs, MVA study artifacts, and `.snakemake/`. **`studies/pid_cancellation/pidcalib_output/` is preserved** (PIDCalib2 histograms from lxplus) |
+| `make clean` | Everything generated under `analysis/generated/` plus `.snakemake/`. **`studies/pid_cancellation/pidcalib_output/` is preserved** (PIDCalib2 histograms from lxplus) |
 | `make clean-generated` | Alias for `make clean` |
-| `make clean-main` | `analysis_output/`, `analysis_output_validation/`, and `results/` only |
-| `make clean-studies` | Generated study outputs only, including MVA study artifacts |
+| `make clean-main` | `generated/output/` and `generated/cache/` |
+| `make clean-studies` | `generated/output/studies/` only |
 | `make clean-snakemake` | Top-level and study-local `.snakemake/` directories |
 
 ## Tree Boundaries
@@ -203,11 +204,12 @@ The tree is separated into three conceptual areas:
   - exploratory but intentionally kept one-off studies under
     `analysis/studies/standalone/`
 - generated outputs
-  - `analysis/analysis_output/`
-  - `analysis/analysis_output_validation/`
-  - `analysis/results/`
-  - `analysis/cache/`
-  - `analysis/studies/*/output/`
+  - `analysis/generated/output/pipeline/`
+  - `analysis/generated/output/studies/`
+  - `analysis/generated/output/presentation/`
+  - `analysis/generated/output/reports/`
+  - `analysis/generated/output/validation/`
+  - `analysis/generated/cache/`
   - `analysis/.snakemake/`
 - archived historical/reference material
   - `analysis/archive/`
@@ -223,6 +225,18 @@ Additional ownership notes:
   studies that are intentionally kept outside the active DAG
 - `analysis/studies/pid_cancellation/` owns the vendored `pidcalib2/` payload
   and the externally prepared `pidcalib_output/` area
+
+### Generated layout
+
+Generated material is now centralized under one output root and one cache root:
+
+- `generated/output/pipeline/<opt_method>/` for the main physics workflow
+- `generated/output/studies/<study_name>/` for active study products
+- `generated/output/presentation/<workflow_name>/` for optional figures
+- `generated/output/reports/` for collected tables and final report products
+- `generated/output/validation/` for smoke/validation runs
+- `generated/cache/pipeline/<opt_method>/` for the main cached arrays
+- `generated/cache/validation/` for smoke/validation cache material
 
 ---
 

@@ -7,10 +7,11 @@ kept study-local.
 ## What Is Active
 
 The active production outputs consumed by the main pipeline are the per-category
-CatBoost models and related optimization products written under `output/`:
+CatBoost models and related optimization products written under
+`generated/output/studies/mva_optimization/`:
 
-- `output/models/catboost_bdt_LL.cbm`
-- `output/models/catboost_bdt_DD.cbm`
+- `generated/output/studies/mva_optimization/models/catboost_bdt_LL.cbm`
+- `generated/output/studies/mva_optimization/models/catboost_bdt_DD.cbm`
 
 The authoritative orchestration path is the top-level `analysis/Snakefile`
 through `make study-mva` or `uv run snakemake study_mva`.

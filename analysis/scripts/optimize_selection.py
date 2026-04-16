@@ -15,6 +15,7 @@ if str(project_root) not in sys.path:
 from modules.box_optimizer import SelectionOptimizer as BoxOptimizer
 from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_cache_dir, pipeline_output_dir, studies_output_dir
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -30,8 +31,8 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "analysis_output/box/cache"
-    output_dir = "analysis_output/box"
+    cache_dir = str(pipeline_cache_dir("box", project_root / "generated" / "cache"))
+    output_dir = str(pipeline_output_dir("box", project_root / "generated" / "output"))
     years = ["2016", "2017", "2018"]
     category = "LL"
     branch = "high_yield"
@@ -136,9 +137,10 @@ if opt_type == "box":
 elif opt_type == "mva":
     # 2. MVA Model Path
     use_pretrained = config.data.get("cut_application", {}).get("use_pretrained_mva", True)
+    output_root = Path(output_dir).parents[1]
     # Look for per-category model first (catboost_bdt_LL.cbm / catboost_bdt_DD.cbm),
     # then fall back to the combined model for backwards compatibility.
-    study_models_dir = project_root / "studies" / "mva_optimization" / "output" / "models"
+    study_models_dir = studies_output_dir(output_root) / "mva_optimization" / "models"
     tuned_model_path = study_models_dir / f"catboost_bdt_{category}.cbm"
     if not tuned_model_path.exists():
         tuned_model_path = study_models_dir / "catboost_bdt.cbm"

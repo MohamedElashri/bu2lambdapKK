@@ -138,8 +138,8 @@ if __name__ == "__main__":
         compare_branches(high_path, low_path, out_file)
     else:
         # Manual execution for testing
-        h_path = Path("analysis_output/mva/high_yield")
-        l_path = Path("analysis_output/mva/low_yield")
-        o_file = Path("analysis_output/mva/comparison/branch_comparison.md")
+        h_path = Path("generated/output/pipeline/mva/high_yield")
+        l_path = Path("generated/output/pipeline/mva/low_yield")
+        o_file = Path("generated/output/pipeline/mva/comparison/branch_comparison.md")
         o_file.parent.mkdir(parents=True, exist_ok=True)
         compare_branches(h_path, l_path, o_file)

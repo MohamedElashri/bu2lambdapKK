@@ -3,6 +3,7 @@ Optimizer for BDT Threshold
 """
 
 import logging
+import os
 from pathlib import Path
 
 import awkward as ak
@@ -326,7 +327,7 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict, category: str = 
 
     # Plot FoMs vs Threshold
     cat_suffix = f"_{category}" if category else ""
-    plot_dir = Path("../output/plots/mva")
+    plot_dir = study_output_dir() / "plots" / "mva"
     plot_dir.mkdir(parents=True, exist_ok=True)
     for group in ["High_Yield", "Low_Yield"]:
         plt.figure(figsize=(8, 6))
@@ -353,7 +354,7 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict, category: str = 
         plt.close()
 
     # Create summary table
-    tables_dir = Path("../output/tables")
+    tables_dir = study_output_dir() / "tables"
     tables_dir.mkdir(exist_ok=True, parents=True)
     rows = []
 
@@ -394,3 +395,9 @@ def optimize_bdt_cut(config: StudyConfig, model, ml_data: dict, category: str = 
     logger.info(f"Optimal BDT Cuts:\n{df.to_string()}")
 
     return best_results
+
+
+def study_output_dir() -> Path:
+    return Path(
+        os.environ.get("ANALYSIS_MVA_OUTPUT_DIR", "../../generated/output/studies/mva_optimization")
+    )

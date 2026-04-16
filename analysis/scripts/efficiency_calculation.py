@@ -11,6 +11,7 @@ if str(project_root) not in sys.path:
 
 from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
+from modules.generated_paths import pipeline_cache_dir, pipeline_output_dir
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,8 +35,8 @@ if "snakemake" in globals():
 else:
     no_cache = False
     config_dir = "config"
-    cache_dir = "analysis_output/box/cache"
-    output_dir = "analysis_output/box"
+    cache_dir = str(pipeline_cache_dir("box", project_root / "generated" / "cache"))
+    output_dir = str(pipeline_output_dir("box", project_root / "generated" / "output"))
     branch = "high_yield"
     category = "LL"
     summary_file = Path(output_dir) / branch / category / "tables" / "cut_summary.json"

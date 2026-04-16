@@ -5,14 +5,14 @@ Reads per-source systematic JSON files from each study and combines them in quad
 into a total systematic per state per branch.
 
 Sources included:
-  Fit model     : studies/fit_systematics/output/fit_systematics_{branch}_{cat}.json
-  PID bootstrap : studies/pid_cancellation/output/pid_bootstrap_systematics.json
+  Fit model     : generated/output/studies/fit_systematics/fit_systematics_{branch}_{cat}.json
+  PID bootstrap : generated/output/studies/pid_cancellation/pid_bootstrap_systematics.json
        (relative systematic on efficiency ratio; applied to the branching fraction ratio)
   Tracking      : 0% (ratio measurement — see studies/standalone/tracking_systematic/)
   Kinematic     : not a separate JSON; the spread is bounded to < 2% based on the
        nominal weight range and is folded into the efficiency systematic via 4.2's error.
        If --kin-syst-rel is supplied, that fraction is used instead.
-  Selection     : studies/selection_systematic/output/selection_systematics_{branch}_{cat}.json
+  Selection     : generated/output/studies/selection_systematic/selection_systematics_{branch}_{cat}.json
 
 Output:
   {output_dir}/{branch}/tables/systematics.json
@@ -198,8 +198,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Systematic uncertainty aggregation")
     parser.add_argument("--branches", nargs="+", default=["high_yield", "low_yield"])
     parser.add_argument("--categories", nargs="+", default=["LL", "DD"])
-    parser.add_argument("--output-dir", default="analysis_output/mva")
-    parser.add_argument("--studies-dir", default="studies")
+    parser.add_argument("--output-dir", default="generated/output/pipeline/mva")
+    parser.add_argument("--studies-dir", default="generated/output/studies")
     parser.add_argument(
         "--kin-syst-rel",
         type=float,

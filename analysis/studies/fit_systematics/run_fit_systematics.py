@@ -128,8 +128,8 @@ if __name__ == "__main__":
     parser.add_argument("--branch", default="high_yield")
     parser.add_argument("--category", default="LL")
     parser.add_argument("--config-dir", default="../../config")
-    parser.add_argument("--cache-dir", default="../../analysis_output/mva/cache")
-    parser.add_argument("--output-dir", default="output")
+    parser.add_argument("--cache-dir", default="../../generated/cache/pipeline/mva")
+    parser.add_argument("--output-dir", default="generated/output/studies/fit_systematics")
     args = parser.parse_args()
 
     compute_fit_systematics(

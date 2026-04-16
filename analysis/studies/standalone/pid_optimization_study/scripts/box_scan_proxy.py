@@ -67,7 +67,7 @@ def _load_cache(project_root: Path):
     """Load preprocessed data and MC from the main pipeline cache."""
     cache_dir = None
     for method in ["mva", "box"]:
-        candidate = project_root / "analysis_output" / method / "cache"
+        candidate = project_root / "generated" / "cache" / "pipeline" / method
         if candidate.exists():
             cache_dir = candidate
             break

@@ -7,8 +7,8 @@ Method:
 3. Load J/psi MC and apply the same pre-selection.
 4. Compute the normalised 1D Data/MC ratio weights for Bu_pT, separately per category.
 5. Save per-category weight maps:
-   output/kinematic_weights_LL.json
-   output/kinematic_weights_DD.json
+   generated/output/studies/kinematic_reweighting/kinematic_weights_LL.json
+   generated/output/studies/kinematic_reweighting/kinematic_weights_DD.json
 
 Current workflow notes:
 - Updated from XGBoost to CatBoost model.
@@ -246,10 +246,20 @@ def main():
         "--branch", default="high_yield", help="Branch name for loading the per-category MVA model."
     )
     parser.add_argument(
+        "--output-dir",
+        default="generated/output/studies/kinematic_reweighting",
+        help="Directory where generated weight maps and JSON files are written.",
+    )
+    parser.add_argument(
+        "--mva-output-dir",
+        default="generated/output/pipeline/mva",
+        help="Pipeline output directory for loading optimized cuts and models.",
+    )
+    parser.add_argument(
         "--compute-variations",
         action="store_true",
         help="Also compute systematic variations and save to "
-        "output/kinematic_weights_{cat}_var_{name}.json",
+        "generated/output/studies/kinematic_reweighting/kinematic_weights_{cat}_var_{name}.json",
     )
     args = parser.parse_args()
 
@@ -264,14 +274,14 @@ def main():
     polarities = config.get_input_magnets() or ["MD", "MU"]
     delta_z_cuts = {cat: config.get_category_delta_z_cut(cat) for cat in ["LL", "DD"]}
 
-    output_dir = Path("output")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(exist_ok=True, parents=True)
 
     all_weights = {}
     for category in ["LL", "DD"]:
         # Try to load optimized threshold for this category
-        cuts_path = Path(
-            f"../../analysis_output/mva/{args.branch}/{category}/models/optimized_cuts.json"
+        cuts_path = (
+            Path(args.mva_output_dir) / args.branch / category / "models" / "optimized_cuts.json"
         )
         cat_threshold = mva_threshold
         if cuts_path.exists():
@@ -281,9 +291,7 @@ def main():
             print(f"[{category}] Loaded MVA threshold = {cat_threshold:.3f} from {cuts_path}")
 
         # Per-category CatBoost model
-        model_path = Path(
-            f"../../analysis_output/mva/{args.branch}/{category}/models/mva_model.cbm"
-        )
+        model_path = Path(args.mva_output_dir) / args.branch / category / "models" / "mva_model.cbm"
 
         weights = derive_weights_for_category(
             category=category,
@@ -338,7 +346,9 @@ def main():
         )
         with open(output_dir / "kinematic_weights.json", "w") as f:
             json.dump({"pt_bins": pt_bins, "weights": w_avg.tolist()}, f, indent=2)
-        print("\nSaved combined (averaged LL+DD) weights to output/kinematic_weights.json")
+        print(
+            f"\nSaved combined (averaged LL+DD) weights to {output_dir / 'kinematic_weights.json'}"
+        )
 
 
 if __name__ == "__main__":
