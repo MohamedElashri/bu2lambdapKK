@@ -46,6 +46,7 @@ else:
     ratios_file = Path(output_dir) / branch / category / "tables" / "efficiency_ratios.csv"
 
 config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
+lumi_config = config.luminosity.get("integrated_luminosity", {})
 
 if not study_eff_file.exists():
     logger.error(
@@ -99,18 +100,18 @@ for state in all_states:
             sys.exit(1)
 
         # Efficiency is computed per category.
-        # Average eff_total over years for this specific category only.
+        # Combine yearly efficiencies with Run-2 luminosity weights.
         # The efficiency JSON structure is {state: {category: {year: {efficiencies, errors}}}}.
-        effs = []
-        errs = []
+        effs_by_year = {}
+        errs_by_year = {}
         state_eff = eff_data[study_state]
         cat_data = state_eff.get(category, state_eff)
-        for _, data in cat_data.items():
+        for year_key, data in cat_data.items():
             if isinstance(data, dict) and "efficiencies" in data:
-                effs.append(data["efficiencies"]["eff_total"])
-                errs.append(data["errors"]["err_total"])
+                effs_by_year[year_key] = float(data["efficiencies"]["eff_total"])
+                errs_by_year[year_key] = float(data["errors"]["err_total"])
 
-        if not effs:
+        if not effs_by_year:
             logger.error(
                 "Efficiency study %s has no usable efficiencies for state=%s, category=%s.",
                 study_eff_file,
@@ -119,9 +120,27 @@ for state in all_states:
             )
             sys.exit(1)
 
-        total_eff = sum(effs) / len(effs)
-        total_err = sum(e**2 for e in errs) ** 0.5 / len(errs)
-        note = f"Averaged over years for category={category}, branch={branch}"
+        weights = {}
+        for year_key in effs_by_year:
+            if year_key not in lumi_config:
+                logger.error(
+                    "Luminosity weight for year=%s is missing from luminosity.toml.",
+                    year_key,
+                )
+                sys.exit(1)
+            weights[year_key] = float(lumi_config[year_key])
+
+        total_weight = sum(weights.values())
+        if total_weight <= 0:
+            logger.error("Integrated luminosity weights must sum to a positive value.")
+            sys.exit(1)
+
+        total_eff = sum(weights[year] * effs_by_year[year] for year in effs_by_year) / total_weight
+        total_err = (
+            sum((weights[year] * errs_by_year[year]) ** 2 for year in errs_by_year) ** 0.5
+            / total_weight
+        )
+        note = f"Luminosity-weighted over years for category={category}, branch={branch}"
 
     eff_rows.append(
         {

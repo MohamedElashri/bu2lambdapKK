@@ -638,6 +638,8 @@ rule export_latex_results:
         high_yield=f"{OUTPUT_DIR}/high_yield/tables/branching_fraction_ratios.csv",
         low_yield=f"{OUTPUT_DIR}/low_yield/tables/branching_fraction_ratios.csv",
         systematics=f"{OUTPUT_DIR}/results/systematics_summary.md",
+        syst_high=f"{OUTPUT_DIR}/high_yield/tables/systematics.json",
+        syst_low=f"{OUTPUT_DIR}/low_yield/tables/systematics.json",
     output:
         report=f"{OUTPUT_DIR}/results/bf_products.tex",
     script:

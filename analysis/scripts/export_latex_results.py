@@ -21,11 +21,11 @@ def load_csv(path):
 
 
 def load_syst_json(path: Path) -> dict:
-    """Load systematics.json; returns empty dict if missing."""
-    if path.exists():
-        with open(path) as f:
-            return json.load(f)
-    return {}
+    """Load a required systematics.json artifact."""
+    if not path.exists():
+        raise FileNotFoundError(f"Required systematics file not found: {path}")
+    with open(path) as f:
+        return json.load(f)
 
 
 def _syst_err_for_state(syst_data: dict, state: str, bf_product: float, n_sig: float) -> float:
@@ -90,8 +90,11 @@ def generate_latex_table(high_path, low_path, output_file, syst_high_path=None, 
         sys.exit(1)
 
     # Load yield-scale systematics and convert them to BF-scale uncertainties.
-    syst_high = load_syst_json(Path(syst_high_path)) if syst_high_path else {}
-    syst_low = load_syst_json(Path(syst_low_path)) if syst_low_path else {}
+    if not syst_high_path or not syst_low_path:
+        logger.error("Systematics JSON paths are required to export the final LaTeX table.")
+        sys.exit(1)
+    syst_high = load_syst_json(Path(syst_high_path))
+    syst_low = load_syst_json(Path(syst_low_path))
 
     # Drop the placeholder syst_err=0 column before merging to avoid name collisions
     high_df = high_df.drop(columns=["syst_err"], errors="ignore")
@@ -201,9 +204,8 @@ if __name__ == "__main__":
         h_path = Path(snakemake.input.high_yield)
         l_path = Path(snakemake.input.low_yield)
         out_file = Path(snakemake.output.report)
-        # Derive systematics.json paths from the CSV paths (sibling in tables/)
-        syst_h = h_path.parent / "systematics.json"
-        syst_l = l_path.parent / "systematics.json"
+        syst_h = Path(snakemake.input.syst_high)
+        syst_l = Path(snakemake.input.syst_low)
         generate_latex_table(h_path, l_path, out_file, syst_high_path=syst_h, syst_low_path=syst_l)
     else:
         logger.error("This script must be run via Snakemake.")

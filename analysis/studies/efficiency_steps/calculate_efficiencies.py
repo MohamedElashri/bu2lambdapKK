@@ -40,6 +40,8 @@ if str(_ANALYSIS_DIR) not in sys.path:
 
 from modules.config_loader import StudyConfig
 
+MC_PENDING_STATES = {"etac_2s"}
+
 
 def _binomial_err(eff: float, n: float) -> float:
     """Return a stable binomial uncertainty for approximate weighted efficiencies."""
@@ -79,14 +81,30 @@ def get_gen_eff_from_config(
     }
     c_state = state_map.get(state, state)
     if c_state not in gen_config:
-        return 0.22, 0.0005
+        if c_state in MC_PENDING_STATES:
+            return 0.22, 0.0005
+        raise KeyError(f"Missing generator efficiency entry for state={c_state}")
     y_key = f"20{year}"
     if y_key not in gen_config[c_state]:
-        return 0.22, 0.0005
+        if c_state in MC_PENDING_STATES:
+            return 0.22, 0.0005
+        raise KeyError(f"Missing generator efficiency entry for state={c_state}, year={y_key}")
     if polarity not in gen_config[c_state][y_key]:
-        return 0.22, 0.0005
+        if c_state in MC_PENDING_STATES:
+            return 0.22, 0.0005
+        raise KeyError(
+            f"Missing generator efficiency entry for state={c_state}, year={y_key}, polarity={polarity}"
+        )
     data = gen_config[c_state][y_key][polarity]
-    return data.get("eff", 0.22), data.get("err", 0.0005)
+    eff = data.get("eff")
+    err = data.get("err")
+    if eff is None or err is None:
+        if c_state in MC_PENDING_STATES:
+            return 0.22, 0.0005
+        raise KeyError(
+            f"Incomplete generator efficiency entry for state={c_state}, year={y_key}, polarity={polarity}"
+        )
+    return float(eff), float(err)
 
 
 @dataclass
@@ -172,6 +190,27 @@ def get_luminosity_weights(config: dict) -> Dict[str, float]:
         lumi_config = {"2016": 1.67, "2017": 1.74, "2018": 2.13}
     total_lumi = sum(float(v) for v in lumi_config.values())
     return {year: float(lumi) / total_lumi for year, lumi in lumi_config.items()}
+
+
+def combine_generator_efficiencies(
+    file_results: list[EfficiencyResult],
+    gen_effs: list[float],
+    gen_errs: list[float],
+) -> tuple[float, float]:
+    """Combine polarity-specific generator efficiencies using effective sample weights."""
+    if not file_results:
+        return 0.0, 0.0
+
+    weights = np.asarray([max(float(res.n_total), 0.0) for res in file_results], dtype=float)
+    if float(np.sum(weights)) <= 0:
+        weights = np.ones(len(file_results), dtype=float)
+    norm = float(np.sum(weights))
+
+    effs = np.asarray(gen_effs, dtype=float)
+    errs = np.asarray(gen_errs, dtype=float)
+    weighted_eff = float(np.sum(weights * effs) / norm)
+    weighted_err = float(np.sqrt(np.sum((weights * errs) ** 2)) / norm)
+    return weighted_eff, weighted_err
 
 
 def calculate_efficiencies_for_file(
@@ -647,8 +686,11 @@ def main():
             try:
                 with open(cuts_path, "r") as cf:
                     cuts_data = json.load(cf)
+                threshold_key = (
+                    "mva_threshold_high" if args.branch == "high_yield" else "mva_threshold_low"
+                )
                 mva_thresholds[cat] = cuts_data.get(
-                    "mva_threshold_high", cuts_data.get("mva_threshold", 0.5)
+                    threshold_key, cuts_data.get("mva_threshold", 0.5)
                 )
             except Exception as e:
                 print(f"[{cat}] Warning: Could not read {cuts_path}: {e}")
@@ -681,6 +723,9 @@ def main():
             for year in years:
                 full_year = f"20{year}"
                 year_res = EfficiencyResult()
+                pol_results = []
+                pol_gen_effs = []
+                pol_gen_errs = []
 
                 # TIS/TOS correction for this (category, year)
                 corr_entry = tis_tos_corrections.get(category, {}).get(year, {})
@@ -691,8 +736,6 @@ def main():
                 for pol in polarities:
                     file_path = f"{mc_base}/{state}/{state}_{year}_{pol}.root"
                     g_eff, g_err = get_gen_eff_from_config(state, year, pol, gen_config)
-                    year_res.gen_eff = g_eff
-                    year_res.gen_err = g_err
 
                     res = calculate_efficiencies_for_file(
                         file_path,
@@ -706,6 +749,9 @@ def main():
                         kin_weights=kin_weights_by_cat[category],
                         tis_tos_corr=tis_tos_corr,
                     )
+                    pol_results.append(res)
+                    pol_gen_effs.append(g_eff)
+                    pol_gen_errs.append(g_err)
 
                     year_res.n_total += res.n_total
                     year_res.n_reco_str += res.n_reco_str
@@ -728,6 +774,10 @@ def main():
                     year_res.n_hlt2_topo3_tos += res.n_hlt2_topo3_tos
                     year_res.n_hlt2_topo4_tos += res.n_hlt2_topo4_tos
                     year_res.n_hlt2_or += res.n_hlt2_or
+
+                year_res.gen_eff, year_res.gen_err = combine_generator_efficiencies(
+                    pol_results, pol_gen_effs, pol_gen_errs
+                )
 
                 trig_counts = {
                     "l0_global_tis": int(year_res.n_l0_global_tis),
