@@ -76,6 +76,8 @@ def load_and_prepare_data(config, category: str = "LL", cache_dir: str | Path | 
 
     # Load the main pipeline config to get the cache dependency hash
     main_config = StudyConfig.from_dir(analysis_dir / "config", output_dir=str(cache_dir.parent))
+    magnets = main_config.get_input_magnets() or ["MD", "MU"]
+    states = main_config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
     cache = CacheManager(cache_dir=str(cache_dir))
     deps = cache.compute_dependencies(
         config_files=main_config.config_paths(),
@@ -83,7 +85,12 @@ def load_and_prepare_data(config, category: str = "LL", cache_dir: str | Path | 
             analysis_dir / "modules" / "clean_data_loader.py",
             analysis_dir / "scripts" / "load_data.py",
         ],
-        extra_params={"years": ["2016", "2017", "2018"], "track_types": ["LL", "DD"]},
+        extra_params={
+            "years": ["2016", "2017", "2018"],
+            "track_types": ["LL", "DD"],
+            "magnets": magnets,
+            "states": states,
+        },
     )
 
     data_full = cache.load("preprocessed_data", dependencies=deps)

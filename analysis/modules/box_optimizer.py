@@ -996,9 +996,9 @@ class SelectionOptimizer:
         opt_config = getattr(self.config, "optimization", {})
 
         step1_var_names = opt_config.get(
-            "seq_step1_vars", ["bu_dtf_chi2", "bu_fdchi2", "bu_ipchi2"]
+            "seq_step1_vars", ["bu_dtf_chi2", "bu_fdchi2", "log_bu_ipchi2"]
         )
-        step2_var_names = opt_config.get("seq_step2_vars", ["bu_pt", "pid_product"])
+        step2_var_names = opt_config.get("seq_step2_vars", ["bu_pt"])
 
         all_variables = {}
         for var_name, var_config in nd_config.items():

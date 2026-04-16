@@ -39,6 +39,8 @@ else:
     years = ["2016", "2017", "2018"]
 
 config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
+magnets = config.get_input_magnets() or ["MD", "MU"]
+states = config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
 
 cache = CacheManager(cache_dir=cache_dir)
 preprocessed_deps = cache.compute_dependencies(
@@ -47,7 +49,12 @@ preprocessed_deps = cache.compute_dependencies(
         project_root / "modules" / "clean_data_loader.py",
         project_root / "scripts" / "load_data.py",
     ],
-    extra_params={"years": years, "track_types": ["LL", "DD"]},
+    extra_params={
+        "years": years,
+        "track_types": ["LL", "DD"],
+        "magnets": magnets,
+        "states": states,
+    },
 )
 cut_deps = cache.compute_dependencies(
     config_files=config.config_paths(),
@@ -99,7 +106,7 @@ if opt_type == "passthrough":
 
 elif opt_type == "box":
     logger.info(f"Applying Box Cuts for branch={branch}, category={category}")
-    target_fom = "S/sqrt(S+B)"
+    target_fom = "S/sqrt(B)" if branch == "high_yield" else "S/sqrt(S+B)"
     target_state = "jpsi" if branch == "high_yield" else "chic1"
 
     branch_cuts = [
@@ -247,6 +254,14 @@ for year in list(data_final.keys()):
 # Cache keys now include branch AND category to avoid collisions between LL/DD runs
 cache_key_data = f"{branch}_{category}_final_data"
 cache_key_mc = f"{branch}_{category}_final_mc"
+cache_key_pre_mva_data = f"{branch}_{category}_pre_mva_data"
+data_pre_mva = data_dict if opt_type == "mva" else data_final
+cache.save(
+    cache_key_pre_mva_data,
+    data_pre_mva,
+    dependencies=cut_deps,
+    description=f"Data before {branch}/{category} MVA threshold",
+)
 cache.save(
     cache_key_data,
     data_final,

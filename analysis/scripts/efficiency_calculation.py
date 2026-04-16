@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 from pathlib import Path
@@ -9,9 +10,8 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from modules.cache_manager import CacheManager
 from modules.config_loader import StudyConfig
-from modules.generated_paths import pipeline_cache_dir, pipeline_output_dir
+from modules.generated_paths import pipeline_output_dir
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -22,56 +22,42 @@ logger = logging.getLogger(__name__)
 MC_PENDING_STATES = {"etac_2s"}
 
 if "snakemake" in globals():
-    no_cache = snakemake.params.no_cache
     config_dir = snakemake.params.config_dir
-    cache_dir = snakemake.params.cache_dir
     output_dir = snakemake.params.output_dir
     branch = snakemake.params.branch
     category = snakemake.params.category
-    summary_file = snakemake.input.summary
-    cuts_file = snakemake.input.cuts
+    study_eff_file = Path(snakemake.input.study_eff)
     eff_file = snakemake.output.efficiencies
     ratios_file = snakemake.output.ratios
 else:
-    no_cache = False
     config_dir = "config"
-    cache_dir = str(pipeline_cache_dir("box", project_root / "generated" / "cache"))
     output_dir = str(pipeline_output_dir("box", project_root / "generated" / "output"))
     branch = "high_yield"
     category = "LL"
-    summary_file = Path(output_dir) / branch / category / "tables" / "cut_summary.json"
-    cuts_file = Path(output_dir) / branch / category / "models" / "optimized_cuts.json"
+    study_eff_file = (
+        project_root
+        / "generated"
+        / "output"
+        / "studies"
+        / "efficiency_steps"
+        / (f"efficiencies_{branch}.json")
+    )
     eff_file = Path(output_dir) / branch / category / "tables" / "efficiencies.csv"
     ratios_file = Path(output_dir) / branch / category / "tables" / "efficiency_ratios.csv"
 
 config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
-cache = CacheManager(cache_dir=cache_dir)
-# Re-compute dependencies
-cut_deps = cache.compute_dependencies(
-    config_files=config.config_paths(),
-    code_files=[project_root / "scripts" / "apply_cuts.py"],
-)
-
-# Load category-specific cut MC (cache key set by apply_cuts.py)
-mc_final = cache.load(f"{branch}_{category}_final_mc", dependencies=cut_deps)
-
-if mc_final is None:
+if not study_eff_file.exists():
     logger.error(
-        f"Cut MC for branch={branch}, category={category} not found in cache. "
-        "Run 'snakemake apply_cuts' first."
+        "Branch-specific efficiency study output not found at %s. "
+        "Run the efficiency study for branch=%s first.",
+        study_eff_file,
+        branch,
     )
     sys.exit(1)
 
-import json
-
-eff_json_path = project_root / "studies" / "efficiency_steps" / "output" / "efficiencies.json"
-eff_data = {}
-if eff_json_path.exists():
-    with open(eff_json_path, "r") as f:
-        eff_data = json.load(f)
-else:
-    logger.warning(f"Efficiency file not found at {eff_json_path}. Using 1.0 placeholders.")
+with open(study_eff_file, "r") as f:
+    eff_data = json.load(f)
 
 # Get the active plotting states from shared config.
 all_states = config.get_plotting_states()
@@ -89,7 +75,7 @@ state_map = {
 
 logger.info(
     f"Calculating Efficiencies for branch={branch}, category={category} "
-    "(aggregating from efficiency study)"
+    f"(aggregating from {study_eff_file})"
 )
 
 eff_rows = []
@@ -103,26 +89,39 @@ for state in all_states:
     if is_placeholder:
         note = "MC in LHCb production pipeline — ε = 1.0 placeholder"
     else:
-        note = "From efficiency study"
+        if study_state not in eff_data:
+            logger.error(
+                "Efficiency study %s does not contain state=%s for branch=%s.",
+                study_eff_file,
+                study_state,
+                branch,
+            )
+            sys.exit(1)
 
-    if not is_placeholder and study_state in eff_data:
         # Efficiency is computed per category.
         # Average eff_total over years for this specific category only.
         # The efficiency JSON structure is {state: {category: {year: {efficiencies, errors}}}}.
         effs = []
         errs = []
         state_eff = eff_data[study_state]
-        # Select the slice for this category; fall back to flat dict if old format
         cat_data = state_eff.get(category, state_eff)
-        for year, data in cat_data.items():
+        for _, data in cat_data.items():
             if isinstance(data, dict) and "efficiencies" in data:
                 effs.append(data["efficiencies"]["eff_total"])
                 errs.append(data["errors"]["err_total"])
 
-        if effs:
-            total_eff = sum(effs) / len(effs)
-            total_err = sum(e**2 for e in errs) ** 0.5 / len(errs)
-            note = f"Averaged over years for category={category}"
+        if not effs:
+            logger.error(
+                "Efficiency study %s has no usable efficiencies for state=%s, category=%s.",
+                study_eff_file,
+                study_state,
+                category,
+            )
+            sys.exit(1)
+
+        total_eff = sum(effs) / len(effs)
+        total_err = sum(e**2 for e in errs) ** 0.5 / len(errs)
+        note = f"Averaged over years for category={category}, branch={branch}"
 
     eff_rows.append(
         {

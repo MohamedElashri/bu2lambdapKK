@@ -101,8 +101,8 @@ KIN_WEIGHT_MAP_LL = f"{KIN_WEIGHT_DIR}/weight_map_LL.pdf"
 KIN_WEIGHT_MAP_DD = f"{KIN_WEIGHT_DIR}/weight_map_DD.pdf"
 
 EFFICIENCY_DIR = f"{STUDIES_OUTPUT_DIR}/efficiency_steps"
-EFFICIENCY_JSON = f"{EFFICIENCY_DIR}/efficiencies.json"
-EFFICIENCY_TABLES = f"{EFFICIENCY_DIR}/efficiencies_tables.md"
+EFFICIENCY_JSON_PATTERN = f"{EFFICIENCY_DIR}/efficiencies_{{branch}}.json"
+EFFICIENCY_TABLES_PATTERN = f"{EFFICIENCY_DIR}/efficiencies_tables_{{branch}}.md"
 
 PID_OUTPUT_DIR = f"{STUDIES_OUTPUT_DIR}/pid_cancellation"
 PID_BOOTSTRAP_JSON = f"{PID_OUTPUT_DIR}/pid_bootstrap_systematics.json"
@@ -231,18 +231,18 @@ rule study_reweighting:
         """
 
 
-rule study_efficiency:
+rule study_efficiency_branch:
     input:
         tis_tos=TRIGGER_JSON,
         kin_ll=KIN_WEIGHT_LL,
         kin_dd=KIN_WEIGHT_DD,
     output:
-        json=EFFICIENCY_JSON,
-        tables=EFFICIENCY_TABLES,
+        json=EFFICIENCY_JSON_PATTERN,
+        tables=EFFICIENCY_TABLES_PATTERN,
     params:
         config_dir=CONFIG_DIR,
         mva_output_dir=OUTPUT_DIR,
-        branch="high_yield",
+        branch="{branch}",
     shell:
         """
         uv run python studies/efficiency_steps/calculate_efficiencies.py \
@@ -253,6 +253,16 @@ rule study_efficiency:
             --mva-output-dir {params.mva_output_dir} \
             --branch {params.branch}
         """
+
+
+rule study_efficiency:
+    input:
+        expand(EFFICIENCY_JSON_PATTERN, branch=BRANCHES),
+        expand(EFFICIENCY_TABLES_PATTERN, branch=BRANCHES),
+    output:
+        f"{EFFICIENCY_DIR}/.study_efficiency_complete",
+    shell:
+        "touch {output}"
 
 
 rule study_pid_bootstrap:
@@ -280,7 +290,7 @@ rule prerequisite_studies:
         TRIGGER_JSON,
         KIN_WEIGHT_LL,
         KIN_WEIGHT_DD,
-        EFFICIENCY_JSON,
+        rules.study_efficiency.output,
     output:
         f"{STUDIES_OUTPUT_DIR}/.studies_complete",
     shell:
@@ -468,7 +478,7 @@ rule efficiency_calculation:
     input:
         summary=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/cut_summary.json",
         cuts=f"{OUTPUT_DIR}/{{branch}}/{{category}}/models/optimized_cuts.json",
-        study_eff=EFFICIENCY_JSON,
+        study_eff=EFFICIENCY_JSON_PATTERN,
     output:
         efficiencies=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/efficiencies.csv",
         ratios=f"{OUTPUT_DIR}/{{branch}}/{{category}}/tables/efficiency_ratios.csv",

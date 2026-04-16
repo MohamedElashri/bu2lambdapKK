@@ -47,6 +47,8 @@ def build_box_reference(category: str) -> None:
     config = StudyConfig.from_dir(config_dir, output_dir=output_root)
     # Force the maintained grouped scan rather than the stale sequential path.
     config.optimization["method"] = "mc_based_grouped_reference"
+    magnets = config.get_input_magnets() or ["MD", "MU"]
+    states = config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
 
     cache = CacheManager(cache_dir=cache_dir)
     deps = cache.compute_dependencies(
@@ -55,7 +57,12 @@ def build_box_reference(category: str) -> None:
             project_root / "modules" / "clean_data_loader.py",
             project_root / "scripts" / "load_data.py",
         ],
-        extra_params={"years": ["2016", "2017", "2018"], "track_types": ["LL", "DD"]},
+        extra_params={
+            "years": ["2016", "2017", "2018"],
+            "track_types": ["LL", "DD"],
+            "magnets": magnets,
+            "states": states,
+        },
     )
 
     data_full = cache.load("preprocessed_data", dependencies=deps)

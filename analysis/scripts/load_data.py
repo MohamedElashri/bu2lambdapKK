@@ -50,7 +50,12 @@ dependencies = cache.compute_dependencies(
         project_root / "modules" / "clean_data_loader.py",
         project_root / "scripts" / "load_data.py",
     ],
-    extra_params={"years": years, "track_types": track_types},
+    extra_params={
+        "years": years,
+        "track_types": track_types,
+        "magnets": magnets,
+        "states": states,
+    },
 )
 
 if not no_cache:

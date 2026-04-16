@@ -36,24 +36,49 @@ logger = logging.getLogger(__name__)
 THRESHOLD_STEP = 0.01  # one grid step for BDT threshold variation
 
 
-def load_cut_data(branch: str, category: str, cache_dir: str, config_dir: str) -> dict | None:
-    """Load the post-cut (but pre-MVA-threshold) cached data."""
+def load_prethreshold_data(
+    branch: str, category: str, cache_dir: str, config_dir: str
+) -> dict | None:
+    """Load cached data from after preselection but before the branch MVA threshold."""
     config = StudyConfig.from_dir(config_dir)
     cache = CacheManager(cache_dir=cache_dir)
     cut_deps = cache.compute_dependencies(
         config_files=config.config_paths(),
         code_files=[project_root / "scripts" / "apply_cuts.py"],
     )
-    return cache.load(f"{branch}_{category}_final_data", dependencies=cut_deps)
+    return cache.load(f"{branch}_{category}_pre_mva_data", dependencies=cut_deps)
+
+
+def _deduplicate(events: ak.Array) -> ak.Array:
+    """Mirror the random single-candidate choice used in apply_cuts.py."""
+    import numpy as np
+
+    if "runNumber" not in events.fields or "eventNumber" not in events.fields:
+        return events
+
+    run = ak.to_numpy(events["runNumber"]).astype(int)
+    evt = ak.to_numpy(events["eventNumber"]).astype(int)
+    keys = run.astype(np.int64) * (10**10) + evt.astype(np.int64)
+    unique_keys = np.unique(keys)
+
+    if len(unique_keys) == len(events):
+        return events
+
+    rng = np.random.default_rng(seed=42)
+    selected = []
+    for event_key in unique_keys:
+        candidates = np.where(keys == event_key)[0]
+        selected.append(rng.choice(candidates))
+
+    return events[np.sort(np.array(selected))]
 
 
 def apply_mva_threshold(
     data_dict: dict, model_path: Path, features: list, threshold: float
 ) -> dict:
-    """Re-apply a given MVA threshold to already-loaded data."""
+    """Apply a given MVA threshold to pre-threshold cached data."""
     if not model_path.exists():
-        logger.warning(f"MVA model not found at {model_path} — skipping threshold re-application.")
-        return data_dict
+        raise FileNotFoundError(f"MVA model not found at {model_path}")
 
     import pandas as pd
     from catboost import CatBoostClassifier
@@ -74,7 +99,7 @@ def apply_mva_threshold(
             df_dict[feat] = ak.to_numpy(arr)
         df = pd.DataFrame(df_dict)
         preds = model.predict_proba(df)[:, 1]
-        filtered[key] = events[preds > threshold]
+        filtered[key] = _deduplicate(events[preds > threshold])
     return filtered
 
 
@@ -97,31 +122,51 @@ def compute_selection_systematics(
 ):
     config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
 
-    data_dict = load_cut_data(branch, category, cache_dir, config_dir)
-    if data_dict is None:
-        logger.error("Cached cut data not found — run main pipeline first.")
+    prethreshold_data = load_prethreshold_data(branch, category, cache_dir, config_dir)
+    if prethreshold_data is None:
+        logger.error(
+            "Cached pre-threshold data not found for branch=%s, category=%s. "
+            "Run 'snakemake apply_cuts' first.",
+            branch,
+            category,
+        )
         sys.exit(1)
 
     # Load nominal BDT threshold and features
     mva_dir = Path(mva_output_dir)
     cuts_path = mva_dir / branch / category / "models" / "optimized_cuts.json"
-    mva_features = config.xgboost.get(
-        "features", ["Bu_DTF_chi2", "Bu_FDCHI2_OWNPV", "Bu_IPCHI2_OWNPV", "Bu_PT"]
-    )
+    if not cuts_path.exists():
+        logger.error("Optimized cuts file not found at %s.", cuts_path)
+        sys.exit(1)
 
-    threshold_nom = 0.89  # conservative default
-    if cuts_path.exists():
-        with open(cuts_path) as f:
-            cuts_data = json.load(f)
-        threshold_nom = cuts_data.get("mva_threshold_high", threshold_nom)
-    logger.info(f"Nominal MVA threshold = {threshold_nom:.4f}")
+    with open(cuts_path) as f:
+        cuts_data = json.load(f)
+
+    if not isinstance(cuts_data, dict):
+        logger.error(
+            "Selection-threshold systematic currently supports only MVA cut payloads, "
+            "but %s is not an MVA cuts file.",
+            cuts_path,
+        )
+        sys.exit(1)
+
+    threshold_key = "mva_threshold_high" if branch == "high_yield" else "mva_threshold_low"
+    threshold_nom = cuts_data.get(threshold_key, cuts_data.get("mva_threshold", 0.89))
+    mva_features = cuts_data.get(
+        "features",
+        config.xgboost.get(
+            "features", ["Bu_DTF_chi2", "Bu_FDCHI2_OWNPV", "Bu_IPCHI2_OWNPV", "Bu_PT"]
+        ),
+    )
+    logger.info("Nominal MVA threshold (%s) = %.4f", threshold_key, threshold_nom)
 
     model_path = mva_dir / branch / category / "models" / "mva_model.cbm"
 
     logger.info(f"=== Selection systematics: branch={branch}, category={category} ===")
 
-    # Nominal fit (data already at nominal threshold from apply_cuts)
-    nominal_yields = fit_and_extract(config, data_dict)
+    # Fit nominal and threshold-shifted selections from the same pre-threshold cache.
+    nominal_data = apply_mva_threshold(prethreshold_data, model_path, mva_features, threshold_nom)
+    nominal_yields = fit_and_extract(config, nominal_data)
 
     systematics = {}
     all_states = ["jpsi", "etac", "chic0", "chic1"]
@@ -134,7 +179,7 @@ def compute_selection_systematics(
     var_yields = {}
     for var_name, thr in variations.items():
         logger.info(f"  Applying threshold {thr:.4f} ({var_name})...")
-        data_var = apply_mva_threshold(data_dict, model_path, mva_features, thr)
+        data_var = apply_mva_threshold(prethreshold_data, model_path, mva_features, thr)
         var_yields[var_name] = fit_and_extract(config, data_var)
 
     for state in all_states:

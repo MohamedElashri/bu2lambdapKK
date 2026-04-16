@@ -38,6 +38,8 @@ else:
     branch = "high_yield"
 
 config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
+magnets = config.get_input_magnets() or ["MD", "MU"]
+states = config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
 
 cache = CacheManager(cache_dir=cache_dir)
 preprocessed_deps = cache.compute_dependencies(
@@ -46,7 +48,12 @@ preprocessed_deps = cache.compute_dependencies(
         project_root / "modules" / "clean_data_loader.py",
         project_root / "scripts" / "load_data.py",
     ],
-    extra_params={"years": years, "track_types": ["LL", "DD"]},
+    extra_params={
+        "years": years,
+        "track_types": ["LL", "DD"],
+        "magnets": magnets,
+        "states": states,
+    },
 )
 
 # Load nested {year: {cat: array}} and {state: {cat: array}} dicts from cache

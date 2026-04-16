@@ -93,7 +93,7 @@ charmonium_region_min = 2900.0
 method = "mc_based_sequential"
 no_charmonium_mass_max = 6000.0
 no_charmonium_mass_min = 4000.0
-seq_step1_vars = ["bu_dtf_chi2", "bu_fdchi2", "bu_ipchi2"]
+seq_step1_vars = ["bu_dtf_chi2", "bu_fdchi2", "log_bu_ipchi2"]
 seq_step2_vars = ["bu_pt"]
 # NOTE: pid_product removed — no [nd_optimizable_selection.pid_product] section exists,
 # and proxy-based PID optimization is fundamentally broken (see
