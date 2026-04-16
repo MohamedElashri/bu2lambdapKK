@@ -65,6 +65,14 @@ def copy_dir_contents(src_dir: Path, dst_dir: Path, pattern: str = "*") -> int:
     return count
 
 
+def first_existing(*paths: Path) -> Path | None:
+    """Return the first existing path from a list of legacy/current candidates."""
+    for path in paths:
+        if path.exists():
+            return path
+    return None
+
+
 def collect(pipeline_dir: Path, studies_dir: Path, out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Collecting results into {out_dir}/")
@@ -119,60 +127,95 @@ def collect(pipeline_dir: Path, studies_dir: Path, out_dir: Path):
     # ------------------------------------------------------------------ #
 
     # MVA
-    mva_src = studies_dir / "mva_optimization" / "output"
+    mva_src = first_existing(
+        studies_dir / "mva_optimization", studies_dir / "mva_optimization" / "output"
+    )
     mva_dst = out_dir / "studies" / "mva"
-    for cat in ("LL", "DD"):
-        copy_if_exists(
-            mva_src / "models" / f"catboost_bdt_{cat}.cbm", mva_dst / f"catboost_bdt_{cat}.cbm"
-        )
-        copy_if_exists(
-            mva_src / f"mva_optimization_report_{cat}.txt",
-            mva_dst / f"mva_optimization_report_{cat}.txt",
-        )
-    for md in (mva_src / "tables").glob("*.md"):
-        copy_if_exists(md, mva_dst / md.name)
+    if mva_src is not None:
+        for cat in ("LL", "DD"):
+            copy_if_exists(
+                mva_src / "models" / f"catboost_bdt_{cat}.cbm", mva_dst / f"catboost_bdt_{cat}.cbm"
+            )
+            copy_if_exists(
+                mva_src / f"mva_optimization_report_{cat}.txt",
+                mva_dst / f"mva_optimization_report_{cat}.txt",
+            )
+        for md in (mva_src / "tables").glob("*.md"):
+            copy_if_exists(md, mva_dst / md.name)
 
     # Efficiency steps
     eff_dst = out_dir / "studies" / "efficiency"
-    copy_if_exists(
-        studies_dir / "efficiency_steps" / "output" / "efficiencies.json",
-        eff_dst / "efficiencies.json",
+    efficiency_dir = first_existing(
+        studies_dir / "efficiency_steps",
+        studies_dir / "efficiency_steps" / "output",
     )
-    copy_if_exists(
-        studies_dir / "efficiency_steps" / "output" / "efficiencies_tables.md",
-        eff_dst / "efficiencies_tables.md",
+    if efficiency_dir is not None:
+        for branch in ("high_yield", "low_yield"):
+            copy_if_exists(
+                efficiency_dir / f"efficiencies_{branch}.json",
+                eff_dst / f"efficiencies_{branch}.json",
+            )
+            copy_if_exists(
+                efficiency_dir / f"efficiencies_tables_{branch}.md",
+                eff_dst / f"efficiencies_tables_{branch}.md",
+            )
+        copy_if_exists(efficiency_dir / "efficiencies.json", eff_dst / "efficiencies.json")
+        copy_if_exists(
+            efficiency_dir / "efficiencies_tables.md", eff_dst / "efficiencies_tables.md"
+        )
+    trigger_dir = first_existing(
+        studies_dir / "trigger_tis_tos",
+        studies_dir / "trigger_tis_tos" / "output",
     )
-    copy_if_exists(
-        studies_dir / "trigger_tis_tos" / "output" / "tis_tos_results.json",
-        eff_dst / "tis_tos_results.json",
-    )
+    if trigger_dir is not None:
+        copy_if_exists(trigger_dir / "tis_tos_results.json", eff_dst / "tis_tos_results.json")
 
     # Kinematic reweighting
-    rew_src = studies_dir / "kinematic_reweighting" / "output"
+    rew_src = first_existing(
+        studies_dir / "kinematic_reweighting",
+        studies_dir / "kinematic_reweighting" / "output",
+    )
     rew_dst = out_dir / "studies" / "reweighting"
-    for f in ("kinematic_weights_LL.json", "kinematic_weights_DD.json", "kinematic_weights.json"):
-        copy_if_exists(rew_src / f, rew_dst / f)
-    copy_dir_contents(rew_src, rew_dst, "*.pdf")
+    if rew_src is not None:
+        for f in (
+            "kinematic_weights_LL.json",
+            "kinematic_weights_DD.json",
+            "kinematic_weights.json",
+        ):
+            copy_if_exists(rew_src / f, rew_dst / f)
+        copy_dir_contents(rew_src, rew_dst, "*.pdf")
 
     # PID cancellation
-    pid_src = studies_dir / "pid_cancellation" / "output"
-    pid_dst = out_dir / "studies" / "pid"
-    copy_if_exists(
-        pid_src / "pid_bootstrap_systematics.json", pid_dst / "pid_bootstrap_systematics.json"
+    pid_src = first_existing(
+        studies_dir / "pid_cancellation",
+        studies_dir / "pid_cancellation" / "output",
     )
-    copy_if_exists(pid_src / "real_pidcalib_results.md", pid_dst / "real_pidcalib_results.md")
-    copy_dir_contents(pid_src, pid_dst, "*.pdf")
-    copy_dir_contents(pid_src, pid_dst, "*.png")
+    pid_dst = out_dir / "studies" / "pid"
+    if pid_src is not None:
+        copy_if_exists(
+            pid_src / "pid_bootstrap_systematics.json", pid_dst / "pid_bootstrap_systematics.json"
+        )
+        copy_if_exists(pid_src / "real_pidcalib_results.md", pid_dst / "real_pidcalib_results.md")
+        copy_dir_contents(pid_src, pid_dst, "*.pdf")
+        copy_dir_contents(pid_src, pid_dst, "*.png")
 
     # Fit systematics
-    fit_syst_src = studies_dir / "fit_systematics" / "output"
+    fit_syst_src = first_existing(
+        studies_dir / "fit_systematics",
+        studies_dir / "fit_systematics" / "output",
+    )
     fit_syst_dst = out_dir / "studies" / "fit_syst"
-    copy_dir_contents(fit_syst_src, fit_syst_dst, "*.json")
+    if fit_syst_src is not None:
+        copy_dir_contents(fit_syst_src, fit_syst_dst, "*.json")
 
     # Selection systematics
-    sel_syst_src = studies_dir / "selection_systematic" / "output"
+    sel_syst_src = first_existing(
+        studies_dir / "selection_systematic",
+        studies_dir / "selection_systematic" / "output",
+    )
     sel_syst_dst = out_dir / "studies" / "sel_syst"
-    copy_dir_contents(sel_syst_src, sel_syst_dst, "*.json")
+    if sel_syst_src is not None:
+        copy_dir_contents(sel_syst_src, sel_syst_dst, "*.json")
 
     logger.info(f"\nDone. All results collected in {out_dir}/")
     _print_tree(out_dir)

@@ -57,6 +57,9 @@ else:
 #                                                                           → export_latex_results
 
 config = StudyConfig.from_dir(config_dir, output_dir=output_dir)
+state_labels = config.get_state_labels()
+ref_state = config.get_ref_state()
+ref_label = state_labels.get(ref_state, "J/psi")
 pdg_bf = config.get_norm_branching_fractions()
 
 br_bu_jpsi_k = pdg_bf.get("bu_to_jpsi_k", {}).get("value", 1.0)
@@ -91,38 +94,39 @@ for state, row in combined_yields.iterrows():
     logger.info(f"  {state}: N={row['N']:.1f} ± {row['N_err']:.1f}")
 
 # ---- Efficiency ratios ----
-# Average efficiency ratios from LL and DD (weighted by yield if available;
-# simple average otherwise). A more principled approach is to compute the
-# luminosity-weighted average efficiency per category, which requires knowing
-# ε_LL × N_gen_LL and ε_DD × N_gen_DD. For now, use the yield-weighted average.
-df_ratios_ll = pd.read_csv(ratios_ll_file)
-df_ratios_dd = pd.read_csv(ratios_dd_file)
+# LL and DD are disjoint reconstruction categories, so the combined efficiency
+# must be built from summed category efficiencies, not from data-yield weights.
+df_eff_ll = pd.read_csv(efficiencies_ll_file)
+df_eff_dd = pd.read_csv(efficiencies_dd_file)
 
-# Merge LL and DD efficiency ratios; compute weighted average using total yields as weights
+effs_ll = df_eff_ll.set_index("state")
+effs_dd = df_eff_dd.set_index("state")
 eff_ratios_combined = {}
-for state in df_ratios_ll["state"].unique():
-    row_ll = df_ratios_ll[df_ratios_ll["state"] == state]
-    row_dd = df_ratios_dd[df_ratios_dd["state"] == state]
-    if row_ll.empty or row_dd.empty:
-        continue
-    r_ll = row_ll["ratio_to_ref"].values[0]
-    r_dd = row_dd["ratio_to_ref"].values[0]
-    e_ll = row_ll["ratio_err"].values[0]
-    e_dd = row_dd["ratio_err"].values[0]
-    # Yield-weighted average: w_LL * r_LL + w_DD * r_DD
-    n_ll = df_ll[df_ll["state"] == state]["yield"].sum() if state in df_ll["state"].values else 1.0
-    n_dd = df_dd[df_dd["state"] == state]["yield"].sum() if state in df_dd["state"].values else 1.0
-    n_total = n_ll + n_dd
-    w_ll = n_ll / n_total if n_total > 0 else 0.5
-    w_dd = n_dd / n_total if n_total > 0 else 0.5
-    r_avg = w_ll * r_ll + w_dd * r_dd
-    e_avg = np.sqrt((w_ll * e_ll) ** 2 + (w_dd * e_dd) ** 2)
-    eff_ratios_combined[state] = (r_avg, e_avg)
+if ref_state not in effs_ll.index or ref_state not in effs_dd.index:
+    logger.error("Reference state %s missing from efficiency tables.", ref_state)
+    sys.exit(1)
 
-# Get config labels
-state_labels = config.get_state_labels()
-ref_state = config.get_ref_state()
-ref_label = state_labels.get(ref_state, "J/psi")
+eff_ref = float(effs_ll.loc[ref_state, "efficiency"]) + float(effs_dd.loc[ref_state, "efficiency"])
+err_ref = np.sqrt(
+    float(effs_ll.loc[ref_state, "efficiency_err"]) ** 2
+    + float(effs_dd.loc[ref_state, "efficiency_err"]) ** 2
+)
+
+for state in sorted(set(df_eff_ll["state"]).intersection(df_eff_dd["state"])):
+    if state not in effs_ll.index or state not in effs_dd.index:
+        continue
+
+    eff_sig = float(effs_ll.loc[state, "efficiency"]) + float(effs_dd.loc[state, "efficiency"])
+    err_sig = np.sqrt(
+        float(effs_ll.loc[state, "efficiency_err"]) ** 2
+        + float(effs_dd.loc[state, "efficiency_err"]) ** 2
+    )
+
+    ratio = eff_sig / eff_ref if eff_ref > 0 else 1.0
+    rel_err_sig = err_sig / eff_sig if eff_sig > 0 else 0.0
+    rel_err_ref = err_ref / eff_ref if eff_ref > 0 else 0.0
+    ratio_err = ratio * np.sqrt(rel_err_sig**2 + rel_err_ref**2)
+    eff_ratios_combined[state] = (ratio, ratio_err)
 
 logger.info(f"Calculating Branching Ratios Relative to {ref_label} (Branch: {branch})")
 
@@ -185,13 +189,12 @@ Path(br_ratios_file).parent.mkdir(parents=True, exist_ok=True)
 df_all.to_csv(br_ratios_file, index=False)
 
 # Write final markdown (LL+DD combined)
-df_eff_ll = pd.read_csv(efficiencies_ll_file)
-df_eff_dd = pd.read_csv(efficiencies_dd_file)
-
 Path(final_results_file).parent.mkdir(parents=True, exist_ok=True)
 with open(final_results_file, "w") as f:
     f.write(f"# Final Physics Results ({branch.replace('_', ' ').title()})\n\n")
-    f.write("*LL and DD fitted separately; yields summed, efficiency ratios yield-weighted.*\n\n")
+    f.write(
+        "*LL and DD fitted separately; yields summed, efficiencies combined from category sums.*\n\n"
+    )
 
     # 1. Yields Table
     f.write("## 1. Fitted Signal Yields (LL + DD combined)\n\n")

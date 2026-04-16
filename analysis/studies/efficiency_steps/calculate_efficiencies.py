@@ -283,9 +283,15 @@ def calculate_efficiencies_for_file(
             return tree[branch_name].array(library="np").astype(bool)
         return default if default is not None else np.zeros(result.n_total, dtype=bool)
 
+    def safe_get_any(branch_names, default=None):
+        for branch_name in branch_names:
+            if branch_name in tree:
+                return tree[branch_name].array(library="np").astype(bool)
+        return default if default is not None else np.zeros(result.n_total, dtype=bool)
+
     zeros = np.zeros(int(tree.num_entries), dtype=bool)
 
-    l0_global_tis = safe_get("Bu_L0GlobalDecision_TIS", zeros.copy())
+    l0_global_tis = safe_get_any(["Bu_L0Global_TIS", "Bu_L0GlobalDecision_TIS"], zeros.copy())
     l0_hadron_tis = safe_get("Bu_L0HadronDecision_TIS", zeros.copy())
     l0_muon_tis = safe_get("Bu_L0MuonDecision_TIS", zeros.copy())
     l0_muon_high = safe_get("Bu_L0MuonHighDecision_TIS", zeros.copy())
@@ -364,6 +370,7 @@ def calculate_efficiencies_for_file(
     l0_fdchi2_arr = tree["L0_FDCHI2_OWNPV"].array(library="np")
     l0_end_z = tree["L0_ENDVERTEX_Z"].array(library="np")
     bu_end_z = tree["Bu_ENDVERTEX_Z"].array(library="np")
+    delta_z_mm = np.abs(l0_end_z - bu_end_z)
     lp_probnnp = tree["Lp_ProbNNp"].array(library="np")
 
     # Data-reduction baseline (mirrors clean_data_loader.py)
@@ -379,7 +386,7 @@ def calculate_efficiencies_for_file(
         (l0_mass > lambda_cfg["mass_min"])
         & (l0_mass < lambda_cfg["mass_max"])
         & (l0_fdchi2_arr > lambda_cfg["fd_chisq_min"])
-        & ((l0_end_z - bu_end_z) > delta_z_cut)
+        & (delta_z_mm > delta_z_cut)
         & (lp_probnnp > lambda_cfg["proton_probnnp_min"])
         & ((p_probnnp * h1_probnnk * h2_probnnk) > lambda_cfg["pid_product_min"])
     )
@@ -433,7 +440,7 @@ def print_trigger_markdown_table(
         sep = "|---|" + "|".join(["---" for _ in years]) + "|"
         output_str += header + "\n" + sep + "\n"
         layout = [
-            ("l0_global_tis", "Bu_L0Global_TIS"),
+            ("l0_global_tis", "Bu_L0Global*_TIS"),
             ("l0_hadron_tis", "Bu_L0HadronDecision_TIS"),
             ("l0_or", "**L0 TIS OR**"),
             ("hlt1_track_mva_tos", "Bu_Hlt1TrackMVADecision_TOS"),

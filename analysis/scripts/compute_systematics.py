@@ -39,11 +39,12 @@ MC_PENDING_STATES = {"etac_2s"}
 STATES = ["jpsi", "etac", "chic0", "chic1"]
 
 
-def load_json_if_exists(path: Path) -> dict:
-    if path.exists():
-        with open(path) as f:
-            return json.load(f)
-    return {}
+def load_required_json(path: Path) -> dict:
+    """Load a required study artifact and fail loudly if it is missing."""
+    if not path.exists():
+        raise FileNotFoundError(f"Required systematic input not found: {path}")
+    with open(path) as f:
+        return json.load(f)
 
 
 def get_fit_syst(fit_json: dict, state: str, n_nom: float) -> float:
@@ -89,18 +90,13 @@ def aggregate_for_branch(
         n_nom_total = 0.0
 
         for cat in categories:
-            fit_path = (
-                studies_dir / "fit_systematics" / "output" / f"fit_systematics_{branch}_{cat}.json"
-            )
+            fit_path = studies_dir / "fit_systematics" / f"fit_systematics_{branch}_{cat}.json"
             sel_path = (
-                studies_dir
-                / "selection_systematic"
-                / "output"
-                / f"selection_systematics_{branch}_{cat}.json"
+                studies_dir / "selection_systematic" / f"selection_systematics_{branch}_{cat}.json"
             )
 
-            fit_json = load_json_if_exists(fit_path)
-            sel_json = load_json_if_exists(sel_path)
+            fit_json = load_required_json(fit_path)
+            sel_json = load_required_json(sel_path)
 
             # LL and DD are statistically independent — add in quadrature
             fit_syst_abs_total += get_fit_syst(fit_json, state, 0) ** 2
@@ -113,8 +109,8 @@ def aggregate_for_branch(
         sel_syst_abs = np.sqrt(sel_syst_abs_total)
 
         # --- PID bootstrap (relative on efficiency ratio) ---
-        pid_path = studies_dir / "pid_cancellation" / "output" / "pid_bootstrap_systematics.json"
-        pid_json = load_json_if_exists(pid_path)
+        pid_path = studies_dir / "pid_cancellation" / "pid_bootstrap_systematics.json"
+        pid_json = load_required_json(pid_path)
         pid_syst_rel = get_pid_syst_rel(pid_json, state)
 
         # --- Kinematic systematic (relative, applied to yield via efficiency) ---
