@@ -68,7 +68,7 @@ h2_probnnk_step = 0.05
 p_probnnp_max = 0.80
 p_probnnp_min = 0.05
 p_probnnp_step = 0.05
-pid_product_max = 0.50
+pid_product_max = 0.80
 # Scan grids for each variable (min, max, step)
 # Product: finer grid to see the transition clearly
 pid_product_min = 0.00

@@ -30,6 +30,7 @@ Usage
 
 import argparse
 import json
+import pickle
 import sys
 from pathlib import Path
 
@@ -44,7 +45,7 @@ import numpy as np
 # Path setup
 # ---------------------------------------------------------------------------
 STUDY_DIR = Path(__file__).resolve().parent.parent
-PROJECT_ROOT = STUDY_DIR.parent.parent  # analysis/
+PROJECT_ROOT = STUDY_DIR.parent.parent.parent  # analysis/
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -61,6 +62,29 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _load_cache(project_root: Path):
+    def _load_compatible(cache: CacheManager, name: str, deps: dict, description: str):
+        cached = cache.load(name, dependencies=deps)
+        if cached is not None:
+            return cached
+
+        matches = []
+        for meta_path in cache.metadata_dir.glob("*.json"):
+            try:
+                with open(meta_path) as handle:
+                    meta = json.load(handle)
+            except Exception:
+                continue
+            if meta.get("description") == description:
+                matches.append((meta.get("created_at", ""), meta.get("key")))
+
+        for _, key in sorted(matches, reverse=True):
+            data_path = cache.data_dir / f"{key}.pkl"
+            if not data_path.exists():
+                continue
+            with open(data_path, "rb") as handle:
+                return pickle.load(handle)
+        return None
+
     cache_dir = None
     for method in ["mva", "box"]:
         candidate = project_root / "generated" / "cache" / "pipeline" / method
@@ -82,8 +106,8 @@ def _load_cache(project_root: Path):
         ],
         extra_params={"years": ["2016", "2017", "2018"], "track_types": ["LL", "DD"]},
     )
-    data_full = cache.load("preprocessed_data", dependencies=deps)
-    mc_full = cache.load("preprocessed_mc", dependencies=deps)
+    data_full = _load_compatible(cache, "preprocessed_data", deps, "Data Pre-processed")
+    mc_full = _load_compatible(cache, "preprocessed_mc", deps, "MC Pre-processed")
     if data_full is None or mc_full is None:
         raise RuntimeError("Cache entries missing. Rebuild with 'snakemake load_data -j1'.")
     return data_full, mc_full
