@@ -60,19 +60,19 @@ widths = {jpsi = 0.0926, etac_1s = 30.5, chic0 = 10.6, chic1 = 0.88, etac_2s = 1
 
 [pid_grids]
 h1_probnnk_max = 0.80
-h1_probnnk_min = 0.05
+h1_probnnk_min = 0.00
 h1_probnnk_step = 0.05
 h2_probnnk_max = 0.80
-h2_probnnk_min = 0.05
+h2_probnnk_min = 0.00
 h2_probnnk_step = 0.05
-p_probnnp_max = 0.80
-p_probnnp_min = 0.05
-p_probnnp_step = 0.05
-pid_product_max = 0.80
+p_probnnp_max = 1.00
+p_probnnp_min = 0.00
+p_probnnp_step = 0.01
+pid_product_max = 1.00
 # Scan grids for each variable (min, max, step)
 # Product: finer grid to see the transition clearly
 pid_product_min = 0.00
-pid_product_step = 0.05
+pid_product_step = 0.01
 
 [pid_variables]
 # Individual PID variables (MC15TuneV1 for both data and MC)
