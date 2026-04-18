@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import logging
-import pickle
 import sys
 from pathlib import Path
 
@@ -12,12 +10,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from _paths import ANALYSIS_DIR, SLIDES_DIR, resolve_pipeline_cache_dir
+from _paths import ANALYSIS_DIR, SLIDES_DIR
 
 if str(ANALYSIS_DIR) not in sys.path:
     sys.path.insert(0, str(ANALYSIS_DIR))
 
-from modules.cache_manager import CacheManager
+from modules.clean_data_loader import load_all_data, load_all_mc
+from modules.config_loader import StudyConfig
 from modules.plot_utils import BINNING
 from modules.presentation_config import MC15_PID_BRANCHES, get_presentation_config
 
@@ -49,30 +48,35 @@ plt.rcParams.update(
 )
 
 
-def _load_latest_by_description(cache: CacheManager, description: str):
-    matches: list[tuple[str, str]] = []
-    for meta_path in cache.metadata_dir.glob("*.json"):
-        try:
-            with open(meta_path) as handle:
-                meta = json.load(handle)
-        except Exception:
-            continue
-        if meta.get("description") == description:
-            matches.append((meta.get("created_at", ""), meta.get("key")))
+def _load_prepid_samples():
+    """Load data and MC directly from ntuples with PID product cut disabled.
 
-    if not matches:
-        raise FileNotFoundError(f"No cache entry with description '{description}' found")
+    The preprocessed pipeline cache already has pid_product_min applied, so it
+    cannot be used for pre-PID distribution plots.  We override the cut to 0.0
+    here and load fresh from the ntuples.
+    """
+    config = StudyConfig.from_dir(ANALYSIS_DIR / "config")
+    config.fixed_selection["pid_product_min"] = 0.0
 
-    _, key = sorted(matches, reverse=True)[0]
-    with open(cache.data_dir / f"{key}.pkl", "rb") as handle:
-        return pickle.load(handle)
+    years = config.get_input_years() or ["2016", "2017", "2018"]
+    magnets = config.get_input_magnets() or ["MD", "MU"]
+    states = config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
 
-
-def _load_preprocessed_samples():
-    cache_dir = resolve_pipeline_cache_dir()
-    cache = CacheManager(cache_dir)
-    data_full = _load_latest_by_description(cache, "Data Pre-processed")
-    mc_full = _load_latest_by_description(cache, "MC Pre-processed")
+    log.info("Loading data pre-PID (pid_product_min overridden to 0.0) …")
+    data_full = load_all_data(
+        config.get_input_data_base_path(),
+        years,
+        magnets=magnets,
+        config=config,
+    )
+    log.info("Loading MC pre-PID …")
+    mc_full = load_all_mc(
+        config.get_input_mc_base_path(),
+        states,
+        years,
+        magnets=magnets,
+        config=config,
+    )
     return data_full, mc_full
 
 
@@ -94,7 +98,7 @@ def _collect_category_samples(
     sig_mask = (mc_mass >= SIG_LO) & (mc_mass <= SIG_HI)
 
     log.info(
-        f"[Lambda{cat}] analysis-preselected samples: "
+        f"[Lambda{cat}] pre-PID samples: "
         f"sideband data={int(np.sum(sb_mask))}, signal MC={int(np.sum(sig_mask))}"
     )
     return {"bkg": data_cat[sb_mask], "sig": mc_cat[sig_mask]}
@@ -156,7 +160,7 @@ def _draw_overlay(
 def make_product_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     fig.suptitle(
-        r"PID product after analysis preselection",
+        r"PID product before PID pre-selection",
         fontsize=12,
     )
     for ax, cat in zip(axes, ("LL", "DD")):
@@ -183,7 +187,7 @@ def make_product_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
 def make_proton_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     fig.suptitle(
-        r"Proton PID after analysis preselection",
+        r"Proton PID before PID pre-selection",
         fontsize=12,
     )
     for ax, cat in zip(axes, ("LL", "DD")):
@@ -208,7 +212,7 @@ def make_proton_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
 def make_kaon_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
     fig, axes = plt.subplots(2, 2, figsize=(10, 7))
     fig.suptitle(
-        r"Kaon PID after analysis preselection",
+        r"Kaon PID before PID pre-selection",
         fontsize=12,
     )
     configs = [
@@ -237,7 +241,7 @@ def make_kaon_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
 
 
 def main() -> None:
-    data_full, mc_full = _load_preprocessed_samples()
+    data_full, mc_full = _load_prepid_samples()
     samples = {cat: _collect_category_samples(data_full, mc_full, cat) for cat in ("LL", "DD")}
 
     outputs = [
