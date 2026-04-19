@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import Callable
 
 import awkward as ak
 import matplotlib
@@ -26,6 +27,8 @@ SIG_LO, SIG_HI = PRESENTATION.bu_signal_window()
 FIGS_DIR = SLIDES_DIR / "figs"
 FIGS_DIR.mkdir(parents=True, exist_ok=True)
 
+ALL_MC_STATES = {"jpsi", "etac", "chic0", "chic1"}
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
@@ -33,7 +36,7 @@ plt.rcParams.update(
     {
         "font.family": "serif",
         "font.size": 11,
-        "axes.titlesize": 11,
+        "axes.titlesize": 10,
         "axes.labelsize": 10,
         "xtick.labelsize": 9,
         "ytick.labelsize": 9,
@@ -48,28 +51,36 @@ plt.rcParams.update(
 )
 
 
-def _load_prepid_samples():
-    """Load data and MC directly from ntuples with PID product cut disabled.
+def _load_samples(skip_lambda: bool = False):
+    """Load data and MC from ntuples with PID product cut disabled.
 
-    The preprocessed pipeline cache already has pid_product_min applied, so it
-    cannot be used for pre-PID distribution plots.  We override the cut to 0.0
-    here and load fresh from the ntuples.
+    If skip_lambda=True, all Lambda selection cuts are also zeroed out so the
+    returned sample reflects only the stripping-level baseline reduction.
     """
     config = StudyConfig.from_dir(ANALYSIS_DIR / "config")
     config.fixed_selection["pid_product_min"] = 0.0
 
+    if skip_lambda:
+        config.lambda_selection["mass_min"] = 0.0
+        config.lambda_selection["mass_max"] = 99999.0
+        config.lambda_selection["fd_chisq_min"] = 0.0
+        config.lambda_selection["proton_probnnp_min"] = 0.0
+        config.lambda_selection["delta_z_min_ll"] = 0.0
+        config.lambda_selection["delta_z_min_dd"] = 0.0
+        log.info("Loading data — no PID cut, no Lambda selections …")
+    else:
+        log.info("Loading data — no PID cut, Lambda selections applied …")
+
     years = config.get_input_years() or ["2016", "2017", "2018"]
     magnets = config.get_input_magnets() or ["MD", "MU"]
-    states = config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
+    states = config.get_input_mc_states() or ["jpsi", "etac", "chic0", "chic1"]
 
-    log.info("Loading data pre-PID (pid_product_min overridden to 0.0) …")
     data_full = load_all_data(
         config.get_input_data_base_path(),
         years,
         magnets=magnets,
         config=config,
     )
-    log.info("Loading MC pre-PID …")
     mc_full = load_all_mc(
         config.get_input_mc_base_path(),
         states,
@@ -85,172 +96,208 @@ def _collect_category_samples(
     mc_full: dict,
     cat: str,
 ) -> dict[str, ak.Array]:
+    """Return sideband background and MC split into high-yield / low-yield state groups."""
     data_cat = ak.concatenate(
         [data_full[year][cat] for year in sorted(data_full) if cat in data_full[year]]
     )
-    mc_cat = ak.concatenate([mc_full[state][cat] for state in mc_full if cat in mc_full[state]])
+    mc_cat = ak.concatenate(
+        [mc_full[s][cat] for s in ALL_MC_STATES if s in mc_full and cat in mc_full[s]]
+    )
 
     data_mass = ak.to_numpy(data_cat["Bu_MM_corrected"])
     mc_mass = ak.to_numpy(mc_cat["Bu_MM_corrected"])
-    sb_mask = ((data_mass >= SB1_LO) & (data_mass <= SB1_HI)) | (
-        (data_mass >= SB2_LO) & (data_mass <= SB2_HI)
-    )
+
+    # Split sideband into lower (SB1, closer to signal peak = "high signals" region)
+    # and upper (SB2, far from signal peak = "low signals" region)
+    sb1_mask = (data_mass >= SB1_LO) & (data_mass <= SB1_HI)
+    sb2_mask = (data_mass >= SB2_LO) & (data_mass <= SB2_HI)
     sig_mask = (mc_mass >= SIG_LO) & (mc_mass <= SIG_HI)
 
     log.info(
         f"[Lambda{cat}] pre-PID samples: "
-        f"sideband data={int(np.sum(sb_mask))}, signal MC={int(np.sum(sig_mask))}"
+        f"SB1(lower)={int(np.sum(sb1_mask))}, SB2(upper)={int(np.sum(sb2_mask))}, "
+        f"signal MC={int(np.sum(sig_mask))}"
     )
-    return {"bkg": data_cat[sb_mask], "sig": mc_cat[sig_mask]}
+    return {
+        "bkg_sb1": data_cat[sb1_mask],
+        "bkg_sb2": data_cat[sb2_mask],
+        "sig": mc_cat[sig_mask],
+    }
 
 
-def _draw_overlay(
+def _draw_raw(
     ax: plt.Axes,
     bkg: np.ndarray,
     sig: np.ndarray,
     title: str,
     xlabel: str,
-    log_y: bool = False,
-    bins: int = 12,
-    x_range: tuple[float, float] = (0.0, 1.0),
+    log_y: bool,
+    bins: int,
+    x_range: tuple[float, float],
 ) -> None:
+    """Plot raw (un-normalised) event counts for signal and background."""
     bkg = bkg[(bkg >= x_range[0]) & (bkg <= x_range[1])]
     sig = sig[(sig >= x_range[0]) & (sig <= x_range[1])]
-    if len(bkg) == 0 or len(sig) == 0:
-        ax.text(0.5, 0.5, "No events", ha="center", va="center", transform=ax.transAxes)
-        return
 
-    width = (x_range[1] - x_range[0]) / bins
     hist_bkg, edges = np.histogram(bkg, bins=bins, range=x_range)
     hist_sig, _ = np.histogram(sig, bins=bins, range=x_range)
-    norm_bkg = hist_bkg.sum() * width
-    norm_sig = hist_sig.sum() * width
     centers = 0.5 * (edges[1:] + edges[:-1])
-    mask = hist_bkg > 0
+    bkg_mask = hist_bkg > 0
 
     ax.errorbar(
-        centers[mask],
-        hist_bkg[mask] / norm_bkg,
-        yerr=np.sqrt(hist_bkg[mask]) / norm_bkg,
+        centers[bkg_mask],
+        hist_bkg[bkg_mask],
+        yerr=np.sqrt(hist_bkg[bkg_mask]),
         fmt="o",
         color="black",
         markersize=3.5,
         label=r"$B^+$ sideband data",
     )
-    ax.hist(
-        sig,
-        bins=bins,
-        range=x_range,
-        weights=np.full(len(sig), 1.0 / norm_sig),
-        histtype="step",
+    ax.stairs(
+        hist_sig,
+        edges,
+        color="#1f77b4",
         linestyle="--",
         linewidth=2.4,
-        color="#1f77b4",
         label="Signal MC",
     )
 
     if log_y:
         ax.set_yscale("log")
+        # prevent log(0) clipping from hiding low-count bins
+        ax.set_ylim(bottom=0.5)
     ax.set_title(title)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel(rf"Normalised / ({width:.2f})")
+    ax.set_ylabel("Events / bin")
     ax.set_xlim(*x_range)
+    ax.legend(framealpha=0.9, loc="upper left")
 
 
-def make_product_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    fig.suptitle(
-        r"PID product before PID pre-selection",
-        fontsize=12,
-    )
-    for ax, cat in zip(axes, ("LL", "DD")):
-        bkg = samples[cat]["bkg"]
-        sig = samples[cat]["sig"]
-        _draw_overlay(
-            ax,
-            ak.to_numpy(bkg["PID_product"]),
-            ak.to_numpy(sig["PID_product"]),
-            title=rf"$\Lambda$ {cat}",
-            xlabel=r"$\mathrm{ProbNN}_p \times \mathrm{ProbNN}_{K^+} \times \mathrm{ProbNN}_{K^-}$",
-            log_y=True,
-            bins=10,
-            x_range=(0.0, 1.0),
-        )
-        ax.legend(framealpha=0.9, loc="upper left")
-    plt.tight_layout()
-    out = FIGS_DIR / "blindsafe_pid_product.pdf"
-    plt.savefig(out, bbox_inches="tight")
-    plt.close(fig)
-    return out
+def _make_2x2_figure(
+    samples: dict[str, dict[str, ak.Array]],
+    get_arr: Callable[[ak.Array], np.ndarray],
+    xlabel: str,
+    suptitle: str,
+    log_y: bool,
+    bins: int,
+    x_range: tuple[float, float],
+    out_path: Path,
+) -> Path:
+    """2×2 figure: rows = lower/upper B+ sideband, cols = LL/DD."""
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    scale_tag = "log scale" if log_y else "linear scale"
+    fig.suptitle(f"{suptitle} ({scale_tag})", fontsize=12)
 
-
-def make_proton_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    fig.suptitle(
-        r"Proton PID before PID pre-selection",
-        fontsize=12,
-    )
-    for ax, cat in zip(axes, ("LL", "DD")):
-        _draw_overlay(
-            ax,
-            ak.to_numpy(samples[cat]["bkg"][MC15_PID_BRANCHES["p"]]),
-            ak.to_numpy(samples[cat]["sig"][MC15_PID_BRANCHES["p"]]),
-            title=rf"$\Lambda$ {cat}",
-            xlabel=r"ProbNNp (bachelor $p$)",
-            log_y=True,
-            bins=10,
-            x_range=tuple(BINNING["pid"]["range"]),
-        )
-        ax.legend(framealpha=0.9, loc="upper left")
-    plt.tight_layout()
-    out = FIGS_DIR / "blindsafe_pid_proton.pdf"
-    plt.savefig(out, bbox_inches="tight")
-    plt.close(fig)
-    return out
-
-
-def make_kaon_figure(samples: dict[str, dict[str, ak.Array]]) -> Path:
-    fig, axes = plt.subplots(2, 2, figsize=(10, 7))
-    fig.suptitle(
-        r"Kaon PID before PID pre-selection",
-        fontsize=12,
-    )
-    configs = [
-        ("LL", MC15_PID_BRANCHES["h1"], r"$\Lambda$ LL: ProbNNk ($h_1 = K^+$)"),
-        ("DD", MC15_PID_BRANCHES["h1"], r"$\Lambda$ DD: ProbNNk ($h_1 = K^+$)"),
-        ("LL", MC15_PID_BRANCHES["h2"], r"$\Lambda$ LL: ProbNNk ($h_2 = K^-$)"),
-        ("DD", MC15_PID_BRANCHES["h2"], r"$\Lambda$ DD: ProbNNk ($h_2 = K^-$)"),
+    row_keys = [
+        ("bkg_sb1", f"Lower sideband ({SB1_LO:.0f}–{SB1_HI:.0f} MeV)"),
+        ("bkg_sb2", f"Upper sideband ({SB2_LO:.0f}–{SB2_HI:.0f} MeV)"),
     ]
-    for ax, (cat, branch, title) in zip(axes.flat, configs):
-        _draw_overlay(
-            ax,
-            ak.to_numpy(samples[cat]["bkg"][branch]),
-            ak.to_numpy(samples[cat]["sig"][branch]),
-            title=title,
-            xlabel="ProbNNk",
-            log_y=True,
+    for row_idx, (bkg_key, sideband_label) in enumerate(row_keys):
+        for col_idx, cat in enumerate(("LL", "DD")):
+            _draw_raw(
+                axes[row_idx, col_idx],
+                get_arr(samples[cat][bkg_key]),
+                get_arr(samples[cat]["sig"]),
+                title=rf"$\Lambda$ {cat} — {sideband_label}",
+                xlabel=xlabel,
+                log_y=log_y,
+                bins=bins,
+                x_range=x_range,
+            )
+
+    plt.tight_layout()
+    plt.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
+
+
+def make_product_figures(samples: dict, suptitle: str, out_suffix: str = "") -> list[Path]:
+    common = dict(
+        samples=samples,
+        get_arr=lambda ev: ak.to_numpy(ev["PID_product"]),
+        xlabel=r"$\mathrm{ProbNN}_p \times \mathrm{ProbNN}_{K^+} \times \mathrm{ProbNN}_{K^-}$",
+        suptitle=suptitle,
+        bins=10,
+        x_range=(0.0, 1.0),
+    )
+    return [
+        _make_2x2_figure(
+            **common,
+            log_y=False,
+            out_path=FIGS_DIR / f"blindsafe_pid_product{out_suffix}_linear.pdf",
+        ),
+        _make_2x2_figure(
+            **common, log_y=True, out_path=FIGS_DIR / f"blindsafe_pid_product{out_suffix}_log.pdf"
+        ),
+    ]
+
+
+def make_proton_figures(samples: dict) -> list[Path]:
+    branch = MC15_PID_BRANCHES["p"]
+    common = dict(
+        samples=samples,
+        get_arr=lambda ev: ak.to_numpy(ev[branch]),
+        xlabel=r"ProbNNp (bachelor $p$)",
+        suptitle="Proton PID (Lambda selections applied)",
+        bins=10,
+        x_range=tuple(BINNING["pid"]["range"]),
+    )
+    return [
+        _make_2x2_figure(
+            **common, log_y=False, out_path=FIGS_DIR / "blindsafe_pid_proton_linear.pdf"
+        ),
+        _make_2x2_figure(**common, log_y=True, out_path=FIGS_DIR / "blindsafe_pid_proton_log.pdf"),
+    ]
+
+
+def make_kaon_figures(samples: dict) -> list[Path]:
+    outputs = []
+    for tag, branch, label in [
+        ("h1", MC15_PID_BRANCHES["h1"], r"ProbNNk ($h_1 = K^+$)"),
+        ("h2", MC15_PID_BRANCHES["h2"], r"ProbNNk ($h_2 = K^-$)"),
+    ]:
+        common = dict(
+            samples=samples,
+            get_arr=lambda ev, b=branch: ak.to_numpy(ev[b]),
+            xlabel=label,
+            suptitle=f"Kaon PID ({label}) (Lambda selections applied)",
             bins=10,
             x_range=tuple(BINNING["pid"]["range"]),
         )
-        ax.legend(framealpha=0.9, loc="upper left")
-    plt.tight_layout()
-    out = FIGS_DIR / "blindsafe_pid_kaons.pdf"
-    plt.savefig(out, bbox_inches="tight")
-    plt.close(fig)
-    return out
+        outputs += [
+            _make_2x2_figure(
+                **common, log_y=False, out_path=FIGS_DIR / f"blindsafe_pid_kaon_{tag}_linear.pdf"
+            ),
+            _make_2x2_figure(
+                **common, log_y=True, out_path=FIGS_DIR / f"blindsafe_pid_kaon_{tag}_log.pdf"
+            ),
+        ]
+    return outputs
 
 
 def main() -> None:
-    data_full, mc_full = _load_prepid_samples()
+    # With Lambda selections
+    data_full, mc_full = _load_samples(skip_lambda=False)
     samples = {cat: _collect_category_samples(data_full, mc_full, cat) for cat in ("LL", "DD")}
 
-    outputs = [
-        make_product_figure(samples),
-        make_proton_figure(samples),
-        make_kaon_figure(samples),
-    ]
-    for output in outputs:
-        log.info(f"Saved {output}")
+    # Without Lambda selections
+    data_full_nl, mc_full_nl = _load_samples(skip_lambda=True)
+    samples_nl = {
+        cat: _collect_category_samples(data_full_nl, mc_full_nl, cat) for cat in ("LL", "DD")
+    }
+
+    outputs = (
+        make_product_figures(
+            samples, suptitle="PID product (Lambda selections applied)", out_suffix=""
+        )
+        + make_product_figures(
+            samples_nl, suptitle="PID product (no Lambda selections)", out_suffix="_no_lambda"
+        )
+        + make_proton_figures(samples)
+        + make_kaon_figures(samples)
+    )
+    for out in outputs:
+        log.info(f"Saved {out}")
 
 
 if __name__ == "__main__":
