@@ -47,16 +47,18 @@ center = 3096.916
 window = 15.0
 
 [xgboost]
-# PID variables (p_ProbNNp, h1_ProbNNk, h2_ProbNNk) have been removed.
-# All proxy-based PID FOMs are anti-correlated with the fit-based FOM (r = -0.90)
-# because sideband backgrounds consist of real, well-identified particles.
-# PID is handled as a fixed pre-cut (PID_product > 0.25) applied in load_and_preprocess().
-# See studies/pid_proxy_comparison/ for the full investigation.
+# PID_product (= p_ProbNNp * h1_ProbNNk * h2_ProbNNk) is included as a BDT feature.
+# A fixed floor cut of 0.25 is applied at the cache level (selection.toml), so the
+# BDT optimizes within [0.25, 1.0]. Individual PID variables are kept out; PID_product
+# is the proven discriminant (fit-based study shows +31% FOM at PID>0.20).
+# Sideband proxy bias goes conservative for PID (sideband has *higher* PID than true
+# combinatorial background), so the BDT will underestimate PID power — acceptable.
 features = [
   "Bu_DTF_chi2",
   "Bu_FDCHI2_OWNPV",
   "Bu_IPCHI2_OWNPV",
-  "Bu_PT"
+  "Bu_PT",
+  "PID_product"
 ]
 random_state = 42
 test_size = 0.3

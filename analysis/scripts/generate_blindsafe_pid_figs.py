@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -28,6 +29,50 @@ FIGS_DIR = SLIDES_DIR / "figs"
 FIGS_DIR.mkdir(parents=True, exist_ok=True)
 
 ALL_MC_STATES = {"jpsi", "etac", "chic0", "chic1"}
+
+# ---------------------------------------------------------------------------
+# Absolute scaling reference
+# ---------------------------------------------------------------------------
+# Background: each sideband is extrapolated to the signal window using the
+# geometric ratio  sig_window_width / sideband_width.  Both sidebands are
+# 80 MeV wide; the signal window (±2.5σ) is 50 MeV → scale = 0.625.
+#
+# Signal MC: anchored to N_SIG_COMBINED, the estimated total signal yield
+# in the ±2.5σ window at baseline selection (Lambda presel only, no PID cut).
+# Derived from the fit_based_optimizer Set1 result (N_J/ψ+N_ηc ≈ 925 at
+# optimal ND cuts + PID>0.20) corrected upward for ND-selection efficiency
+# (~65%) and PID>0.25 efficiency (~65%):  925 / 0.65 / 0.65 ≈ 2187 → rounded
+# to 2000 as a conservative estimate.  Split between LL and DD by sideband
+# event fraction (loaded from proxy-scan reference at runtime).
+N_SIG_COMBINED = 2000  # estimated all-states signal yield at pre-PID baseline
+
+
+def _load_sideband_fractions() -> dict[str, float]:
+    """Return per-category fraction of total sideband from proxy-scan reference."""
+    study_dir = (
+        ANALYSIS_DIR / "studies" / "standalone" / "pid_optimization_study" / "output" / "box_proxy"
+    )
+    counts = {}
+    for cat in ("LL", "DD"):
+        path = study_dir / f"proxy_scan_results_{cat}.json"
+        counts[cat] = json.loads(path.read_text())["pid_product"]["n_sb_total"]
+    total = sum(counts.values())
+    return {cat: counts[cat] / total for cat in counts}
+
+
+_SB_FRAC = _load_sideband_fractions()  # e.g. {"LL": 0.293, "DD": 0.707}
+
+
+def _signal_scale(n_mc_runtime: int, cat: str) -> float:
+    """Scale factor: multiply each MC bin count to get expected signal events."""
+    n_sig_ref = N_SIG_COMBINED * _SB_FRAC[cat]
+    return n_sig_ref / max(n_mc_runtime, 1)
+
+
+def _bkg_scale(sb_lo: float, sb_hi: float) -> float:
+    """Scale factor: multiply each sideband bin count to get expected bkg events."""
+    return (SIG_HI - SIG_LO) / (sb_hi - sb_lo)
+
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -122,10 +167,11 @@ def _collect_category_samples(
         "bkg_sb1": data_cat[sb1_mask],
         "bkg_sb2": data_cat[sb2_mask],
         "sig": mc_cat[sig_mask],
+        "n_mc": int(np.sum(sig_mask)),
     }
 
 
-def _draw_raw(
+def _draw_scaled(
     ax: plt.Axes,
     bkg: np.ndarray,
     sig: np.ndarray,
@@ -134,24 +180,35 @@ def _draw_raw(
     log_y: bool,
     bins: int,
     x_range: tuple[float, float],
+    bkg_scale: float,
+    mc_scale: float,
+    n_sig_ref: float,
 ) -> None:
-    """Plot raw (un-normalised) event counts for signal and background."""
+    """Plot expected event counts in the ±2.5σ signal window.
+
+    bkg_scale: sig_window_width / sideband_width  (geometric extrapolation)
+    mc_scale:  N_sig_ref / n_mc_total             (signal yield anchor)
+    """
     bkg = bkg[(bkg >= x_range[0]) & (bkg <= x_range[1])]
     sig = sig[(sig >= x_range[0]) & (sig <= x_range[1])]
 
-    hist_bkg, edges = np.histogram(bkg, bins=bins, range=x_range)
-    hist_sig, _ = np.histogram(sig, bins=bins, range=x_range)
+    hist_bkg_raw, edges = np.histogram(bkg, bins=bins, range=x_range)
+    hist_sig_raw, _ = np.histogram(sig, bins=bins, range=x_range)
+
+    hist_bkg = hist_bkg_raw * bkg_scale
+    hist_sig = hist_sig_raw * mc_scale
+
     centers = 0.5 * (edges[1:] + edges[:-1])
-    bkg_mask = hist_bkg > 0
+    bkg_mask = hist_bkg_raw > 0
 
     ax.errorbar(
         centers[bkg_mask],
         hist_bkg[bkg_mask],
-        yerr=np.sqrt(hist_bkg[bkg_mask]),
+        yerr=np.sqrt(hist_bkg_raw[bkg_mask]) * bkg_scale,
         fmt="o",
         color="black",
         markersize=3.5,
-        label=r"$B^+$ sideband data",
+        label=r"$B^+$ sideband (scaled to sig. window)",
     )
     ax.stairs(
         hist_sig,
@@ -159,16 +216,15 @@ def _draw_raw(
         color="#1f77b4",
         linestyle="--",
         linewidth=2.4,
-        label="Signal MC",
+        label=rf"Signal MC (scaled, $N_{{sig}}\approx{n_sig_ref:.0f}$)",
     )
 
     if log_y:
         ax.set_yscale("log")
-        # prevent log(0) clipping from hiding low-count bins
-        ax.set_ylim(bottom=0.5)
+        ax.set_ylim(bottom=0.3)
     ax.set_title(title)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel("Events / bin")
+    ax.set_ylabel(r"Expected events in $\pm2.5\sigma$ window / bin")
     ax.set_xlim(*x_range)
     ax.legend(framealpha=0.9, loc="upper left")
 
@@ -188,13 +244,17 @@ def _make_2x2_figure(
     scale_tag = "log scale" if log_y else "linear scale"
     fig.suptitle(f"{suptitle} ({scale_tag})", fontsize=12)
 
-    row_keys = [
-        ("bkg_sb1", f"Lower sideband ({SB1_LO:.0f}–{SB1_HI:.0f} MeV)"),
-        ("bkg_sb2", f"Upper sideband ({SB2_LO:.0f}–{SB2_HI:.0f} MeV)"),
+    row_specs = [
+        ("bkg_sb1", SB1_LO, SB1_HI, f"Lower sideband ({SB1_LO:.0f}–{SB1_HI:.0f} MeV)"),
+        ("bkg_sb2", SB2_LO, SB2_HI, f"Upper sideband ({SB2_LO:.0f}–{SB2_HI:.0f} MeV)"),
     ]
-    for row_idx, (bkg_key, sideband_label) in enumerate(row_keys):
+    for row_idx, (bkg_key, sb_lo, sb_hi, sideband_label) in enumerate(row_specs):
+        bkg_sc = _bkg_scale(sb_lo, sb_hi)
         for col_idx, cat in enumerate(("LL", "DD")):
-            _draw_raw(
+            n_mc = samples[cat]["n_mc"]
+            n_sig_ref = N_SIG_COMBINED * _SB_FRAC[cat]
+            mc_sc = _signal_scale(n_mc, cat)
+            _draw_scaled(
                 axes[row_idx, col_idx],
                 get_arr(samples[cat][bkg_key]),
                 get_arr(samples[cat]["sig"]),
@@ -203,6 +263,9 @@ def _make_2x2_figure(
                 log_y=log_y,
                 bins=bins,
                 x_range=x_range,
+                bkg_scale=bkg_sc,
+                mc_scale=mc_sc,
+                n_sig_ref=n_sig_ref,
             )
 
     plt.tight_layout()

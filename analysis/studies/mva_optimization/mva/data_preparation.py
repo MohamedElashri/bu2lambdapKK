@@ -74,10 +74,27 @@ def load_and_prepare_data(config, category: str = "LL", cache_dir: str | Path | 
 
     cache_dir = Path(cache_dir)
 
-    # Load the main pipeline config to get the cache dependency hash
+    # Load the main pipeline config to get the cache dependency hash.
+    # IMPORTANT: magnets/states/years must match exactly what load_data.py uses when run
+    # via Snakemake, which reads them from snakemake_config.yaml (not from StudyConfig).
     main_config = StudyConfig.from_dir(analysis_dir / "config", output_dir=str(cache_dir.parent))
-    magnets = main_config.get_input_magnets() or ["MD", "MU"]
-    states = main_config.get_input_mc_states() or ["Jpsi", "etac", "chic0", "chic1"]
+
+    snakemake_cfg_path = analysis_dir / "snakemake_config.yaml"
+    if snakemake_cfg_path.exists():
+        import yaml
+
+        with open(snakemake_cfg_path) as _f:
+            _sncfg = yaml.safe_load(_f)
+        years = _sncfg.get("years", ["2016", "2017", "2018"])
+        track_types = _sncfg.get("track_types", ["LL", "DD"])
+        magnets = _sncfg.get("magnets", ["MD", "MU"])
+        states = _sncfg.get("states", ["jpsi", "etac", "chic0", "chic1"])
+    else:
+        years = ["2016", "2017", "2018"]
+        track_types = ["LL", "DD"]
+        magnets = main_config.get_input_magnets() or ["MD", "MU"]
+        states = ["jpsi", "etac", "chic0", "chic1"]
+
     cache = CacheManager(cache_dir=str(cache_dir))
     deps = cache.compute_dependencies(
         config_files=main_config.config_paths(),
@@ -86,8 +103,8 @@ def load_and_prepare_data(config, category: str = "LL", cache_dir: str | Path | 
             analysis_dir / "scripts" / "load_data.py",
         ],
         extra_params={
-            "years": ["2016", "2017", "2018"],
-            "track_types": ["LL", "DD"],
+            "years": years,
+            "track_types": track_types,
             "magnets": magnets,
             "states": states,
         },
