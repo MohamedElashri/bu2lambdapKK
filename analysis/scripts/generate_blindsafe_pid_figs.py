@@ -28,7 +28,8 @@ SIG_LO, SIG_HI = PRESENTATION.bu_signal_window()
 FIGS_DIR = SLIDES_DIR / "figs"
 FIGS_DIR.mkdir(parents=True, exist_ok=True)
 
-ALL_MC_STATES = {"jpsi", "etac", "chic0", "chic1"}
+HIGH_RATE_STATES = {"jpsi", "etac"}  # J/ψ + ηc(1S) — high-yield charmonium
+LOW_RATE_STATES = {"chic0", "chic1"}  # χc0 + χc1 — low-yield charmonium
 
 # ---------------------------------------------------------------------------
 # Absolute scaling reference
@@ -37,14 +38,22 @@ ALL_MC_STATES = {"jpsi", "etac", "chic0", "chic1"}
 # geometric ratio  sig_window_width / sideband_width.  Both sidebands are
 # 80 MeV wide; the signal window (±2.5σ) is 50 MeV → scale = 0.625.
 #
-# Signal MC: anchored to N_SIG_COMBINED, the estimated total signal yield
+# Signal MC: anchored to N_SIG_HIGH / N_SIG_LOW, the estimated signal yields
 # in the ±2.5σ window at baseline selection (Lambda presel only, no PID cut).
-# Derived from the fit_based_optimizer Set1 result (N_J/ψ+N_ηc ≈ 925 at
-# optimal ND cuts + PID>0.20) corrected upward for ND-selection efficiency
-# (~65%) and PID>0.25 efficiency (~65%):  925 / 0.65 / 0.65 ≈ 2187 → rounded
-# to 2000 as a conservative estimate.  Split between LL and DD by sideband
-# event fraction (loaded from proxy-scan reference at runtime).
-N_SIG_COMBINED = 2000  # estimated all-states signal yield at pre-PID baseline
+#
+# High-rate (J/ψ + ηc): from fit_based_optimizer Set1 N_J/ψ+N_ηc ≈ 925 at
+#   optimal ND cuts + PID>0.20; corrected upward for ND eff (~65%) and
+#   PID>0.20 eff (~65%):  925 / 0.65 / 0.65 ≈ 2187 → 2000 (conservative).
+#
+# Low-rate (χc0 + χc1 + ηc(2S)): from Set2 N_χc0+N_χc1+N_ηc(2S) ≈ 182 at
+#   optimal ND cuts + PID>0.20; same correction:  182 / 0.65 / 0.65 ≈ 430.
+#   χc0+χc1 MC is used as the shape proxy; the ηc(2S) contribution is
+#   included in the yield anchor but not separately in the MC.
+#
+# Both yields are split between LL and DD by the sideband event fraction
+# (loaded from proxy-scan reference at runtime).
+N_SIG_HIGH = 2000  # estimated high-rate (J/ψ + ηc) signal yield at pre-PID baseline
+N_SIG_LOW = 430  # estimated low-rate  (χc0 + χc1 + ηc(2S)) yield at pre-PID baseline
 
 
 def _load_sideband_fractions() -> dict[str, float]:
@@ -63,9 +72,9 @@ def _load_sideband_fractions() -> dict[str, float]:
 _SB_FRAC = _load_sideband_fractions()  # e.g. {"LL": 0.293, "DD": 0.707}
 
 
-def _signal_scale(n_mc_runtime: int, cat: str) -> float:
+def _signal_scale(n_mc_runtime: int, cat: str, n_sig_combined: float) -> float:
     """Scale factor: multiply each MC bin count to get expected signal events."""
-    n_sig_ref = N_SIG_COMBINED * _SB_FRAC[cat]
+    n_sig_ref = n_sig_combined * _SB_FRAC[cat]
     return n_sig_ref / max(n_mc_runtime, 1)
 
 
@@ -118,7 +127,7 @@ def _load_samples(skip_lambda: bool = False):
 
     years = config.get_input_years() or ["2016", "2017", "2018"]
     magnets = config.get_input_magnets() or ["MD", "MU"]
-    states = config.get_input_mc_states() or ["jpsi", "etac", "chic0", "chic1"]
+    all_states = list(HIGH_RATE_STATES | LOW_RATE_STATES)
 
     data_full = load_all_data(
         config.get_input_data_base_path(),
@@ -128,7 +137,7 @@ def _load_samples(skip_lambda: bool = False):
     )
     mc_full = load_all_mc(
         config.get_input_mc_base_path(),
-        states,
+        all_states,
         years,
         magnets=magnets,
         config=config,
@@ -140,26 +149,23 @@ def _collect_category_samples(
     data_full: dict,
     mc_full: dict,
     cat: str,
-) -> dict[str, ak.Array]:
-    """Return sideband background and MC split into high-yield / low-yield state groups."""
+    states: set[str],
+) -> dict:
+    """Return sideband background and MC for the given charmonium state set."""
     data_cat = ak.concatenate(
         [data_full[year][cat] for year in sorted(data_full) if cat in data_full[year]]
     )
-    mc_cat = ak.concatenate(
-        [mc_full[s][cat] for s in ALL_MC_STATES if s in mc_full and cat in mc_full[s]]
-    )
+    mc_cat = ak.concatenate([mc_full[s][cat] for s in states if s in mc_full and cat in mc_full[s]])
 
     data_mass = ak.to_numpy(data_cat["Bu_MM_corrected"])
     mc_mass = ak.to_numpy(mc_cat["Bu_MM_corrected"])
 
-    # Split sideband into lower (SB1, closer to signal peak = "high signals" region)
-    # and upper (SB2, far from signal peak = "low signals" region)
     sb1_mask = (data_mass >= SB1_LO) & (data_mass <= SB1_HI)
     sb2_mask = (data_mass >= SB2_LO) & (data_mass <= SB2_HI)
     sig_mask = (mc_mass >= SIG_LO) & (mc_mass <= SIG_HI)
 
     log.info(
-        f"[Lambda{cat}] pre-PID samples: "
+        f"[Lambda{cat}] states={sorted(states)}: "
         f"SB1(lower)={int(np.sum(sb1_mask))}, SB2(upper)={int(np.sum(sb2_mask))}, "
         f"signal MC={int(np.sum(sig_mask))}"
     )
@@ -230,7 +236,7 @@ def _draw_scaled(
 
 
 def _make_2x2_figure(
-    samples: dict[str, dict[str, ak.Array]],
+    samples: dict[str, dict],
     get_arr: Callable[[ak.Array], np.ndarray],
     xlabel: str,
     suptitle: str,
@@ -238,6 +244,7 @@ def _make_2x2_figure(
     bins: int,
     x_range: tuple[float, float],
     out_path: Path,
+    n_sig_combined: float,
 ) -> Path:
     """2×2 figure: rows = lower/upper B+ sideband, cols = LL/DD."""
     fig, axes = plt.subplots(2, 2, figsize=(11, 8))
@@ -252,8 +259,8 @@ def _make_2x2_figure(
         bkg_sc = _bkg_scale(sb_lo, sb_hi)
         for col_idx, cat in enumerate(("LL", "DD")):
             n_mc = samples[cat]["n_mc"]
-            n_sig_ref = N_SIG_COMBINED * _SB_FRAC[cat]
-            mc_sc = _signal_scale(n_mc, cat)
+            n_sig_ref = n_sig_combined * _SB_FRAC[cat]
+            mc_sc = _signal_scale(n_mc, cat, n_sig_combined)
             _draw_scaled(
                 axes[row_idx, col_idx],
                 get_arr(samples[cat][bkg_key]),
@@ -274,23 +281,33 @@ def _make_2x2_figure(
     return out_path
 
 
-def make_product_figures(samples: dict, suptitle: str, out_suffix: str = "") -> list[Path]:
+def make_product_figures(
+    samples: dict,
+    suptitle: str,
+    out_suffix: str = "",
+    n_sig_combined: float = N_SIG_HIGH,
+    x_range_linear: tuple[float, float] = (0.0, 1.0),
+) -> list[Path]:
     common = dict(
         samples=samples,
         get_arr=lambda ev: ak.to_numpy(ev["PID_product"]),
         xlabel=r"$\mathrm{ProbNN}_p \times \mathrm{ProbNN}_{K^+} \times \mathrm{ProbNN}_{K^-}$",
         suptitle=suptitle,
         bins=10,
-        x_range=(0.0, 1.0),
+        n_sig_combined=n_sig_combined,
     )
     return [
         _make_2x2_figure(
             **common,
             log_y=False,
+            x_range=x_range_linear,
             out_path=FIGS_DIR / f"blindsafe_pid_product{out_suffix}_linear.pdf",
         ),
         _make_2x2_figure(
-            **common, log_y=True, out_path=FIGS_DIR / f"blindsafe_pid_product{out_suffix}_log.pdf"
+            **common,
+            log_y=True,
+            x_range=(0.0, 1.0),
+            out_path=FIGS_DIR / f"blindsafe_pid_product{out_suffix}_log.pdf",
         ),
     ]
 
@@ -301,9 +318,10 @@ def make_proton_figures(samples: dict) -> list[Path]:
         samples=samples,
         get_arr=lambda ev: ak.to_numpy(ev[branch]),
         xlabel=r"ProbNNp (bachelor $p$)",
-        suptitle="Proton PID (Lambda selections applied)",
+        suptitle=r"Proton PID — high-rate states (J/$\psi$, $\eta_c$) [Λ sel.]",
         bins=10,
         x_range=tuple(BINNING["pid"]["range"]),
+        n_sig_combined=N_SIG_HIGH,
     )
     return [
         _make_2x2_figure(
@@ -323,9 +341,10 @@ def make_kaon_figures(samples: dict) -> list[Path]:
             samples=samples,
             get_arr=lambda ev, b=branch: ak.to_numpy(ev[b]),
             xlabel=label,
-            suptitle=f"Kaon PID ({label}) (Lambda selections applied)",
+            suptitle=rf"Kaon PID ({label}) — high-rate states (J/$\psi$, $\eta_c$) [Λ sel.]",
             bins=10,
             x_range=tuple(BINNING["pid"]["range"]),
+            n_sig_combined=N_SIG_HIGH,
         )
         outputs += [
             _make_2x2_figure(
@@ -339,25 +358,47 @@ def make_kaon_figures(samples: dict) -> list[Path]:
 
 
 def main() -> None:
-    # With Lambda selections
     data_full, mc_full = _load_samples(skip_lambda=False)
-    samples = {cat: _collect_category_samples(data_full, mc_full, cat) for cat in ("LL", "DD")}
 
-    # Without Lambda selections
+    # Separate sample collections per rate group (same background, different MC)
+    samples_hi = {
+        cat: _collect_category_samples(data_full, mc_full, cat, HIGH_RATE_STATES)
+        for cat in ("LL", "DD")
+    }
+    samples_lo = {
+        cat: _collect_category_samples(data_full, mc_full, cat, LOW_RATE_STATES)
+        for cat in ("LL", "DD")
+    }
+
+    # No-Lambda version uses high-rate MC as reference
     data_full_nl, mc_full_nl = _load_samples(skip_lambda=True)
-    samples_nl = {
-        cat: _collect_category_samples(data_full_nl, mc_full_nl, cat) for cat in ("LL", "DD")
+    samples_hi_nl = {
+        cat: _collect_category_samples(data_full_nl, mc_full_nl, cat, HIGH_RATE_STATES)
+        for cat in ("LL", "DD")
     }
 
     outputs = (
         make_product_figures(
-            samples, suptitle="PID product (Lambda selections applied)", out_suffix=""
+            samples_hi,
+            suptitle=r"PID product — high-rate states (J/$\psi$, $\eta_c$) [Λ sel.]",
+            out_suffix="_highrate",
+            n_sig_combined=N_SIG_HIGH,
         )
         + make_product_figures(
-            samples_nl, suptitle="PID product (no Lambda selections)", out_suffix="_no_lambda"
+            samples_lo,
+            suptitle=r"PID product — low-rate states ($\chi_{c0}$, $\chi_{c1}$) [Λ sel.]",
+            out_suffix="_lowrate",
+            n_sig_combined=N_SIG_LOW,
+            x_range_linear=(0.5, 1.0),  # zoom in: signal peak near 1 is otherwise invisible
         )
-        + make_proton_figures(samples)
-        + make_kaon_figures(samples)
+        + make_product_figures(
+            samples_hi_nl,
+            suptitle=r"PID product — high-rate states (J/$\psi$, $\eta_c$) [no Λ sel.]",
+            out_suffix="_highrate_no_lambda",
+            n_sig_combined=N_SIG_HIGH,
+        )
+        + make_proton_figures(samples_hi)
+        + make_kaon_figures(samples_hi)
     )
     for out in outputs:
         log.info(f"Saved {out}")
