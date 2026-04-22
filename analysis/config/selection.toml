@@ -42,6 +42,16 @@ proton_probnnp_min = 0.3
 bu_corrected = [5255.0, 5305.0]
 charmonium_fit_range = [2800.0, 4000.0]
 
+[mva_thresholds]
+dd_high_yield = 0.08
+dd_low_yield = 0.32
+# Frozen thresholds from mva_optimization study (fit-based 2D FOM scan,
+# studies/generated/output/studies/mva_optimization/tables/).
+# When use_pretrained_mva = true, optimize_selection.py uses these values directly
+# and skips the proxy-based threshold scan, preserving the frozen analysis state.
+ll_high_yield = 0.10
+ll_low_yield = 0.27
+
 [nd_optimizable_selection.bu_dtf_chi2]
 begin = 10.0
 branch_name = "Bu_DTF_chi2"
@@ -131,15 +141,18 @@ window = 15.0
 # Legacy section name retained for compatibility with the current scripts.
 # The active production artifact is a CatBoost model, but the feature list and
 # random-seed settings are still read from this `[xgboost]` block.
-# PID variables (p_ProbNNp, h1_ProbNNk, h2_ProbNNk) removed from BDT feature set.
-# Reason: sideband training background has higher PID quality than true combinatorial
-# background in signal window → BDT learns wrong direction in PID space.
-# PID > 0.25 is applied as a fixed pre-cut before BDT evaluation.
+# PID_product (= p_ProbNNp * h1_ProbNNk * h2_ProbNNk) is included as a BDT feature.
+# A fixed floor cut of pid_product_min = 0.25 (above) is applied before BDT evaluation,
+# so the BDT optimises within [0.25, 1.0]. The sideband proxy bias is mitigated by
+# the floor cut: in the restricted range the proxy bias is conservative rather than
+# sign-reversed. Trained models (catboost_bdt_LL.cbm, catboost_bdt_DD.cbm) use exactly
+# these 5 features; any change here invalidates the pre-trained models.
 features = [
   "Bu_DTF_chi2",
   "Bu_FDCHI2_OWNPV",
   "Bu_IPCHI2_OWNPV",
-  "Bu_PT"
+  "Bu_PT",
+  "PID_product"
 ]
 random_state = 42
 test_size = 0.3

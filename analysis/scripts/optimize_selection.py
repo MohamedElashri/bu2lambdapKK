@@ -191,53 +191,69 @@ elif opt_type == "mva":
     out_path.mkdir(parents=True, exist_ok=True)
     model.save_model(str(out_path / "mva_model.cbm"))
 
-    # 3. Threshold Optimization via Scientific FOM Scan
-    logger.info("Starting scientific BDT threshold optimization...")
+    # 3. Threshold determination: use frozen thresholds from config when available
+    # (use_pretrained_mva = true), otherwise run a proxy-based FOM scan.
+    # The frozen thresholds come from the fit-based 2D FOM scan in the
+    # mva_optimization study and must not be overwritten by the proxy scan,
+    # which uses a biased sideband background estimate.
+    frozen_thresholds = config.data.get("mva_thresholds", {})
+    cat_key = category.lower()  # "ll" or "dd"
+    frozen_high = frozen_thresholds.get(f"{cat_key}_high_yield")
+    frozen_low = frozen_thresholds.get(f"{cat_key}_low_yield")
 
-    # Pre-evaluate BDT on full data
-    X_data = ak.to_dataframe(data_combined[features])[features].values
-    data_probs = model.predict_proba(X_data)[:, 1]
+    if use_pretrained and frozen_high is not None and frozen_low is not None:
+        best_cuts = {"high": float(frozen_high), "low": float(frozen_low)}
+        logger.info(
+            f"Using frozen thresholds from config [mva_thresholds]: "
+            f"high={best_cuts['high']}, low={best_cuts['low']}"
+        )
+    else:
+        logger.info("Starting proxy-based BDT threshold scan...")
 
-    # Evaluate BDT on MC and store totals
-    mc_probs = {}
-    mc_totals = {}
-    for state in ["jpsi", "etac", "chic0", "chic1"]:
-        if state in mc_dict:
-            X_mc = ak.to_dataframe(mc_dict[state][features])[features].values
-            mc_probs[state] = model.predict_proba(X_mc)[:, 1]
-            mc_totals[state] = len(mc_dict[state])
+        # Pre-evaluate BDT on full data
+        X_data = ak.to_dataframe(data_combined[features])[features].values
+        data_probs = model.predict_proba(X_data)[:, 1]
 
-    # Grid search for groups
-    thresholds = np.linspace(0.1, 0.95, 86)
-    sig_groups = {"high": ["jpsi", "etac"], "low": ["chic0", "chic1"]}
-    best_cuts = {"high": 0.5, "low": 0.5}
+        # Evaluate BDT on MC and store totals
+        mc_probs = {}
+        mc_totals = {}
+        for state in ["jpsi", "etac", "chic0", "chic1"]:
+            if state in mc_dict:
+                X_mc = ak.to_dataframe(mc_dict[state][features])[features].values
+                mc_probs[state] = model.predict_proba(X_mc)[:, 1]
+                mc_totals[state] = len(mc_dict[state])
 
-    for group, states in sig_groups.items():
-        best_fom = -1
-        for thr in thresholds:
-            s_total = 0
-            b_total = 0
-            for st in states:
-                # Signal: eps(thr) * N_exp
-                if st in mc_probs:
-                    eps = np.sum(mc_probs[st] > thr) / mc_totals[st]
-                    s_total += eps * n_expected[st]
+        # Grid search for groups
+        thresholds = np.linspace(0.1, 0.95, 86)
+        sig_groups = {"high": ["jpsi", "etac"], "low": ["chic0", "chic1"]}
+        best_cuts = {"high": 0.5, "low": 0.5}
 
-                # Background: sideband counts after cut
-                sw = state_windows[st]
-                data_mask = data_probs > thr
-                n_low_cut = float(ak.sum(data_mask & sw["low_sb"]))
-                n_high_cut = float(ak.sum(data_mask & sw["high_sb"]))
-                b_total += (
-                    (n_low_cut / b_low_sb_width + n_high_cut / b_high_sb_width) / 2.0
-                ) * b_sig_width
+        for group, states in sig_groups.items():
+            best_fom = -1
+            for thr in thresholds:
+                s_total = 0
+                b_total = 0
+                for st in states:
+                    # Signal: eps(thr) * N_exp
+                    if st in mc_probs:
+                        eps = np.sum(mc_probs[st] > thr) / mc_totals[st]
+                        s_total += eps * n_expected[st]
 
-            # FOM: S/sqrt(S+B) for both
-            fom = s_total / np.sqrt(s_total + b_total) if (s_total + b_total) > 0 else 0
+                    # Background: sideband counts after cut
+                    sw = state_windows[st]
+                    data_mask = data_probs > thr
+                    n_low_cut = float(ak.sum(data_mask & sw["low_sb"]))
+                    n_high_cut = float(ak.sum(data_mask & sw["high_sb"]))
+                    b_total += (
+                        (n_low_cut / b_low_sb_width + n_high_cut / b_high_sb_width) / 2.0
+                    ) * b_sig_width
 
-            if fom > best_fom:
-                best_fom = fom
-                best_cuts[group] = float(thr)
+                # FOM: S/sqrt(S+B) for both
+                fom = s_total / np.sqrt(s_total + b_total) if (s_total + b_total) > 0 else 0
+
+                if fom > best_fom:
+                    best_fom = fom
+                    best_cuts[group] = float(thr)
 
     cuts_file = out_path / "optimized_cuts.json"
     with open(cuts_file, "w") as f:
@@ -251,9 +267,9 @@ elif opt_type == "mva":
             indent=2,
         )
 
-    logger.info("MVA Scientific Optimization complete.")
-    logger.info(f"Threshold High (S/sqrt(B)): {best_cuts['high']}")
-    logger.info(f"Threshold Low (S/sqrt(S+B)): {best_cuts['low']}")
+    logger.info("MVA threshold determination complete.")
+    logger.info(f"Threshold High: {best_cuts['high']}")
+    logger.info(f"Threshold Low: {best_cuts['low']}")
 
 else:
     logger.error(f"Unknown optimization_type: {opt_type}. Must be 'box' or 'mva'.")
